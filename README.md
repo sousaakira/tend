@@ -8,9 +8,9 @@ spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo.
 
-> Status: early. The terminal core — parser, grid, scrollback and screen —
-> works and is tested. The PTY layer, agent detection, server, TUI and CLI are
-> still to come. Not yet usable.
+> Status: early. The terminal core — parser, grid, scrollback and screen — and
+> manifest-driven agent detection for 22 agents both work and are tested. The
+> PTY layer, server, TUI and CLI are still to come. Not yet usable.
 
 ## development
 

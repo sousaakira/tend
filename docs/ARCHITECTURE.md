@@ -109,9 +109,30 @@ rules over regions of the bottom of the screen buffer, with AND/OR gates and
 negative guards.
 
 Manifests are derived from herdr's, which is the single most valuable thing
-tend inherits: they encode calibration against 22 real agent UIs. They port
-almost unchanged because Rust's `regex` and Go's `regexp` are both RE2 — no
-lookaround, no backreferences, same `\x{...}` and `(?m)` syntax.
+tend inherits: they encode calibration against 22 real agent UIs. They are
+kept byte-identical to their upstream — 22 manifests, 136 rules, 103 patterns
+— so a future sync is a copy rather than a re-edit.
+
+The patterns carry over because Rust's `regex` and Go's `regexp` are the same
+engine family: RE2, no lookaround, no backreferences. The *semantics* need no
+translation at all. Two pieces of *syntax* do, and 9 of the 103 patterns use
+them:
+
+- Rust accepts `\uFFFF` and `\u{FFFF}` for a codepoint; Go only `\x{FFFF}`.
+- Rust supports Unicode properties such as `\p{Alphabetic}`; Go supports only
+  categories and scripts.
+
+`dialect.go` translates both at load time rather than editing the manifests,
+which is what preserves the sync property. `\p{Alphabetic}` maps to `\p{L}`,
+an approximation documented at the mapping rather than buried: Alphabetic also
+covers `Nl` and some Indic combining marks, which cannot arise in the one thing
+the manifests use it for — a letter following a spinner.
+
+Anything the translator does not cover is passed through for Go's own compiler
+to reject, so an unsupported construct fails loudly at load instead of quietly
+disabling one agent's detection.
+`TestBundledPatternsCompileAfterTranslation` walks every bundled pattern and is
+the guard for that on the next sync.
 
 Two rules carried over from that lineage, both learned the hard way:
 
