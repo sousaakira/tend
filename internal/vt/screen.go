@@ -2,6 +2,7 @@ package vt
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/mattn/go-runewidth"
 )
@@ -72,6 +73,8 @@ type Screen struct {
 	OnBell func()
 	// OnTitle is called when the window title changes. Nil means ignore.
 	OnTitle func(string)
+	// OnProgress is called when the OSC 9 progress report changes.
+	OnProgress func(string)
 
 	cols, rows int
 
@@ -84,9 +87,10 @@ type Screen struct {
 
 	top, bottom int // scroll region, inclusive, 0-based
 
-	modes Modes
-	tabs  []bool
-	title string
+	modes    Modes
+	tabs     []bool
+	title    string
+	progress string
 
 	parser Parser
 	// replyBuf is reused so cursor reports do not allocate per request.
@@ -145,6 +149,10 @@ func (s *Screen) IsAlt() bool { return s.onAlt }
 
 // Title returns the last title set via OSC 0 or OSC 2.
 func (s *Screen) Title() string { return s.title }
+
+// Progress returns the last OSC 9 payload, without its leading command
+// number: "4;1;-1" rather than "9;4;1;-1".
+func (s *Screen) Progress() string { return s.progress }
 
 // Size returns the screen dimensions.
 func (s *Screen) Size() (cols, rows int) { return s.cols, s.rows }
@@ -487,14 +495,18 @@ func (s *Screen) Reset() {
 	s.main.ClearHistory()
 	s.alt.Clear(DefaultStyle)
 	s.title = ""
+	s.progress = ""
 	s.resetTabs()
 	s.parser.Reset()
 }
 
 // --- Handler: strings ------------------------------------------------------
 
-// OSCDispatch handles operating-system commands. Only the title commands carry
-// meaning for tend today; the rest are consumed.
+// OSCDispatch handles operating-system commands.
+//
+// Two carry meaning for tend: the title commands, and OSC 9, which agents use
+// to report progress. An agent can go from working to waiting without redrawing
+// anything, so these fields are evidence the screen itself does not hold.
 func (s *Screen) OSCDispatch(params [][]byte, _ bool) {
 	if len(params) < 2 {
 		return
@@ -502,6 +514,37 @@ func (s *Screen) OSCDispatch(params [][]byte, _ bool) {
 	switch string(params[0]) {
 	case "0", "2": // icon+title, title
 		s.setTitle(string(params[1]))
+	case "9": // progress
+		s.setProgress(joinParams(params[1:]))
+	}
+}
+
+// joinParams rebuilds an OSC payload minus its command number. Progress is
+// matched as "4;1;-1" rather than "9;4;1;-1", so the command is dropped and
+// the rest kept verbatim.
+func joinParams(params [][]byte) string {
+	n := 0
+	for _, p := range params {
+		n += len(p) + 1
+	}
+	var b strings.Builder
+	b.Grow(n)
+	for i, p := range params {
+		if i > 0 {
+			b.WriteByte(';')
+		}
+		b.Write(p)
+	}
+	return b.String()
+}
+
+func (s *Screen) setProgress(p string) {
+	if s.progress == p {
+		return
+	}
+	s.progress = p
+	if s.OnProgress != nil {
+		s.OnProgress(p)
 	}
 }
 

@@ -8,9 +8,36 @@ spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo.
 
-> Status: early. The terminal core — parser, grid, scrollback and screen — and
-> manifest-driven agent detection for 22 agents both work and are tested. The
-> PTY layer, server, TUI and CLI are still to come. Not yet usable.
+> Status: early. The terminal core, agent detection for 22 agents, and the pty
+> layer work and are tested, and the CLI below runs. The server and the TUI
+> client — the parts that make it a multiplexer — are still to come.
+
+## try it
+
+```bash
+make build
+
+bin/tend agents -v              # the agents tend can detect
+bin/tend watch -- claude        # run an agent and report its state live
+bin/tend watch -capture out.raw -- codex
+bin/tend detect -agent claude out.raw    # replay a capture offline
+bin/tend explain -agent claude out.raw   # ...and see how every rule voted
+bin/tend screen out.raw                  # ...and what the terminal core made of it
+```
+
+`watch` runs one command on a pseudo-terminal, mirrors its output, and prints
+state changes to stderr:
+
+```
+[tend] watching claude as "claude" on a 120x40 terminal
+[tend] working   osc_title_working
+[tend] blocked   bash_permission_prompt
+[tend] idle      live_prompt_box
+```
+
+`-capture` writes the raw bytes, which `detect`, `explain` and `screen` replay
+offline. That loop is how a detection rule gets debugged: capture the state
+once, then iterate against the file instead of against a live agent.
 
 ## development
 

@@ -141,6 +141,22 @@ Two rules carried over from that lineage, both learned the hard way:
 - Gate on controls that are invariant for a state. Never match incidental text
   that happens to appear on screen.
 
+## The pty layer
+
+`internal/pty` runs a command on a pseudo-terminal, because a pane's process
+must believe it owns a terminal: that is what makes an agent draw a spinner,
+report a title and answer cursor queries at all. Running it on a pipe changes
+its behaviour and silently defeats detection.
+
+One platform detail leaks far enough to be worth naming: when a child exits,
+Linux fails the next read on the master side with `EIO` rather than reporting
+end of file. The package translates that, so callers treat a pty like any
+other reader instead of special-casing an errno only one platform produces.
+
+Windows is a stub that returns `ErrUnsupported`. ConPTY is a different enough
+mechanism to be its own piece of work rather than a port of the Unix path; the
+seam is in place so that work lands in one file.
+
 ## Non-goals for the core milestone
 
 Plugins, SSH/multi-machine, kitty graphics, worktree management and session

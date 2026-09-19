@@ -11,7 +11,7 @@ DEV_PKGS ?= ./internal/...
 # `make` with no arguments runs the fast loop, not the first target in the file.
 .DEFAULT_GOAL := dev
 
-.PHONY: toolchain dev watch test test-race check fmt vet bench build clean
+.PHONY: toolchain run dev watch test test-race check fmt vet bench build clean
 
 ## toolchain: fail with a usable message instead of "go: No such file or directory".
 toolchain:
@@ -45,6 +45,13 @@ watch:
 		fi; \
 		sleep 1; \
 	done
+
+## run: build and run the CLI. Pass arguments with ARGS="...".
+#   make run
+#   make run ARGS="agents -v"
+#   make run ARGS="watch -- claude"
+run: toolchain
+	@$(GO) run ./cmd/tend $(ARGS)
 
 ## test: full test run.
 test: toolchain
