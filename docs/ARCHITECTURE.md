@@ -75,6 +75,33 @@ arbitrary byte boundaries, so parsing a stream one byte at a time must produce
 exactly the events that parsing it in one write produces.
 `TestParseIsChunkIndependent` pins that.
 
+### What the core implements today
+
+`Parser` (escape-sequence machine), `Grid` (cells, rows, scrollback ring) and
+`Screen` (the Handler that turns events into screen state): printing with
+wrap, wide characters and combining marks; cursor movement and addressing;
+erase, insert and delete for both cells and lines; scroll regions; SGR
+including 256-colour and direct colour in both the semicolon and colon forms;
+the alternate screen; mouse and paste modes; titles; and cursor reports.
+
+Deliberate gaps, each a decision rather than an oversight:
+
+- **No reflow.** Narrowing a pane truncates instead of rewrapping. `Row`
+  already tracks the wrapped flag reflow needs; the algorithm lands when the
+  renderer does.
+- **No character sets.** tend is UTF-8 only. `ESC ( B` and friends are
+  consumed and ignored.
+- **No 8-bit C1 controls**, for the UTF-8 reason in the package comment.
+- **DCS and APC payloads are captured and discarded.** kitty graphics will
+  read them later without the parser changing.
+
+Two invariants hold the core together, both pinned by tests:
+
+- **Chunk independence.** Feeding a session one byte at a time must land on
+  exactly the screen a single write produces. PTY reads split anywhere.
+- **No allocation in steady state.** Parsing and screen writes are
+  `0 allocs/op`, and a full scrollback ring recycles rows rather than growing.
+
 ## Detection
 
 Agent state detection is declarative. A manifest per agent describes ordered
