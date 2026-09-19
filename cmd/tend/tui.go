@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"sync"
 	"time"
 
@@ -99,20 +98,29 @@ type tui struct {
 	client  *client.Client
 	painter *vt.Painter
 
-	mu      sync.Mutex
-	snap    proto.SessionSnapshot
-	rects   []proto.PaneRect
-	screens map[uint64]*vt.Screen
-	sizes   map[uint64]ui.Rect
-	focus   uint64
-	tab     uint64
-	message string
-	alert   bool
-	msgAt   time.Time
-	overlay []string
-	zoom    bool
-	offline bool
-	dirty   bool
+	mu        sync.Mutex
+	snap      proto.SessionSnapshot
+	rects     []proto.PaneRect
+	screens   map[uint64]*vt.Screen
+	sizes     map[uint64]ui.Rect
+	focus     uint64
+	tab       uint64
+	workspace uint64
+
+	sidebar    bool
+	navigating bool
+	navPane    uint64
+
+	prompt         promptKind
+	promptText     string
+	promptPristine bool
+	message        string
+	alert          bool
+	msgAt          time.Time
+	overlay        []string
+	zoom           bool
+	offline        bool
+	dirty          bool
 
 	// scrollPane is the pane being looked back through, zero when live.
 	// The pane keeps running while it is read: scrolling is a view, not a
@@ -275,7 +283,7 @@ func (t *tui) ensureSession() error {
 			return err
 		}
 	}
-	_, _, err = t.client.NewTab(ws, "shell", proto.PaneSpec{Command: t.config.Shell()})
+	_, _, err = t.client.NewTab(ws, "tab 1", proto.PaneSpec{Command: t.config.Shell()})
 	return err
 }
 
@@ -292,17 +300,19 @@ func (t *tui) refresh() error {
 
 	t.mu.Lock()
 	t.snap = snap
+	t.resolveViewLocked()
 	tab := t.tab
 	t.mu.Unlock()
 
-	if tab == 0 || !tabExists(snap, tab) {
-		tab = activeTab(snap)
-	}
 	if tab == 0 {
+		// An empty workspace is a real state, not a failure: the user closed
+		// its last tab and is looking at the space itself.
 		t.mu.Lock()
-		t.tab, t.rects, t.focus = 0, nil, 0
+		t.rects, t.focus = nil, 0
 		t.dirty = true
 		t.mu.Unlock()
+		t.painter.Invalidate()
+		t.markDirty()
 		return nil
 	}
 
@@ -313,7 +323,6 @@ func (t *tui) refresh() error {
 	}
 
 	t.mu.Lock()
-	t.tab = tab
 	t.rects = layout.Panes
 	if !paneInLayout(layout.Panes, t.focus) {
 		t.focus = firstPane(layout.Panes)
@@ -346,25 +355,31 @@ func (t *tui) refresh() error {
 // layoutArea is the region panes are laid out in: the terminal minus the tab
 // bar above and the status bar below.
 func (t *tui) layoutArea() ui.Rect {
-	top := ui.TabRows(t.tabCount())
-	return ui.Rect{Y: top, Cols: t.cols, Rows: t.rows - top - ui.StatusRows}
-}
-
-func (t *tui) tabCount() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	n := 0
-	for _, w := range t.snap.Workspaces {
-		n += len(w.Tabs)
+	return t.layoutAreaLocked()
+}
+
+// layoutAreaLocked is the region panes are drawn in: the terminal minus the
+// tab bar above, the status bar below, and the agent list to the left.
+func (t *tui) layoutAreaLocked() ui.Rect {
+	top := ui.TabRows(len(t.tabsLocked()))
+	left := 0
+	if t.sidebar {
+		left = min(ui.SidebarWidth, t.cols)
 	}
-	return n
+	return ui.Rect{
+		X:    left,
+		Y:    top,
+		Cols: t.cols - left,
+		Rows: t.rows - top - ui.StatusRows,
+	}
 }
 
 // paneRects is where panes actually go, which is the tab's layout unless one
 // pane is zoomed and has the area to itself. The caller holds the lock.
 func (t *tui) paneRects() []proto.PaneRect {
-	area := ui.Rect{Y: ui.TabRows(t.countTabsLocked()), Cols: t.cols,
-		Rows: t.rows - ui.TabRows(t.countTabsLocked()) - ui.StatusRows}
+	area := t.layoutAreaLocked()
 
 	if t.zoom && t.focus != 0 {
 		return []proto.PaneRect{{
@@ -372,22 +387,15 @@ func (t *tui) paneRects() []proto.PaneRect {
 		}}
 	}
 
-	// The layout comes back relative to the area, so it is shifted down past
-	// the tab bar here rather than the server knowing about one.
+	// The layout comes back relative to the area, so it is shifted here rather
+	// than the server knowing about a tab bar or an agent list.
 	out := make([]proto.PaneRect, len(t.rects))
 	for i, r := range t.rects {
 		out[i] = r
+		out[i].X += area.X
 		out[i].Y += area.Y
 	}
 	return out
-}
-
-func (t *tui) countTabsLocked() int {
-	n := 0
-	for _, w := range t.snap.Workspaces {
-		n += len(w.Tabs)
-	}
-	return n
 }
 
 // syncPaneSizes tells the server what size each pane is being drawn at, so its
@@ -538,6 +546,11 @@ func (t *tui) buildFrame() ui.Frame {
 		Zoomed:  t.zoom,
 		Offline: t.offline,
 	}
+	if t.prompt != promptNone {
+		frame.Prompt = t.promptLabelLocked()
+		frame.PromptText = t.promptText
+		frame.PromptSelected = t.promptPristine
+	}
 	if t.scrollPane != 0 {
 		frame.Scroll = t.scrollOffset
 		frame.ScrollDepth = t.scrollDepth
@@ -547,28 +560,39 @@ func (t *tui) buildFrame() ui.Frame {
 	for _, p := range t.snap.Panes {
 		info[p.ID] = p
 	}
-	for _, w := range t.snap.Workspaces {
-		if w.ID == t.snap.ActiveWorkspace {
-			frame.Workspace = w.Name
+	if w, ok := t.workspaceLocked(); ok {
+		frame.Workspace = w.Name
+	}
+	for _, tab := range t.tabsLocked() {
+		if tab.ID == t.tab {
+			frame.Tab = tab.Name
 		}
-		for _, tab := range w.Tabs {
-			if tab.ID == t.tab {
-				frame.Tab = tab.Name
+		label := ui.Tab{
+			ID:     tab.ID,
+			Name:   tab.Name,
+			Panes:  len(tab.Panes),
+			Active: tab.ID == t.tab,
+		}
+		// A blocked agent in a tab you are not looking at is the one thing
+		// the bar exists to tell you about.
+		for _, id := range tab.Panes {
+			if info[id].State == "blocked" {
+				label.Alert = true
 			}
-			label := ui.Tab{
-				ID:     tab.ID,
-				Name:   tab.Name,
-				Panes:  len(tab.Panes),
-				Active: tab.ID == t.tab,
+		}
+		frame.Tabs = append(frame.Tabs, label)
+	}
+
+	if t.sidebar {
+		frame.Sidebar = true
+		frame.Navigating = t.navigating
+		frame.SidebarRows = t.sidebarRowsLocked()
+		if t.navigating {
+			for i := range frame.SidebarRows {
+				frame.SidebarRows[i].Selected =
+					frame.SidebarRows[i].Kind == ui.SidebarPane &&
+						frame.SidebarRows[i].Pane == t.navPane
 			}
-			// A blocked agent in a tab you are not looking at is the one thing
-			// the bar exists to tell you about.
-			for _, id := range tab.Panes {
-				if info[id].State == "blocked" {
-					label.Alert = true
-				}
-			}
-			frame.Tabs = append(frame.Tabs, label)
 		}
 	}
 
@@ -678,8 +702,8 @@ func (t *tui) handleInput(data []byte) error {
 	if offline {
 		// Keystrokes have nowhere to go, and a command would only fail. The
 		// exception is detaching, which is the user asking to stop waiting.
-		for _, cmd := range commands {
-			if cmd == ui.CommandDetach {
+		for _, action := range commands {
+			if action.Command == ui.CommandDetach {
 				t.detach = true
 				return nil
 			}
@@ -690,6 +714,28 @@ func (t *tui) handleInput(data []byte) error {
 	// A chunk can hold both keys and commands — "q" leaving the scroll view
 	// and the prefix sequence after it often arrive together — so consuming
 	// the keys must not discard the commands that came with them.
+	// The prompt takes the keyboard ahead of everything else: while a name is
+	// being typed, every key is part of that name.
+	if t.prompting() {
+		handled, err := t.promptKeys(forward)
+		if err != nil {
+			return err
+		}
+		if handled {
+			forward = nil
+		}
+	}
+
+	if t.navigatingNow() {
+		handled, err := t.navigateKeys(forward)
+		if err != nil {
+			return err
+		}
+		if handled {
+			forward = nil
+		}
+	}
+
 	if t.scrolling() {
 		handled, err := t.scrollKeys(forward)
 		if err != nil {
@@ -705,8 +751,8 @@ func (t *tui) handleInput(data []byte) error {
 			return err
 		}
 	}
-	for _, cmd := range commands {
-		if err := t.command(cmd); err != nil {
+	for _, action := range commands {
+		if err := t.command(action); err != nil {
 			t.setMessage(err.Error(), true)
 		}
 		if t.detach {
@@ -716,7 +762,9 @@ func (t *tui) handleInput(data []byte) error {
 	return nil
 }
 
-func (t *tui) command(cmd ui.Command) error {
+func (t *tui) command(action ui.Action) error {
+	cmd := action.Command
+
 	t.mu.Lock()
 	focus := t.focus
 	tab := t.tab
@@ -724,6 +772,41 @@ func (t *tui) command(cmd ui.Command) error {
 	t.mu.Unlock()
 
 	switch cmd {
+	case ui.CommandSelectTab:
+		return t.selectTab(action.Arg)
+
+	case ui.CommandNextSpace, ui.CommandPrevSpace:
+		return t.switchWorkspace(cmd == ui.CommandNextSpace)
+
+	case ui.CommandNewSpace:
+		return t.newWorkspace()
+
+	case ui.CommandToggleAgents:
+		t.mu.Lock()
+		t.sidebar = !t.sidebar
+		if !t.sidebar {
+			t.navigating = false
+		}
+		t.mu.Unlock()
+		t.painter.Invalidate()
+		return t.refresh()
+
+	case ui.CommandRenameTab:
+		t.startPrompt(promptRenameTab)
+		return nil
+
+	case ui.CommandRenameSpace:
+		t.startPrompt(promptRenameSpace)
+		return nil
+
+	case ui.CommandNavigate:
+		if t.navigatingNow() {
+			t.leaveNavigate()
+			return nil
+		}
+		t.enterNavigate()
+		return t.refresh()
+
 	case ui.CommandSplitColumns, ui.CommandSplitRows:
 		if focus == 0 {
 			return nil
@@ -784,11 +867,15 @@ func (t *tui) command(cmd ui.Command) error {
 		return t.refresh()
 
 	case ui.CommandNewTab:
-		ws := t.activeWorkspace()
+		ws := t.shownWorkspace()
 		if ws == 0 {
 			return nil
 		}
-		newTab, _, err := t.client.NewTab(ws, "shell", proto.PaneSpec{Command: t.config.Shell()})
+		t.mu.Lock()
+		name := t.nextName("tab", len(t.tabsLocked()))
+		t.mu.Unlock()
+
+		newTab, _, err := t.client.NewTab(ws, name, proto.PaneSpec{Command: t.config.Shell()})
 		if err != nil {
 			return err
 		}
@@ -886,9 +973,20 @@ func (t *tui) focusNext(rects []proto.PaneRect, focus uint64) {
 	t.wakeUp()
 }
 
-func (t *tui) activeWorkspace() uint64 {
+func (t *tui) navigatingNow() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	return t.navigating
+}
+
+// shownWorkspace is the workspace being looked at, which is where a new tab
+// belongs — not whichever one the server last considered active.
+func (t *tui) shownWorkspace() uint64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.workspace != 0 {
+		return t.workspace
+	}
 	if t.snap.ActiveWorkspace != 0 {
 		return t.snap.ActiveWorkspace
 	}
@@ -898,24 +996,22 @@ func (t *tui) activeWorkspace() uint64 {
 	return 0
 }
 
+// switchTab moves within the workspace being shown.
+//
+// Only within it: a tab in another space is not the next tab, it is somewhere
+// else, and stepping into it without saying so would leave the user unsure
+// where they are.
 func (t *tui) switchTab(forward bool, current uint64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var tabs []uint64
-	for _, w := range t.snap.Workspaces {
-		for _, tab := range w.Tabs {
-			tabs = append(tabs, tab.ID)
-		}
-	}
+	tabs := t.tabsLocked()
 	if len(tabs) < 2 {
 		return
 	}
-	sort.Slice(tabs, func(i, j int) bool { return tabs[i] < tabs[j] })
-
 	idx := 0
-	for i, id := range tabs {
-		if id == current {
+	for i, tab := range tabs {
+		if tab.ID == current {
 			idx = i
 			break
 		}
@@ -925,8 +1021,8 @@ func (t *tui) switchTab(forward bool, current uint64) {
 	} else {
 		idx = (idx - 1 + len(tabs)) % len(tabs)
 	}
-	t.tab = tabs[idx]
-	t.focus = 0
+	t.tab = tabs[idx].ID
+	t.focus, t.zoom = 0, false
 }
 
 // --- terminal --------------------------------------------------------------

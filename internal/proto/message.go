@@ -13,8 +13,11 @@ const (
 
 	MethodWorkspaceNew = "workspace.new"
 
-	MethodTabNew   = "tab.new"
-	MethodTabClose = "tab.close"
+	MethodTabNew    = "tab.new"
+	MethodTabClose  = "tab.close"
+	MethodTabRename = "tab.rename"
+
+	MethodWorkspaceRename = "workspace.rename"
 
 	MethodPaneSplit     = "pane.split"
 	MethodPaneClose     = "pane.close"
@@ -147,6 +150,18 @@ type TabNewResult struct {
 // TabCloseParams closes a tab and every pane in it.
 type TabCloseParams struct {
 	Tab uint64 `json:"tab"`
+}
+
+// TabRenameParams renames a tab.
+type TabRenameParams struct {
+	Tab  uint64 `json:"tab"`
+	Name string `json:"name"`
+}
+
+// WorkspaceRenameParams renames a workspace.
+type WorkspaceRenameParams struct {
+	Workspace uint64 `json:"workspace"`
+	Name      string `json:"name"`
 }
 
 // PaneSplitParams divides a pane.

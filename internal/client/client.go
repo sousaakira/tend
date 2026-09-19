@@ -296,6 +296,18 @@ func (c *Client) CloseTab(tab uint64) error {
 	return c.Call(proto.MethodTabClose, proto.TabCloseParams{Tab: tab}, nil)
 }
 
+// RenameTab changes a tab's label.
+func (c *Client) RenameTab(tab uint64, name string) error {
+	return c.Call(proto.MethodTabRename, proto.TabRenameParams{Tab: tab, Name: name}, nil)
+}
+
+// RenameWorkspace changes a workspace's label.
+func (c *Client) RenameWorkspace(ws uint64, name string) error {
+	return c.Call(proto.MethodWorkspaceRename, proto.WorkspaceRenameParams{
+		Workspace: ws, Name: name,
+	}, nil)
+}
+
 // SplitPane divides a pane. direction is "columns" or "rows".
 func (c *Client) SplitPane(target uint64, direction string, spec proto.PaneSpec) (uint64, error) {
 	var out proto.PaneSplitResult

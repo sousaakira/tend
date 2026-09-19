@@ -534,8 +534,8 @@ func TestAttachShowsTabs(t *testing.T) {
 	a.waitForScreen(t, "a tab bar", func(string) bool {
 		return !strings.HasPrefix(a.lines()[0], "┌")
 	})
-	if first := a.lines()[0]; !strings.Contains(first, "shell") {
-		t.Errorf("tab bar = %q, want it to name the tabs", first)
+	if first := a.lines()[0]; !strings.Contains(first, "tab 1") || !strings.Contains(first, "tab 2") {
+		t.Errorf("tab bar = %q, want it to name both tabs", first)
 	}
 }
 
@@ -820,5 +820,183 @@ func TestAttachReconnects(t *testing.T) {
 	a.send(t, "printf back-again\n")
 	a.waitForScreen(t, "the new session to work", func(s string) bool {
 		return strings.Contains(s, "back-again")
+	})
+}
+
+// TestAttachTabsAreScopedToTheirSpace is the bug this set of features started
+// from: a bar listing every tab in the session puts tabs the user cannot
+// reach next to ones they can.
+func TestAttachTabsAreScopedToTheirSpace(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Two tabs in the first space.
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a tab bar", func(string) bool {
+		return strings.Contains(a.lines()[0], "tab 2")
+	})
+
+	// A new space starts with one tab of its own, and the first space's tabs
+	// must not appear in its bar.
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "the new space", func(s string) bool {
+		return strings.Contains(s, "space 2")
+	})
+	if first := a.lines()[0]; strings.Contains(first, "tab 2") {
+		t.Errorf("the tab bar shows another space's tabs: %q", first)
+	}
+
+	// Going back finds the first space's tabs again.
+	a.send(t, "\x02(")
+	a.waitForScreen(t, "the first space", func(string) bool {
+		return strings.Contains(a.lines()[0], "tab 2")
+	})
+}
+
+// TestAttachAgentListGroupsEverything: the point of seeing every agent at
+// once is reaching the one that stopped, wherever it lives.
+func TestAttachAgentListGroupsEverything(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "a second space", func(s string) bool {
+		return strings.Contains(s, "space 2")
+	})
+
+	a.send(t, "\x02a")
+	a.waitForScreen(t, "the agent list", func(s string) bool {
+		return strings.Contains(s, "main") && strings.Contains(s, "space 2")
+	})
+
+	// Both spaces, their tabs, and every pane are listed together.
+	text := a.text()
+	if strings.Count(text, "tab 1") < 2 {
+		t.Errorf("the list should show each space's tabs:\n%s", text)
+	}
+
+	// Closing it gives the columns back: the pane returns to the left edge.
+	a.send(t, "\x02a")
+	a.waitForScreen(t, "the list to close", func(string) bool {
+		return a.paneStartsAtLeftEdge()
+	})
+}
+
+// paneStartsAtLeftEdge reports whether a pane border occupies column zero,
+// which it does only when the agent list is not taking those columns.
+func (a *attached) paneStartsAtLeftEdge() bool {
+	for _, line := range a.lines() {
+		for _, r := range line {
+			return r == '┌' || r == '│' || r == '└'
+		}
+	}
+	return false
+}
+
+// TestAttachNavigateJumpsAcrossSpaces covers the reason the list exists.
+func TestAttachNavigateJumpsAcrossSpaces(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Mark the first space's pane so it can be recognised after the jump.
+	a.send(t, "printf FIRST-SPACE\n")
+	a.waitForScreen(t, "the marker", func(s string) bool {
+		return strings.Contains(s, "FIRST-SPACE")
+	})
+
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "the second space", func(s string) bool {
+		return strings.Contains(s, "space 2") && !strings.Contains(s, "FIRST-SPACE")
+	})
+
+	// Walk the list back to the first space's pane and jump to it.
+	a.send(t, "\x02g")
+	a.waitForScreen(t, "navigate mode", func(s string) bool {
+		return strings.Contains(s, "NAVIGATE")
+	})
+	a.send(t, "k\r")
+
+	a.waitForScreen(t, "the jump to land", func(s string) bool {
+		return strings.Contains(s, "FIRST-SPACE") && !strings.Contains(s, "NAVIGATE")
+	})
+}
+
+func TestAttachSelectsTabByNumber(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "printf TAB-ONE\n")
+	a.waitForScreen(t, "the marker", func(s string) bool {
+		return strings.Contains(s, "TAB-ONE")
+	})
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a second tab", func(s string) bool {
+		return !strings.Contains(s, "TAB-ONE")
+	})
+
+	a.send(t, "\x021")
+	a.waitForScreen(t, "the first tab", func(s string) bool {
+		return strings.Contains(s, "TAB-ONE")
+	})
+}
+
+// TestAttachRenamesATab: the seeded name starts selected, so typing replaces
+// it rather than appending to it.
+func TestAttachRenamesATab(t *testing.T) {
+	a := startSession(t, 100, 12)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02,")
+	a.waitForScreen(t, "the prompt", func(s string) bool {
+		return strings.Contains(s, "rename tab")
+	})
+	a.send(t, "builder")
+	a.waitForScreen(t, "the typed name", func(s string) bool {
+		return strings.Contains(s, "rename tab: builder") &&
+			!strings.Contains(s, "tab 1builder")
+	})
+
+	a.send(t, "\r")
+	a.waitForScreen(t, "the new name", func(s string) bool {
+		return strings.Contains(s, "· builder")
+	})
+}
+
+// TestAttachRenameCanBeCancelled: escape must leave the name as it was.
+func TestAttachRenameCanBeCancelled(t *testing.T) {
+	a := startSession(t, 100, 12)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02,")
+	a.waitForScreen(t, "the prompt", func(s string) bool {
+		return strings.Contains(s, "rename tab")
+	})
+	a.send(t, "discarded\x1b")
+	a.waitForScreen(t, "the prompt to close", func(s string) bool {
+		return !strings.Contains(s, "rename tab")
+	})
+	if strings.Contains(a.text(), "discarded") {
+		t.Errorf("a cancelled rename took effect:\n%s", a.text())
+	}
+}
+
+// TestAttachNamesNewSpacesAndTabs: an unnamed space shows as a dash and
+// vanishes from the status bar, making the thing just created the hardest to
+// find.
+func TestAttachNamesNewSpacesAndTabs(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "the new space named", func(s string) bool {
+		return strings.Contains(s, "· space 2 ·")
+	})
+
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "the new tab named", func(s string) bool {
+		return strings.Contains(s, "· tab 2")
 	})
 }

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-
 	"github.com/sousaakira/tend/internal/ui"
 	"github.com/sousaakira/tend/internal/vt"
 )
@@ -12,6 +10,47 @@ import (
 // The pane keeps running and the server keeps its live screen; what changes is
 // only which rows this client asks to be drawn. That is why leaving the view
 // needs no resynchronisation: nothing was ever out of step.
+
+// splitKeys breaks a chunk into whole keys.
+//
+// A handler that looks at only the first byte and then reports the chunk
+// consumed drops everything after it, which is how "k" followed by Enter
+// moved a cursor and never acted on it. Splitting first makes that shape of
+// mistake impossible: every key in the chunk is offered in turn.
+func splitKeys(data []byte) []string {
+	var keys []string
+	for i := 0; i < len(data); {
+		if data[i] == 0x1b {
+			if n := escapeLength(data[i:]); n > 0 {
+				keys = append(keys, string(data[i:i+n]))
+				i += n
+				continue
+			}
+		}
+		keys = append(keys, string(data[i:i+1]))
+		i++
+	}
+	return keys
+}
+
+// escapeLength is how many bytes the escape sequence at the start of data
+// occupies, or zero when it is not one this cares about.
+func escapeLength(data []byte) int {
+	if len(data) < 3 || data[1] != '[' {
+		return 0
+	}
+	for i := 2; i < len(data); i++ {
+		// A final byte ends a control sequence; the parameters before it are
+		// digits and semicolons.
+		if data[i] >= '@' && data[i] <= '~' {
+			return i + 1
+		}
+		if data[i] != ';' && (data[i] < '0' || data[i] > '9') {
+			return 0
+		}
+	}
+	return 0
+}
 
 func (t *tui) scrolling() bool {
 	t.mu.Lock()
@@ -88,41 +127,38 @@ func (t *tui) scrollBy(lines int) error {
 // consumed, so that keys meant for a pane are not swallowed by a mode the
 // user has already left.
 func (t *tui) scrollKeys(data []byte) (bool, error) {
-	if len(data) == 0 {
-		return false, nil
+	for _, key := range splitKeys(data) {
+		handled, err := t.scrollKey(key)
+		if err != nil {
+			return true, err
+		}
+		if !handled {
+			// The view is closed and this key belongs to the pane. Anything
+			// after it does too, so the rest of the chunk goes back.
+			return false, nil
+		}
 	}
+	return len(data) > 0, nil
+}
 
+func (t *tui) scrollKey(key string) (bool, error) {
 	t.mu.Lock()
 	page := max(t.rows-ui.StatusRows-4, 1)
+	depth := t.scrollDepth
 	t.mu.Unlock()
 
-	switch {
-	case bytes.HasPrefix(data, []byte("\x1b[A")): // up
+	switch key {
+	case "\x1b[A", "k":
 		return true, t.scrollBy(1)
-	case bytes.HasPrefix(data, []byte("\x1b[B")): // down
+	case "\x1b[B", "j":
 		return true, t.scrollBy(-1)
-	case bytes.HasPrefix(data, []byte("\x1b[5~")): // page up
+	case "\x1b[5~":
 		return true, t.scrollBy(page)
-	case bytes.HasPrefix(data, []byte("\x1b[6~")): // page down
+	case "\x1b[6~":
 		return true, t.scrollBy(-page)
-	case bytes.HasPrefix(data, []byte("\x1b[H")): // home
-		t.mu.Lock()
-		depth := t.scrollDepth
-		t.mu.Unlock()
+	case "\x1b[H", "g":
 		return true, t.scrollBy(depth)
-	}
-
-	switch data[0] {
-	case 'k':
-		return true, t.scrollBy(1)
-	case 'j':
-		return true, t.scrollBy(-1)
-	case 'g':
-		t.mu.Lock()
-		depth := t.scrollDepth
-		t.mu.Unlock()
-		return true, t.scrollBy(depth)
-	case 'G', 'q', 0x1b, 0x03: // bottom, quit, escape, ctrl+c
+	case "G", "q", "\x1b", "\x03":
 		t.leaveScroll()
 		return true, nil
 	}
@@ -155,6 +191,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MousePress:
+		if pane := t.sidebarPaneAt(ev.X, ev.Y); pane != 0 {
+			return t.jumpToPane(pane)
+		}
 		if pane, side, ok := t.dividerAt(ev.X, ev.Y); ok {
 			// A press on a border is a grab, not a focus change: the user is
 			// reaching for the divider, not for the pane behind it.
@@ -228,6 +267,16 @@ func (t *tui) dragDivider(ev ui.MouseEvent) error {
 	return t.refresh()
 }
 
+// sidebarPaneAt returns the pane on an agent-list row, or zero.
+func (t *tui) sidebarPaneAt(x, y int) uint64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.sidebar {
+		return 0
+	}
+	return ui.SidebarPaneAt(t.buildFrame(), x, y, t.rows)
+}
+
 // paneAt returns the pane drawn at a point, or zero.
 func (t *tui) paneAt(x, y int) uint64 {
 	t.mu.Lock()
@@ -249,8 +298,7 @@ func (t *tui) dividerAt(x, y int) (uint64, string, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	area := ui.Rect{Y: ui.TabRows(t.countTabsLocked()), Cols: t.cols,
-		Rows: t.rows - ui.TabRows(t.countTabsLocked()) - ui.StatusRows}
+	area := t.layoutAreaLocked()
 
 	for _, r := range t.paneRects() {
 		inRows := y >= r.Y && y < r.Y+r.Rows

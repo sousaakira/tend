@@ -45,10 +45,30 @@ is not one already, and draws it.
  work · main · agents   1:claude ●  2:codex ▲
 ```
 
-`ctrl+b` is the prefix, and `ctrl+b ?` lists the keys: `|` and `-` split,
-`hjkl` and the arrows move focus, `HJKL` resize, `z` zooms a pane to the whole
-window, `[` scrolls back through its history, `c` opens a tab, `x` closes a
-pane, and `d` detaches leaving everything running.
+`ctrl+b` is the prefix and `ctrl+b ?` lists every key.
+
+| | |
+|---|---|
+| `\|` `-` | split beside, below |
+| `hjkl` arrows | move focus |
+| `HJKL` | resize |
+| `z` | zoom a pane to the window |
+| `[` | scroll back through its history |
+| `x` | close a pane |
+| `c` `n` `p` `1-9` | tabs: new, next, previous, by number |
+| `s` `(` `)` | spaces: new, previous, next |
+| `a` | show every agent, grouped |
+| `g` | pick one and jump to it |
+| `,` `.` | rename this tab, this space |
+| `d` | detach, leaving everything running |
+
+A **space** holds tabs, a tab holds panes. Tabs belong to their space, so
+`ctrl+b n` stays where you are and `ctrl+b )` is how you leave.
+
+`ctrl+b a` opens the agent list down the left: every agent in the session,
+grouped by space and tab, with what it is doing. `ctrl+b g` walks it and Enter
+jumps — which is the point, since the agent that stopped is rarely the one you
+are looking at.
 
 The mouse works too: click a pane to focus it, drag a border to resize, scroll
 to look back. A pane running something that wants the mouse itself — an editor,

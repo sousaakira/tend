@@ -397,6 +397,26 @@ func (s *Server) Write(id session.PaneID, data []byte) error {
 	return err
 }
 
+// RenameTab changes a tab's label.
+func (s *Server) RenameTab(id session.TabID, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrClosed
+	}
+	return s.session.RenameTab(id, name)
+}
+
+// RenameWorkspace changes a workspace's label.
+func (s *Server) RenameWorkspace(id session.WorkspaceID, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrClosed
+	}
+	return s.session.RenameWorkspace(id, name)
+}
+
 // AdjustSplit moves one edge of a pane within its tab's layout, taking the
 // space from the neighbour across it.
 func (s *Server) AdjustSplit(id session.PaneID, side session.Side, cells int, area session.Rect) error {

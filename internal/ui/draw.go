@@ -33,6 +33,11 @@ type Theme struct {
 	Overlay      vt.Style
 	OverlayTitle vt.Style
 
+	Sidebar            vt.Style
+	SidebarActive      vt.Style
+	SidebarGroup       vt.Style
+	SidebarGroupActive vt.Style
+
 	Working vt.Style
 	Blocked vt.Style
 	Idle    vt.Style
@@ -56,6 +61,11 @@ func DefaultTheme() Theme {
 
 		Overlay:      vt.Style{Attrs: vt.AttrReverse},
 		OverlayTitle: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
+
+		Sidebar:            vt.Style{},
+		SidebarActive:      vt.Style{Attrs: vt.AttrBold},
+		SidebarGroup:       dim,
+		SidebarGroupActive: vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
 
 		Working: vt.Style{FG: vt.IndexedColor(3)},
 		Blocked: vt.Style{FG: vt.IndexedColor(1), Attrs: vt.AttrBold},
@@ -177,6 +187,23 @@ type Frame struct {
 	// Prefix marks that the prefix key is armed and the next key is a command.
 	Prefix bool
 
+	// Sidebar shows the agent list down the left edge, and SidebarRows is
+	// what it holds.
+	Sidebar     bool
+	SidebarRows []SidebarRow
+	// Navigating marks that the list has the keyboard.
+	Navigating bool
+
+	// Prompt and PromptText are a line being typed, such as a new name. When
+	// Prompt is set it replaces the rest of the status bar: what is being
+	// typed matters more than what was there.
+	Prompt     string
+	PromptText string
+	// PromptSelected marks the text as the seed, about to be replaced by the
+	// next keystroke. It is drawn differently so that is visible rather than
+	// surprising.
+	PromptSelected bool
+
 	// Overlay is a panel drawn over the middle of the screen, for things that
 	// do not fit on one status line. A list of keys is the obvious case: there
 	// are fourteen of them, and cramming those into a status bar means
@@ -208,6 +235,7 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	dst.Clear(vt.DefaultStyle)
 
 	drawTabs(dst, f, theme)
+	drawSidebar(dst, f, theme)
 	for _, p := range f.Panes {
 		drawPane(dst, p, theme)
 	}
@@ -255,19 +283,40 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 }
 
 // drawOverlay puts a panel in the middle of the screen.
+//
+// A list too long for the window is laid out in two columns rather than being
+// cut off. Cutting it drops the entries at the end, which for a key list is
+// the half nobody has memorised yet.
 func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
-	width := 0
-	for _, line := range lines {
-		width = max(width, runewidth.StringWidth(line))
+	if len(lines) == 0 {
+		return
 	}
-	// Two cells of padding each side, plus the border.
-	box := Rect{Cols: width + 6, Rows: len(lines) + 4}
-	if box.Cols > dst.Cols() {
-		box.Cols = dst.Cols()
+	title, body := lines[0], lines[1:]
+
+	columns := [][]string{body}
+	if len(lines)+4 > dst.Rows() && len(body) > 1 {
+		half := (len(body) + 1) / 2
+		columns = [][]string{body[:half], body[half:]}
 	}
-	if box.Rows > dst.Rows() {
-		box.Rows = dst.Rows()
+
+	const gap = 2
+	height := 0
+	width := runewidth.StringWidth(title)
+	inner := 0
+	for _, col := range columns {
+		height = max(height, len(col))
+		colWidth := 0
+		for _, line := range col {
+			colWidth = max(colWidth, runewidth.StringWidth(line))
+		}
+		if inner > 0 {
+			inner += gap
+		}
+		inner += colWidth
 	}
+	width = max(width, inner)
+
+	box := Rect{Cols: min(width+6, dst.Cols()), Rows: min(height+5, dst.Rows())}
 	box.X = (dst.Cols() - box.Cols) / 2
 	box.Y = (dst.Rows() - box.Rows) / 2
 
@@ -285,16 +334,22 @@ func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
 	drawBox(dst, box, theme.OverlayTitle)
 
 	limit := box.X + box.Cols - 2
-	for i, line := range lines {
-		y := box.Y + 2 + i
-		if y >= box.Y+box.Rows-1 {
-			break
+	writeString(dst, box.X+3, box.Y+1, truncate(title, box.Cols-6), theme.OverlayTitle, limit)
+
+	x := box.X + 3
+	for _, col := range columns {
+		colWidth := 0
+		for _, line := range col {
+			colWidth = max(colWidth, runewidth.StringWidth(line))
 		}
-		style := theme.Overlay
-		if i == 0 {
-			style = theme.OverlayTitle
+		for i, line := range col {
+			y := box.Y + 3 + i
+			if y >= box.Y+box.Rows-1 {
+				break
+			}
+			writeString(dst, x, y, truncate(line, limit-x), theme.Overlay, limit)
 		}
-		writeString(dst, box.X+3, y, truncate(line, box.Cols-6), style, limit)
+		x += colWidth + gap
 	}
 }
 
@@ -466,11 +521,26 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	limit := dst.Cols()
 	x := 0
 
+	if f.Prompt != "" {
+		x = writeString(dst, x, y, " "+f.Prompt, theme.StatusKey, limit)
+		textStyle := theme.Status
+		if f.PromptSelected {
+			textStyle = theme.StatusKey
+		}
+		x = writeString(dst, x, y, f.PromptText, textStyle, limit)
+		// A block where the next character goes, since the real cursor is
+		// inside a pane and cannot be here.
+		writeString(dst, x, y, "▏", theme.StatusKey, limit)
+		return
+	}
 	if f.Offline {
 		x = writeString(dst, x, y, " OFFLINE ", theme.StatusAlert, limit)
 	}
 	if f.Prefix {
 		x = writeString(dst, x, y, " PREFIX ", theme.StatusAlert, limit)
+	}
+	if f.Navigating {
+		x = writeString(dst, x, y, " NAVIGATE ", theme.StatusKey, limit)
 	}
 
 	left := " " + f.Session

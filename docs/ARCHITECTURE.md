@@ -373,6 +373,44 @@ had nothing to do with them. After reconnecting, nothing about the old session
 is assumed: the panes on the other side may be different ones carrying the same
 numbers.
 
+### Spaces, tabs and the agent list
+
+A space holds tabs and a tab holds panes, and all three of "which space is
+shown", "which of its tabs" and "which pane has the keyboard" belong to the
+client rather than the server. Two people attached to one session should be
+able to look at different things, so the server is asked only for what exists,
+never for what is being looked at.
+
+Tabs are scoped to their space. A bar listing every tab in the session puts
+tabs the user cannot reach next to ones they can, which is worse than not
+showing them.
+
+The agent list is the one view that answers "which one stopped?" without
+looking at every pane, which is why it groups by space and tab: that is where
+an agent actually is, and reaching it means going there. The navigation cursor
+and the focused pane are marked separately — moving the cursor must not move
+the view, since a user reading down the list has not left the pane they are
+working in.
+
+New spaces and tabs are named by position rather than left blank. An unnamed
+space shows as a dash and disappears from the status bar, which makes the thing
+just created the hardest one to find. A rename seeds the prompt with the
+current name and starts it selected, as any rename field would: typing replaces
+it, backspace keeps it and edits from the end.
+
+### Reading a chunk of input
+
+Terminal input arrives in chunks that can hold several keys, and twice now a
+handler looked at the first byte, acted on it, and reported the whole chunk
+consumed — dropping everything after. `splitKeys` breaks a chunk into whole
+keys so that shape of mistake is not available: every key is offered in turn,
+and a handler that declines one hands back the rest.
+
+A lone escape is never held as a possible mouse report. It is far more often
+the Escape key, and holding it means the key does not arrive until the user
+presses something else — which inside an editor is indistinguishable from tend
+having eaten it.
+
 ### Settings
 
 Every setting has a working default, so the file is optional and a partial one

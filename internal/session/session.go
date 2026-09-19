@@ -378,6 +378,26 @@ func (s *Session) MoveFocus(side Side, area Rect) bool {
 	return true
 }
 
+// RenameTab changes a tab's label.
+func (s *Session) RenameTab(id TabID, name string) error {
+	t, ok := s.Tab(id)
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchTab, id)
+	}
+	t.Name = name
+	return nil
+}
+
+// RenameWorkspace changes a workspace's label.
+func (s *Session) RenameWorkspace(id WorkspaceID, name string) error {
+	w, ok := s.Workspace(id)
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchWorkspace, id)
+	}
+	w.Name = name
+	return nil
+}
+
 // AdjustSplit moves one edge of a pane by a number of cells, taking the space
 // from the neighbour across that edge.
 //

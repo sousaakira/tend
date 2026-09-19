@@ -33,6 +33,14 @@ const (
 	CommandNewTab
 	CommandNextTab
 	CommandPrevTab
+	CommandSelectTab
+	CommandNextSpace
+	CommandPrevSpace
+	CommandNewSpace
+	CommandToggleAgents
+	CommandNavigate
+	CommandRenameTab
+	CommandRenameSpace
 	CommandDetach
 	CommandRefresh
 	CommandHelp
@@ -77,6 +85,22 @@ func (c Command) String() string {
 		return "next-tab"
 	case CommandPrevTab:
 		return "prev-tab"
+	case CommandSelectTab:
+		return "select-tab"
+	case CommandNextSpace:
+		return "next-space"
+	case CommandPrevSpace:
+		return "prev-space"
+	case CommandNewSpace:
+		return "new-space"
+	case CommandToggleAgents:
+		return "toggle-agents"
+	case CommandNavigate:
+		return "navigate"
+	case CommandRenameTab:
+		return "rename-tab"
+	case CommandRenameSpace:
+		return "rename-space"
 	case CommandDetach:
 		return "detach"
 	case CommandRefresh:
@@ -111,6 +135,13 @@ var Keys = []struct {
 	{"c", CommandNewTab, "new tab"},
 	{"n", CommandNextTab, "next tab"},
 	{"p", CommandPrevTab, "previous tab"},
+	{"1-9", CommandSelectTab, "go to tab"},
+	{"s", CommandNewSpace, "new space"},
+	{"( )", CommandNextSpace, "switch space"},
+	{"a", CommandToggleAgents, "show agents"},
+	{"g", CommandNavigate, "pick an agent"},
+	{",", CommandRenameTab, "rename tab"},
+	{".", CommandRenameSpace, "rename space"},
 	{"d", CommandDetach, "detach"},
 	{"r", CommandRefresh, "redraw"},
 	{"?", CommandHelp, "this help"},
@@ -160,6 +191,8 @@ type Result struct {
 	Forward []byte
 	// Command is a client action, or CommandNone.
 	Command Command
+	// Arg carries a command's argument, such as which tab a digit selected.
+	Arg int
 }
 
 // Feed processes one byte.
@@ -181,14 +214,21 @@ func (in *Input) Feed(b byte) Result {
 // Bytes and commands are kept in order relative to each other, because a chunk
 // can hold both: a paste that ends mid-sequence, or a prefix typed fast enough
 // to arrive with the key after it.
-func (in *Input) FeedAll(data []byte) ([]byte, []Command, []MouseEvent) {
+// Action is a command and its argument, kept together so a caller does not
+// have to pair them up by position.
+type Action struct {
+	Command Command
+	Arg     int
+}
+
+func (in *Input) FeedAll(data []byte) ([]byte, []Action, []MouseEvent) {
 	if len(in.partialMouse) > 0 {
 		data = append(in.partialMouse, data...)
 		in.partialMouse = nil
 	}
 
 	var forward []byte
-	var commands []Command
+	var commands []Action
 	var mice []MouseEvent
 
 	for i := 0; i < len(data); {
@@ -202,17 +242,21 @@ func (in *Input) FeedAll(data []byte) ([]byte, []Command, []MouseEvent) {
 		}
 		if incomplete {
 			rest := data[i:]
-			if len(rest) < maxPartialMouse {
+			// A lone escape is never held. It is far more often the Escape
+			// key than the start of a mouse report, and holding it means the
+			// key does not arrive until the user presses something else —
+			// which inside an editor is indistinguishable from tend having
+			// eaten it. Two bytes are enough to be worth waiting for.
+			if len(rest) >= 2 && len(rest) < maxPartialMouse {
 				in.partialMouse = append(in.partialMouse[:0], rest...)
 				return forward, commands, mice
 			}
-			// Too long to be a mouse report; treat it as ordinary input.
 		}
 
 		r := in.Feed(data[i])
 		forward = append(forward, r.Forward...)
 		if r.Command != CommandNone {
-			commands = append(commands, r.Command)
+			commands = append(commands, Action{Command: r.Command, Arg: r.Arg})
 		}
 		i++
 	}
@@ -280,6 +324,22 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandGrowDown}
 	case 'c':
 		return Result{Command: CommandNewTab}
+	case 's':
+		return Result{Command: CommandNewSpace}
+	case ')':
+		return Result{Command: CommandNextSpace}
+	case '(':
+		return Result{Command: CommandPrevSpace}
+	case 'a':
+		return Result{Command: CommandToggleAgents}
+	case 'g':
+		return Result{Command: CommandNavigate}
+	case ',':
+		return Result{Command: CommandRenameTab}
+	case '.':
+		return Result{Command: CommandRenameSpace}
+	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return Result{Command: CommandSelectTab, Arg: int(b - '0')}
 	case 'n':
 		return Result{Command: CommandNextTab}
 	case 'p':

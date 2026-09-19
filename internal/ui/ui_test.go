@@ -341,7 +341,7 @@ func TestInputPrefixCommands(t *testing.T) {
 	for key, want := range cases {
 		var in Input
 		forward, commands, _ := in.FeedAll(append([]byte{Prefix}, key...))
-		if len(commands) != 1 || commands[0] != want {
+		if len(commands) != 1 || commands[0].Command != want {
 			t.Errorf("prefix %q gave %v, want %v", key, commands, want)
 		}
 		if len(forward) != 0 {
@@ -360,7 +360,7 @@ func TestInputPrefixArrowKeys(t *testing.T) {
 	for seq, want := range cases {
 		var in Input
 		_, commands, _ := in.FeedAll(append([]byte{Prefix}, seq...))
-		if len(commands) != 1 || commands[0] != want {
+		if len(commands) != 1 || commands[0].Command != want {
 			t.Errorf("prefix %q gave %v, want %v", seq, commands, want)
 		}
 	}
@@ -370,12 +370,12 @@ func TestInputPrefixArrowKeys(t *testing.T) {
 // in separate chunks, and the state machine has to survive that.
 func TestInputArrowKeysArrivingApart(t *testing.T) {
 	var in Input
-	var commands []Command
+	var commands []Action
 	for _, chunk := range [][]byte{{Prefix}, {0x1b}, {'['}, {'C'}} {
 		_, cmds, _ := in.FeedAll(chunk)
 		commands = append(commands, cmds...)
 	}
-	if len(commands) != 1 || commands[0] != CommandFocusRight {
+	if len(commands) != 1 || commands[0].Command != CommandFocusRight {
 		t.Errorf("commands = %v, want focus-right", commands)
 	}
 }
@@ -388,7 +388,7 @@ func TestInputDoublePrefixSendsItLiterally(t *testing.T) {
 	if len(forward) != 1 || forward[0] != Prefix {
 		t.Errorf("forwarded %q, want the prefix byte", forward)
 	}
-	if len(commands) != 1 || commands[0] != CommandLiteralPrefix {
+	if len(commands) != 1 || commands[0].Command != CommandLiteralPrefix {
 		t.Errorf("commands = %v", commands)
 	}
 }
@@ -442,7 +442,7 @@ func TestInputKeepsOrderWithinAChunk(t *testing.T) {
 	if string(forward) != "ab" {
 		t.Errorf("forwarded %q, want ab", forward)
 	}
-	if len(commands) != 1 || commands[0] != CommandClosePane {
+	if len(commands) != 1 || commands[0].Command != CommandClosePane {
 		t.Errorf("commands = %v", commands)
 	}
 }
@@ -611,5 +611,103 @@ func TestMouseEnableAndDisableArePaired(t *testing.T) {
 		if !strings.Contains(DisableMouse, mode+"l") {
 			t.Errorf("DisableMouse does not clear %s", mode)
 		}
+	}
+}
+
+// TestInputSelectTabCarriesTheNumber: the digit keys all map to one command,
+// so the number has to travel with it rather than being encoded in a dozen
+// commands that differ only by a value.
+func TestInputSelectTabCarriesTheNumber(t *testing.T) {
+	for n := 1; n <= 9; n++ {
+		var in Input
+		_, commands, _ := in.FeedAll([]byte{Prefix, byte('0' + n)})
+		if len(commands) != 1 {
+			t.Fatalf("digit %d gave %v", n, commands)
+		}
+		if commands[0].Command != CommandSelectTab || commands[0].Arg != n {
+			t.Errorf("digit %d = %+v, want select-tab with arg %d", n, commands[0], n)
+		}
+	}
+
+	// Zero is not a tab: tabs are counted from one, and a key that quietly
+	// selects nothing is worse than one that does nothing.
+	var in Input
+	forward, commands, _ := in.FeedAll([]byte{Prefix, '0'})
+	if len(commands) != 0 {
+		t.Errorf("zero gave %v, want no command", commands)
+	}
+	if string(forward) != "0" {
+		t.Errorf("zero forwarded %q, want it passed to the pane", forward)
+	}
+}
+
+func TestInputSpaceAndAgentCommands(t *testing.T) {
+	cases := map[byte]Command{
+		's': CommandNewSpace,
+		')': CommandNextSpace,
+		'(': CommandPrevSpace,
+		'a': CommandToggleAgents,
+		'g': CommandNavigate,
+	}
+	for key, want := range cases {
+		var in Input
+		_, commands, _ := in.FeedAll([]byte{Prefix, key})
+		if len(commands) != 1 || commands[0].Command != want {
+			t.Errorf("key %q gave %v, want %v", string(key), commands, want)
+		}
+	}
+}
+
+// TestInputDeliversALoneEscape is why a lone escape is never held as a
+// possible mouse report: inside an editor, a key that does not arrive until
+// the next keystroke is indistinguishable from one that was eaten.
+func TestInputDeliversALoneEscape(t *testing.T) {
+	var in Input
+	forward, _, mice := in.FeedAll([]byte("abc\x1b"))
+	if string(forward) != "abc\x1b" {
+		t.Errorf("forwarded %q, want the escape delivered with the rest", forward)
+	}
+	if len(mice) != 0 {
+		t.Errorf("mice = %v", mice)
+	}
+
+	// On its own, too.
+	var lone Input
+	forward, _, _ = lone.FeedAll([]byte{0x1b})
+	if len(forward) != 1 || forward[0] != 0x1b {
+		t.Errorf("forwarded %q, want a single escape", forward)
+	}
+}
+
+// TestInputStillWaitsForALikelyMouseReport keeps the fix above from throwing
+// away the buffering it was narrowing.
+func TestInputStillWaitsForALikelyMouseReport(t *testing.T) {
+	var in Input
+	forward, _, mice := in.FeedAll([]byte("\x1b["))
+	if len(forward) != 0 || len(mice) != 0 {
+		t.Fatalf("forward=%q mice=%v, want it held", forward, mice)
+	}
+	forward, _, mice = in.FeedAll([]byte("<0;4;2M"))
+	if len(forward) != 0 {
+		t.Errorf("forwarded %q, want nothing", forward)
+	}
+	if len(mice) != 1 || mice[0].X != 3 || mice[0].Y != 1 {
+		t.Errorf("mice = %+v", mice)
+	}
+}
+
+// TestInputReleasesAHeldSequenceThatIsNotAMouseReport: an arrow key begins the
+// same way and must still reach the pane.
+func TestInputReleasesAHeldSequenceThatIsNotAMouseReport(t *testing.T) {
+	var in Input
+	if forward, _, _ := in.FeedAll([]byte("\x1b[")); len(forward) != 0 {
+		t.Fatalf("forwarded %q too early", forward)
+	}
+	forward, _, mice := in.FeedAll([]byte("A"))
+	if string(forward) != "\x1b[A" {
+		t.Errorf("forwarded %q, want the whole arrow key", forward)
+	}
+	if len(mice) != 0 {
+		t.Errorf("mice = %v", mice)
 	}
 }
