@@ -223,6 +223,50 @@ A pane that ignores the hangup is killed when the grace period expires. Panes
 tend hangs up on purpose do not report the resulting hangup as a failure, or
 every pane the user closes would show an error.
 
+## The wire
+
+`internal/proto` is the format, `internal/transport` is the socket,
+`internal/client` is the other end. Together they make the server a daemon:
+panes outlive every client, so clients may come and go while agents keep
+working.
+
+**Two kinds of traffic, two encodings.** Control messages are JSON, because
+they are rare, structured, and worth being able to read in a hex dump. Pane
+traffic is raw bytes behind an 8-byte pane id, because it is the hot path and
+base64 inside JSON would cost a third more bytes and an encode per read.
+
+**Screens, not byte streams.** A subscribed client is sent a pane's whole
+screen on a tick, not the bytes that changed it. A client that falls behind
+can miss any number of screens and still be correct once the next arrives,
+because a screen describes a state rather than a change. Raw bytes would be
+cheaper and unrecoverable if one were ever dropped — and a client can stall,
+which is what decides it.
+
+**Three compatibility rules**, each one the difference between a mismatch
+failing clearly and failing subtly:
+
+- Frame type numbers are permanent, and an unknown type is skipped rather than
+  guessed at.
+- Method names are permanent, and an unknown method is answered with an error,
+  never a disconnect. A missing feature disables one action, not the session.
+- New JSON fields are optional. A peer that has never heard of a field behaves
+  as it did before the field existed.
+
+The handshake exchanges versions and the server's method list, so a client can
+disable an action the server cannot perform rather than letting a user discover
+the gap.
+
+**The socket is the access control.** There is no authentication beyond the
+file system: the directory is `0700` and the socket `0600`, set before anyone
+can reach it. Anyone who can connect can run a command as this user.
+
+Two details that only show up in practice. A socket path longer than `sun_path`
+— 108 bytes on Linux, 104 on macOS — fails with a bare "invalid argument", so
+the length is checked first and reported with a way out. And a socket left by a
+crashed server is removed on the next start, but only after checking that
+nothing is listening on it: removing a live server's socket would orphan it,
+leaving its panes running and unreachable.
+
 ## Non-goals for the core milestone
 
 Plugins, SSH/multi-machine, kitty graphics, worktree management and session

@@ -20,4 +20,5 @@ func (p *Pty) Resize(Size) error         { return ErrUnsupported }
 func (p *Pty) Pid() int                  { return 0 }
 func (p *Pty) Wait() error               { return ErrUnsupported }
 func (p *Pty) Signal(os.Signal) error    { return ErrUnsupported }
+func (p *Pty) Kill() error               { return ErrUnsupported }
 func (p *Pty) Close() error              { return nil }

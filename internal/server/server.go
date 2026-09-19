@@ -102,7 +102,11 @@ type Server struct {
 	session  *session.Session
 	runtimes map[session.PaneID]*paneRuntime
 	titles   map[session.PaneID]string
-	closed   bool
+	// conns tracks connected clients so shutdown can hang them up. Without
+	// this they sit blocked on a socket read that nothing ever ends, and Close
+	// waits on them forever.
+	conns  map[*clientConn]struct{}
+	closed bool
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -135,6 +139,7 @@ func New(cfg Config) (*Server, error) {
 		session:  session.New(),
 		runtimes: make(map[session.PaneID]*paneRuntime),
 		titles:   make(map[session.PaneID]string),
+		conns:    make(map[*clientConn]struct{}),
 		done:     make(chan struct{}),
 	}
 
@@ -160,12 +165,22 @@ func (s *Server) Close() error {
 	for _, rt := range s.runtimes {
 		runtimes = append(runtimes, rt)
 	}
+	conns := make([]*clientConn, 0, len(s.conns))
+	for c := range s.conns {
+		conns = append(conns, c)
+	}
 	s.mu.Unlock()
 
 	close(s.done)
 	for _, rt := range runtimes {
 		rt.setClosing()
 		_ = rt.pty.Close()
+	}
+	// Hang up the clients too. Their handlers are blocked on a socket read
+	// that nothing else will end, and a client seeing its connection drop is
+	// how it learns the server is gone.
+	for _, c := range conns {
+		_ = c.conn.Close()
 	}
 
 	// A pane that ignores the hangup gets killed rather than holding shutdown

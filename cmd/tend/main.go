@@ -17,13 +17,20 @@ const usage = `tend — terminal runtime for coding agents
 
 usage: tend <command> [options]
 
-commands:
+commands, against a running server:
+  serve             run the session server
+  ls                list a session's panes, or every session
+  new               open a pane in a session
+  kill              close panes, or stop a session
+  attach            follow a session's events and screens
+
+commands that need no server:
   agents            list the agents tend can detect
   detect            report an agent's state from captured terminal output
   explain           show how every rule voted, for one capture
   screen            render captured terminal output as tend parses it
   watch             run a command on a pty and report its agent state
-  session           run several commands as panes in one server
+  session           run several commands as panes in one process
   version           print the version
 
 run "tend <command> -h" for a command's options.
@@ -49,6 +56,16 @@ func main() {
 		err = runWatch(os.Args[2:])
 	case "session":
 		err = runSession(os.Args[2:])
+	case "serve":
+		err = runServe(os.Args[2:])
+	case "ls":
+		err = runList(os.Args[2:])
+	case "new":
+		err = runNew(os.Args[2:])
+	case "kill":
+		err = runKill(os.Args[2:])
+	case "attach":
+		err = runAttach(os.Args[2:])
 	case "version":
 		fmt.Println(version)
 	case "-h", "--help", "help":

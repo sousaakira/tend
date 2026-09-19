@@ -8,10 +8,9 @@ spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo.
 
-> Status: early. The terminal core, agent detection for 22 agents, the pty
-> layer, session state and the server all work and are tested. The wire
-> protocol and the TUI client are still to come, so there is nothing to attach
-> to or detach from yet.
+> Status: early. The server runs as a daemon and panes outlive their clients,
+> so the CLI below is usable for real. The TUI client — the part that draws
+> panes and forwards keys — is still to come.
 
 ## try it
 
@@ -25,8 +24,24 @@ bin/tend detect -agent claude out.raw    # replay a capture offline
 bin/tend explain -agent claude out.raw   # ...and see how every rule voted
 bin/tend screen out.raw                  # ...and what the terminal core made of it
 
-bin/tend session -- claude -- codex      # several panes in one server
+bin/tend session -- claude -- codex      # several panes in one process
 ```
+
+against a running server:
+
+```bash
+bin/tend serve &                # start the session daemon
+bin/tend new -- claude          # open a pane; prints its id
+bin/tend new -split 1 -dir rows -- codex
+bin/tend ls                     # what is running
+bin/tend attach -pane 1         # follow events and a pane's screen
+bin/tend kill 2                 # close one pane
+bin/tend kill -server           # stop the session
+```
+
+The panes belong to the server, not to the command that opened them: every
+line above is a separate process, and the agents keep working between them.
+`-s NAME` runs more than one session side by side.
 
 `watch` runs one command on a pseudo-terminal, mirrors its output, and prints
 state changes to stderr:
