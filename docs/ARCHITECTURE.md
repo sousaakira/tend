@@ -157,6 +157,38 @@ Windows is a stub that returns `ErrUnsupported`. ConPTY is a different enough
 mechanism to be its own piece of work rather than a port of the Unix path; the
 seam is in place so that work lands in one file.
 
+## Session state
+
+`internal/session` holds the shape of a session — workspaces, tabs, panes and
+their arrangement — as plain data. There is no PTY, no goroutine and no
+terminal in the package, which is what lets a whole workspace's behaviour be
+tested without starting anything. The server owns the runtime and pairs it with
+these records by id.
+
+Three decisions that are easy to get subtly wrong, and so are pinned by tests:
+
+- **Splits name their arrangement, not their divider.** `Columns` places panes
+  side by side, `Rows` stacks them. "Horizontal split" means opposite things in
+  different multiplexers, and the ambiguity reliably puts panes in the wrong
+  place.
+- **Splitting the same way twice stays flat.** A second `Columns` split makes
+  three panes in a row rather than nested halves, so the third pane is a third
+  of the screen and not a quarter.
+- **Geometry tiles exactly.** Each child's far edge comes from a cumulative
+  fraction and the next child starts there, so rounding cannot open a one-cell
+  seam. `assertTiles` checks coverage cell by cell rather than by summing
+  widths, because a sum hides exactly the failure a user sees.
+
+Focus movement works on the computed rectangles rather than on the tree, since
+"the pane to the left" is a spatial question: the tree can nest two panes
+arbitrarily far apart and they are still neighbours on screen.
+
+`CheckInvariants` verifies everything the package promises about its own shape,
+and the tests call it after every mutation. It exists because a layout tree
+fails by drifting rather than by crashing — a stale index, focus on a closed
+pane, split shares no longer summing to one — and each of those renders wrongly
+instead of stopping, which makes them expensive to find later.
+
 ## Non-goals for the core milestone
 
 Plugins, SSH/multi-machine, kitty graphics, worktree management and session

@@ -4,9 +4,10 @@
 GO ?= $(shell command -v go 2>/dev/null || echo $(HOME)/.local/go/bin/go)
 
 
-# Packages under active development. `dev` narrows to these so the loop stays
-# fast as the tree grows; widen it when a package graduates.
-DEV_PKGS ?= ./internal/...
+# Packages the fast loop covers. It is everything with tests: narrowing it
+# further once cost the CLI its coverage, which is where the last real bug was.
+# Narrow it deliberately when the tree grows enough to need it.
+DEV_PKGS ?= ./...
 
 # `make` with no arguments runs the fast loop, not the first target in the file.
 .DEFAULT_GOAL := dev
