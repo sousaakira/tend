@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"sort"
@@ -28,6 +29,11 @@ func sessionFlag(fs *flag.FlagSet) *string {
 
 // connect dials a session, reporting the missing-server case in a way that
 // says what to do about it rather than quoting a socket error.
+//
+// It does not start a server. Commands that inspect or change a session
+// should fail when there is none, because creating one on the way to listing
+// it would report an empty session rather than the absence of one. Commands
+// that are meant to put you in a session use openSession instead.
 func connect(name string, handler client.Handler) (*client.Client, error) {
 	path, err := transport.SocketPath(name)
 	if err != nil {
@@ -35,12 +41,96 @@ func connect(name string, handler client.Handler) (*client.Client, error) {
 	}
 	c, err := client.Dial(path, handler)
 	if err != nil {
-		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED) {
-			return nil, fmt.Errorf("no server for session %q; start one with \"tend serve -s %s\"", name, name)
+		if notRunning(err) {
+			return nil, fmt.Errorf("no session %q; start one with \"tend attach -s %s\"", name, name)
 		}
 		return nil, err
 	}
 	return c, nil
+}
+
+// notRunning reports whether the error means there is nothing listening, as
+// opposed to something being wrong with a server that is.
+func notRunning(err error) bool {
+	return errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED)
+}
+
+// openSession connects, starting a server first if there is none.
+//
+// Needing a daemon is tend's problem, not the user's: a session is what they
+// asked for, and a second terminal running a server is a step that exists
+// only because of how this is built. The server outlives the client either
+// way, so starting it here changes nothing about what happens afterwards.
+func openSession(name string, handler client.Handler) (*client.Client, error) {
+	path, err := transport.SocketPath(name)
+	if err != nil {
+		return nil, err
+	}
+
+	c, err := client.Dial(path, handler)
+	if err == nil {
+		return c, nil
+	}
+	if !notRunning(err) {
+		return nil, err
+	}
+
+	if err := startServer(name); err != nil {
+		return nil, err
+	}
+
+	// Wait for it to come up. Two clients starting at once is fine: the second
+	// server fails to take the socket and exits, and the client that started it
+	// connects to the first one.
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if c, err := client.Dial(path, handler); err == nil {
+			return c, nil
+		} else if !notRunning(err) {
+			return nil, err
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	return nil, fmt.Errorf("started a server for %q but it never came up; see %s", name, serverLog(path))
+}
+
+// startServer launches this same binary as a background server.
+func startServer(name string) error {
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("finding tend: %w", err)
+	}
+	path, err := transport.SocketPath(name)
+	if err != nil {
+		return err
+	}
+
+	// The server's output goes to a file rather than nowhere. It is the only
+	// record of why a session failed to start, and a background process with
+	// no output is one that fails silently.
+	log, err := os.OpenFile(serverLog(path), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("opening the server log: %w", err)
+	}
+	defer log.Close()
+
+	cmd := exec.Command(self, "serve", "-s", name)
+	cmd.Stdin = nil
+	cmd.Stdout = log
+	cmd.Stderr = log
+	detach(cmd)
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting a server for %q: %w", name, err)
+	}
+	// Not waited on deliberately: the server is meant to outlive this process,
+	// and is reparented once we exit.
+	return nil
+}
+
+// serverLog is where a background server writes, beside its socket.
+func serverLog(socketPath string) string {
+	return strings.TrimSuffix(socketPath, ".sock") + ".log"
 }
 
 // runServe runs the daemon in the foreground.
@@ -216,7 +306,7 @@ func runNew(args []string) error {
 		return errors.New("no command given")
 	}
 
-	c, err := connect(*name, nil)
+	c, err := openSession(*name, nil)
 	if err != nil {
 		return err
 	}

@@ -93,7 +93,7 @@ type tui struct {
 }
 
 func (t *tui) run() error {
-	c, err := connect(t.session, t)
+	c, err := openSession(t.session, t)
 	if err != nil {
 		return err
 	}

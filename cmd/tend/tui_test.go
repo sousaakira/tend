@@ -327,3 +327,126 @@ func TestAttachRefusesWithoutATerminal(t *testing.T) {
 		t.Errorf("error = %q, want it to explain the terminal requirement", out)
 	}
 }
+
+// TestBareTendStartsItsOwnServer is the shape of the thing: one command, no
+// server running, and you are in a session.
+//
+// Needing a daemon is tend's problem rather than the user's, and this is the
+// test that keeps it that way — it starts from an empty runtime directory with
+// nothing listening.
+func TestBareTendStartsItsOwnServer(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, nil, pty.Options{
+		Size: pty.Size{Cols: 80, Rows: 20},
+		Env: append(os.Environ(),
+			"TEND_RUNTIME_DIR="+runtimeDir,
+			"SHELL=/bin/sh",
+		),
+	})
+	if err != nil {
+		t.Fatalf("running tend with no arguments: %v", err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(80, 20, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+
+	t.Cleanup(func() {
+		_ = p.Close()
+		if c, err := connect("default", nil); err == nil {
+			_ = c.Shutdown()
+			_ = c.Close()
+		}
+	})
+
+	a.waitForScreen(t, "a session drawn from nothing", func(s string) bool {
+		return strings.Contains(s, "┌") && strings.Contains(s, "default")
+	})
+
+	// A shell really is running in it.
+	a.send(t, "printf started-from-nothing\n")
+	a.waitForScreen(t, "the shell's output", func(s string) bool {
+		return strings.Contains(s, "started-from-nothing")
+	})
+}
+
+// TestStartedServerOutlivesTheClient: the server tend starts is detached, so
+// closing the client leaves the session running rather than taking it down.
+func TestStartedServerOutlivesTheClient(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, []string{"attach", "-s", "auto"}, pty.Options{
+		Size: pty.Size{Cols: 80, Rows: 20},
+		Env:  append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(80, 20, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+
+	t.Cleanup(func() {
+		if c, err := connect("auto", nil); err == nil {
+			_ = c.Shutdown()
+			_ = c.Close()
+		}
+	})
+
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02d")
+	exited := make(chan error, 1)
+	go func() { exited <- p.Wait() }()
+	select {
+	case <-exited:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the client did not exit after detaching")
+	}
+
+	c, err := connect("auto", nil)
+	if err != nil {
+		t.Fatalf("the server should still be running: %v", err)
+	}
+	defer c.Close()
+	snap, err := c.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Panes) != 1 {
+		t.Errorf("the session has %d panes, want 1", len(snap.Panes))
+	}
+}
+
+// TestCommandsThatInspectDoNotCreate: listing a session that does not exist
+// must say so. Creating one on the way to listing it would report an empty
+// session rather than the absence of one.
+func TestCommandsThatInspectDoNotCreate(t *testing.T) {
+	runtimeDir := t.TempDir()
+	bin := buildBinary(t)
+
+	for _, args := range [][]string{
+		{"ls", "-s", "ghost"},
+		{"kill", "-s", "ghost", "1"},
+	} {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			t.Errorf("%v succeeded against a session that does not exist", args)
+		}
+		if !strings.Contains(string(out), "no session") {
+			t.Errorf("%v said %q, want it to report the missing session", args, out)
+		}
+	}
+
+	if entries, err := os.ReadDir(runtimeDir); err == nil && len(entries) > 0 {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("inspecting created %v", names)
+	}
+}

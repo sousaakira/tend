@@ -30,9 +30,11 @@ bin/tend session -- claude -- codex      # several panes in one process
 against a running server:
 
 ```bash
-bin/tend serve &        # start the session daemon
-bin/tend attach         # draw it and use it
+bin/tend
 ```
+
+That is the whole thing. It opens a session, starting a server for it if there
+is not one already, and draws it.
 
 ```
 ┌ 1 claude ●──────────────────────────┐┌ 2 codex ▲───────────────────────────┐
@@ -57,6 +59,11 @@ bin/tend follow                 # watch state changes, for diagnosis
 bin/tend kill 2                 # close one pane
 bin/tend kill -server           # stop the session
 ```
+
+`attach` and `new` start a server when there is none; everything else reports
+a missing session instead, since creating one on the way to listing it would
+report an empty session rather than the absence of one. `tend serve` runs a
+server in the foreground, which is for watching it rather than for using it.
 
 The panes belong to the server, not to the command that opened them: every
 line above is a separate process, and the agents keep working between them.

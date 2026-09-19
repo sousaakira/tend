@@ -305,6 +305,26 @@ tend's own terminal emulator reads what it drew. That makes it the one test
 exercising the whole stack at once, and the one that fails when any layer stops
 agreeing with another.
 
+### Starting the server
+
+`tend` with no arguments opens a session, starting a server for it when there
+is none. Needing a daemon is tend's problem rather than the user's: a second
+terminal running a server is a step that exists only because of how this is
+built, and the server outlives the client either way, so starting it from the
+client changes nothing about what happens afterwards.
+
+The server is started detached — its own session, no controlling terminal — so
+it does not receive the Ctrl+C meant for the client and does not die with the
+terminal that launched it. Its output goes to a log file beside its socket,
+because a background process with no output is one that fails silently.
+
+Two clients racing to start one is fine: the second server cannot take the
+socket, exits, and the client that started it connects to the first.
+
+Only `attach` and `new` do this. `ls`, `kill` and `follow` report a missing
+session instead — creating one on the way to listing it would report an empty
+session rather than the absence of one.
+
 ## Non-goals for the core milestone
 
 Plugins, SSH/multi-machine, kitty graphics, worktree management and session

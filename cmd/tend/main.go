@@ -15,15 +15,18 @@ const version = "tend (development build)"
 
 const usage = `tend — terminal runtime for coding agents
 
-usage: tend <command> [options]
+usage: tend [command] [options]
 
-commands, against a running server:
-  serve             run the session server
+with no command, tend opens a session — starting a server for it if there is
+not one already — and draws it.
+
+commands:
+  attach            open a session and draw it (the default)
   ls                list a session's panes, or every session
   new               open a pane in a session
   kill              close panes, or stop a session
-  attach            draw a session and use it
   follow            print a session's events, for diagnosis
+  serve             run a session server in the foreground
 
 commands that need no server:
   agents            list the agents tend can detect
@@ -38,37 +41,40 @@ run "tend <command> -h" for a command's options.
 `
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprint(os.Stderr, usage)
-		os.Exit(2)
+	// Bare "tend" opens a session, starting a server if there is none. Asking
+	// someone to run a daemon before they can use the thing is a step that
+	// exists only because of how it is built.
+	args := os.Args[1:]
+	if len(args) == 0 {
+		args = []string{"attach"}
 	}
 
 	var err error
-	switch cmd := os.Args[1]; cmd {
+	switch cmd := args[0]; cmd {
 	case "agents":
-		err = runAgents(os.Args[2:])
+		err = runAgents(args[1:])
 	case "detect":
-		err = runDetect(os.Args[2:], false)
+		err = runDetect(args[1:], false)
 	case "explain":
-		err = runDetect(os.Args[2:], true)
+		err = runDetect(args[1:], true)
 	case "screen":
-		err = runScreen(os.Args[2:])
+		err = runScreen(args[1:])
 	case "watch":
-		err = runWatch(os.Args[2:])
+		err = runWatch(args[1:])
 	case "session":
-		err = runSession(os.Args[2:])
+		err = runSession(args[1:])
 	case "serve":
-		err = runServe(os.Args[2:])
+		err = runServe(args[1:])
 	case "ls":
-		err = runList(os.Args[2:])
+		err = runList(args[1:])
 	case "new":
-		err = runNew(os.Args[2:])
+		err = runNew(args[1:])
 	case "kill":
-		err = runKill(os.Args[2:])
+		err = runKill(args[1:])
 	case "attach":
-		err = runAttach(os.Args[2:])
+		err = runAttach(args[1:])
 	case "follow":
-		err = runFollow(os.Args[2:])
+		err = runFollow(args[1:])
 	case "version":
 		fmt.Println(version)
 	case "-h", "--help", "help":
