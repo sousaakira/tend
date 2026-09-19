@@ -74,8 +74,11 @@ type PaneInfo struct {
 	State string `json:"state"`
 	Rule  string `json:"rule,omitempty"`
 
-	Running bool   `json:"running"`
-	Pid     int    `json:"pid,omitempty"`
+	Running bool `json:"running"`
+	Pid     int  `json:"pid,omitempty"`
+	// Mouse is the mouse reporting the pane's own program asked for, so a
+	// client knows whether a click belongs to the application or to tend.
+	Mouse   bool   `json:"mouse,omitempty"`
 	ExitErr string `json:"exit_error,omitempty"`
 
 	Command []string `json:"command,omitempty"`
@@ -201,9 +204,12 @@ type PaneSubscribeParams struct {
 	Panes []uint64 `json:"panes"`
 }
 
-// PaneScreenParams asks for a pane's current screen.
+// PaneScreenParams asks for a pane's screen.
 type PaneScreenParams struct {
 	Pane uint64 `json:"pane"`
+	// Offset is how many lines back through the scrollback to look. Zero is
+	// the live screen.
+	Offset int `json:"offset,omitempty"`
 }
 
 // PaneScreenResult carries a pane's screen.
@@ -217,6 +223,12 @@ type PaneScreenResult struct {
 	Title string `json:"title,omitempty"`
 	Cols  int    `json:"cols"`
 	Rows  int    `json:"rows"`
+	// History is how many lines are behind the top of the screen, so a client
+	// knows how far back it can scroll without asking and being refused.
+	History int `json:"history,omitempty"`
+	// Offset is how far back this view actually is, which may be less than
+	// was asked for.
+	Offset int `json:"offset,omitempty"`
 }
 
 // TabLayoutParams asks where a tab's panes go at a given size.

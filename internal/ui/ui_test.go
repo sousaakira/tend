@@ -296,7 +296,7 @@ func TestCursorHiddenWithNoFocus(t *testing.T) {
 
 func TestInputForwardsOrdinaryKeys(t *testing.T) {
 	var in Input
-	forward, commands := in.FeedAll([]byte("hello world"))
+	forward, commands, _ := in.FeedAll([]byte("hello world"))
 	if string(forward) != "hello world" {
 		t.Errorf("forwarded %q", forward)
 	}
@@ -310,7 +310,7 @@ func TestInputForwardsOrdinaryKeys(t *testing.T) {
 func TestInputForwardsEscapeSequencesUntouched(t *testing.T) {
 	var in Input
 	seq := "\x1b[1;5A\x1b[200~pasted\x1b[201~\x1bOP"
-	forward, commands := in.FeedAll([]byte(seq))
+	forward, commands, _ := in.FeedAll([]byte(seq))
 	if string(forward) != seq {
 		t.Errorf("forwarded %q, want %q", forward, seq)
 	}
@@ -340,7 +340,7 @@ func TestInputPrefixCommands(t *testing.T) {
 	}
 	for key, want := range cases {
 		var in Input
-		forward, commands := in.FeedAll(append([]byte{Prefix}, key...))
+		forward, commands, _ := in.FeedAll(append([]byte{Prefix}, key...))
 		if len(commands) != 1 || commands[0] != want {
 			t.Errorf("prefix %q gave %v, want %v", key, commands, want)
 		}
@@ -359,7 +359,7 @@ func TestInputPrefixArrowKeys(t *testing.T) {
 	}
 	for seq, want := range cases {
 		var in Input
-		_, commands := in.FeedAll(append([]byte{Prefix}, seq...))
+		_, commands, _ := in.FeedAll(append([]byte{Prefix}, seq...))
 		if len(commands) != 1 || commands[0] != want {
 			t.Errorf("prefix %q gave %v, want %v", seq, commands, want)
 		}
@@ -372,7 +372,7 @@ func TestInputArrowKeysArrivingApart(t *testing.T) {
 	var in Input
 	var commands []Command
 	for _, chunk := range [][]byte{{Prefix}, {0x1b}, {'['}, {'C'}} {
-		_, cmds := in.FeedAll(chunk)
+		_, cmds, _ := in.FeedAll(chunk)
 		commands = append(commands, cmds...)
 	}
 	if len(commands) != 1 || commands[0] != CommandFocusRight {
@@ -384,7 +384,7 @@ func TestInputArrowKeysArrivingApart(t *testing.T) {
 // editor bound to Ctrl+B, still receives the key.
 func TestInputDoublePrefixSendsItLiterally(t *testing.T) {
 	var in Input
-	forward, commands := in.FeedAll([]byte{Prefix, Prefix})
+	forward, commands, _ := in.FeedAll([]byte{Prefix, Prefix})
 	if len(forward) != 1 || forward[0] != Prefix {
 		t.Errorf("forwarded %q, want the prefix byte", forward)
 	}
@@ -397,7 +397,7 @@ func TestInputDoublePrefixSendsItLiterally(t *testing.T) {
 // keystroke after it.
 func TestInputUnboundKeyIsForwarded(t *testing.T) {
 	var in Input
-	forward, commands := in.FeedAll([]byte{Prefix, 'Z'})
+	forward, commands, _ := in.FeedAll([]byte{Prefix, 'Z'})
 	if string(forward) != "Z" {
 		t.Errorf("forwarded %q, want Z", forward)
 	}
@@ -410,7 +410,7 @@ func TestInputUnboundKeyIsForwarded(t *testing.T) {
 // to be an arrow key releases what it collected rather than guessing.
 func TestInputPrefixThenNonArrowEscape(t *testing.T) {
 	var in Input
-	forward, commands := in.FeedAll([]byte{Prefix, 0x1b, 'O'})
+	forward, commands, _ := in.FeedAll([]byte{Prefix, 0x1b, 'O'})
 	if string(forward) != "\x1bO" {
 		t.Errorf("forwarded %q, want the collected bytes", forward)
 	}
@@ -438,7 +438,7 @@ func TestInputArmedReporting(t *testing.T) {
 // and they must stay in order relative to each other.
 func TestInputKeepsOrderWithinAChunk(t *testing.T) {
 	var in Input
-	forward, commands := in.FeedAll([]byte{'a', Prefix, 'x', 'b'})
+	forward, commands, _ := in.FeedAll([]byte{'a', Prefix, 'x', 'b'})
 	if string(forward) != "ab" {
 		t.Errorf("forwarded %q, want ab", forward)
 	}
@@ -500,5 +500,116 @@ func BenchmarkDraw(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		Draw(dst, frame, theme)
+	}
+}
+
+// --- mouse -----------------------------------------------------------------
+
+func TestParseMouseReports(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want MouseEvent
+	}{
+		{"press", "\x1b[<0;10;5M", MouseEvent{Kind: MousePress, X: 9, Y: 4}},
+		{"release", "\x1b[<0;10;5m", MouseEvent{Kind: MouseRelease, X: 9, Y: 4}},
+		{"right button", "\x1b[<2;3;3M", MouseEvent{Kind: MousePress, X: 2, Y: 2, Button: 2}},
+		{"drag", "\x1b[<32;7;9M", MouseEvent{Kind: MouseDrag, X: 6, Y: 8}},
+		{"wheel up", "\x1b[<64;1;1M", MouseEvent{Kind: MouseWheelUp}},
+		{"wheel down", "\x1b[<65;1;1M", MouseEvent{Kind: MouseWheelDown, Button: 1}},
+		// Coordinates past 223 are exactly why the SGR encoding is asked for.
+		{"far right", "\x1b[<0;400;200M", MouseEvent{Kind: MousePress, X: 399, Y: 199}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, n, incomplete := parseMouse([]byte(c.in))
+			if incomplete || n != len(c.in) {
+				t.Fatalf("consumed %d of %d (incomplete=%v)", n, len(c.in), incomplete)
+			}
+			if got.Kind != c.want.Kind || got.X != c.want.X ||
+				got.Y != c.want.Y || got.Button != c.want.Button {
+				t.Errorf("got %+v, want %+v", got, c.want)
+			}
+			// Raw is what gets forwarded to a pane, so it has to be the whole
+			// sequence and nothing else.
+			if string(got.Raw) != c.in {
+				t.Errorf("Raw = %q, want %q", got.Raw, c.in)
+			}
+		})
+	}
+}
+
+// TestParseMouseIncomplete: a report split across reads must be waited for,
+// not forwarded in halves.
+func TestParseMouseIncomplete(t *testing.T) {
+	for _, partial := range []string{"\x1b", "\x1b[", "\x1b[<", "\x1b[<0", "\x1b[<0;10;"} {
+		_, n, incomplete := parseMouse([]byte(partial))
+		if n != 0 || !incomplete {
+			t.Errorf("%q: n=%d incomplete=%v, want it to wait", partial, n, incomplete)
+		}
+	}
+}
+
+func TestParseMouseRejectsOtherSequences(t *testing.T) {
+	for _, other := range []string{"\x1b[A", "\x1b[1;5A", "hello", "\x1b[<abcM"} {
+		_, n, incomplete := parseMouse([]byte(other))
+		if n != 0 || incomplete {
+			t.Errorf("%q: n=%d incomplete=%v, want it rejected", other, n, incomplete)
+		}
+	}
+}
+
+func TestInputSeparatesMouseFromKeys(t *testing.T) {
+	var in Input
+	forward, commands, mice := in.FeedAll([]byte("ab\x1b[<0;5;5Mcd"))
+	if string(forward) != "abcd" {
+		t.Errorf("forwarded %q, want abcd", forward)
+	}
+	if len(commands) != 0 {
+		t.Errorf("commands = %v", commands)
+	}
+	if len(mice) != 1 || mice[0].Kind != MousePress {
+		t.Errorf("mice = %+v, want one press", mice)
+	}
+}
+
+// TestInputBuffersASplitMouseReport: a terminal can deliver one across two
+// reads, and half of it reaching a pane would appear there as typed text.
+func TestInputBuffersASplitMouseReport(t *testing.T) {
+	var in Input
+	forward, _, mice := in.FeedAll([]byte("\x1b[<0;12"))
+	if len(forward) != 0 || len(mice) != 0 {
+		t.Fatalf("a partial report produced forward=%q mice=%v", forward, mice)
+	}
+	forward, _, mice = in.FeedAll([]byte(";7M"))
+	if len(forward) != 0 {
+		t.Errorf("forwarded %q, want nothing", forward)
+	}
+	if len(mice) != 1 || mice[0].X != 11 || mice[0].Y != 6 {
+		t.Errorf("mice = %+v, want one press at (11,6)", mice)
+	}
+}
+
+// TestInputGivesUpOnAnEndlessPartial: something that starts like a mouse
+// report but never ends must not swallow input forever.
+func TestInputGivesUpOnAnEndlessPartial(t *testing.T) {
+	var in Input
+	long := "\x1b[<" + strings.Repeat("1", maxPartialMouse+10)
+	forward, _, _ := in.FeedAll([]byte(long))
+	if len(forward) == 0 {
+		t.Error("an over-long partial should be released as ordinary input")
+	}
+}
+
+func TestMouseEnableAndDisableArePaired(t *testing.T) {
+	// Whatever is turned on must be turned off, or every later click in that
+	// terminal emits gibberish.
+	for _, mode := range []string{"1002", "1006"} {
+		if !strings.Contains(EnableMouse, mode+"h") {
+			t.Errorf("EnableMouse does not set %s", mode)
+		}
+		if !strings.Contains(DisableMouse, mode+"l") {
+			t.Errorf("DisableMouse does not clear %s", mode)
+		}
 	}
 }

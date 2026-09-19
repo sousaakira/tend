@@ -143,6 +143,27 @@ func startSession(t *testing.T, cols, rows int) *attached {
 	return a
 }
 
+// dividerColumn returns the screen column where two panes meet, counted in
+// cells rather than bytes.
+//
+// The box-drawing characters are three bytes each, so strings.Index gives an
+// offset that is not a column. Comparing two such offsets happens to work;
+// clicking at one does not.
+func (a *attached) dividerColumn() int {
+	for _, line := range a.lines() {
+		col := 0
+		var prev rune
+		for _, r := range line {
+			if prev == '┐' && r == '┌' {
+				return col - 1
+			}
+			prev = r
+			col++
+		}
+	}
+	return -1
+}
+
 // TestAttachDrawsAPane is the whole stack in one assertion: a server starts a
 // shell on a pty, renders its screen to ANSI, sends it over a socket, and the
 // client parses and draws it inside a bordered frame.
@@ -484,16 +505,7 @@ func TestAttachResizesASplit(t *testing.T) {
 		return strings.Count(s, "┌") == 2
 	})
 
-	// The divider starts in the middle.
-	divider := func() int {
-		for _, line := range a.lines() {
-			if i := strings.Index(line, "┐┌"); i >= 0 {
-				return i
-			}
-		}
-		return -1
-	}
-	start := divider()
+	start := a.dividerColumn()
 	if start < 0 {
 		t.Fatalf("could not find the divider:\n%s", a.text())
 	}
@@ -502,7 +514,7 @@ func TestAttachResizesASplit(t *testing.T) {
 	// divider left.
 	a.send(t, "\x02H")
 	a.waitForScreen(t, "the divider to move left", func(string) bool {
-		d := divider()
+		d := a.dividerColumn()
 		return d >= 0 && d < start
 	})
 }
@@ -525,4 +537,288 @@ func TestAttachShowsTabs(t *testing.T) {
 	if first := a.lines()[0]; !strings.Contains(first, "shell") {
 		t.Errorf("tab bar = %q, want it to name the tabs", first)
 	}
+}
+
+// TestAttachScrollsBack: a pane's history is reachable without stopping it.
+func TestAttachScrollsBack(t *testing.T) {
+	a := startSession(t, 80, 12)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// More output than fits, so the early lines are only in the scrollback.
+	a.send(t, "for i in $(seq 1 40); do echo line-$i; done\n")
+	a.waitForScreen(t, "the last line", func(s string) bool {
+		return strings.Contains(s, "line-40")
+	})
+	if strings.Contains(a.text(), "line-1\n") {
+		t.Fatal("line-1 should have scrolled off already")
+	}
+
+	a.send(t, "\x02[")
+	a.waitForScreen(t, "the scroll indicator", func(s string) bool {
+		return strings.Contains(s, "scroll")
+	})
+
+	// Page back until the earliest line appears.
+	for i := 0; i < 10 && !strings.Contains(a.text(), "line-2 "); i++ {
+		a.send(t, "\x1b[5~")
+		time.Sleep(60 * time.Millisecond)
+	}
+	if !strings.Contains(a.text(), "line-2") {
+		t.Errorf("scrolling back did not reach the early output:\n%s", a.text())
+	}
+
+	// Leaving the view returns to the live screen.
+	a.send(t, "q")
+	a.waitForScreen(t, "the live screen", func(s string) bool {
+		return !strings.Contains(s, "scroll") && strings.Contains(s, "line-40")
+	})
+}
+
+// TestAttachUsesTheConfiguredPrefix: a user who rebinds the prefix gets the
+// new key, and the old one reaches the pane like any other keystroke.
+func TestAttachUsesTheConfiguredPrefix(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(cfgPath, []byte("[keys]\nprefix = \"ctrl+a\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+
+	p, err := pty.Start(bin, []string{"attach", "-s", "cfg"}, pty.Options{
+		Size: pty.Size{Cols: 90, Rows: 20},
+		Env: append(os.Environ(),
+			"TEND_RUNTIME_DIR="+runtimeDir,
+			"TEND_CONFIG="+cfgPath,
+			"SHELL=/bin/sh",
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(90, 20, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		if c, err := connect("cfg", nil); err == nil {
+			_ = c.Shutdown()
+			_ = c.Close()
+		}
+	})
+
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// The configured prefix works.
+	a.send(t, "\x01|")
+	a.waitForScreen(t, "a split from ctrl+a", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
+}
+
+// TestAttachRejectsABrokenConfig: running with settings the user did not
+// write, and not saying so, is worse than refusing to start.
+func TestAttachRejectsABrokenConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(cfgPath, []byte("[keys]\nprefix = \"banana\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	bin := buildBinary(t)
+	cmd := exec.Command(bin, "attach")
+	cmd.Env = append(os.Environ(),
+		"TEND_RUNTIME_DIR="+t.TempDir(),
+		"TEND_CONFIG="+cfgPath,
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("a broken config should stop tend from starting")
+	}
+	if !strings.Contains(string(out), "prefix") {
+		t.Errorf("error = %q, want it to name the setting", out)
+	}
+}
+
+// TestConfigCommand covers the path people are pointed at when something is
+// wrong with their settings.
+func TestConfigCommand(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	bin := buildBinary(t)
+
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "TEND_CONFIG="+cfgPath)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	out, err := run("config")
+	if err != nil {
+		t.Fatalf("config: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, cfgPath) || !strings.Contains(out, "none") {
+		t.Errorf("output = %q, want the path and that there is no file", out)
+	}
+
+	if out, err := run("config", "-init"); err != nil {
+		t.Fatalf("config -init: %v\n%s", err, out)
+	}
+	out, err = run("config")
+	if err != nil {
+		t.Fatalf("config after init: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "loads cleanly") {
+		t.Errorf("output = %q, want it to load", out)
+	}
+
+	// A second -init must not quietly overwrite what the user has written.
+	if _, err := run("config", "-init"); err == nil {
+		t.Error("a second -init should refuse without -force")
+	}
+}
+
+// TestVersionIsStamped: a binary that cannot say what built it is one nobody
+// can report a bug against.
+func TestVersionIsStamped(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "tend")
+	build := exec.Command("go", "build", "-ldflags", "-X main.version=v9.9.9-test", "-o", bin, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building: %v\n%s", err, out)
+	}
+	out, err := exec.Command(bin, "version").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "v9.9.9-test") {
+		t.Errorf("version = %q, want the stamped value", out)
+	}
+}
+
+// TestAttachClickFocusesAPane: clicking is the plainest way to say "I mean
+// that one", and it has to work without the keyboard.
+func TestAttachClickFocusesAPane(t *testing.T) {
+	a := startSession(t, 86, 12)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
+
+	// Focus follows a split, so it is on the right-hand pane. Clicking the
+	// left one and typing must put the text there.
+	a.send(t, "\x1b[<0;5;5M\x1b[<0;5;5m")
+	time.Sleep(150 * time.Millisecond)
+	a.send(t, "printf clicked\n")
+
+	a.waitForScreen(t, "the click to move focus", func(string) bool {
+		for _, line := range a.lines() {
+			if i := strings.Index(line, "clicked"); i >= 0 && i < 43 {
+				return true // it landed in the left pane
+			}
+		}
+		return false
+	})
+}
+
+// TestAttachDragResizesASplit: grabbing a border is the other half of the
+// mouse being useful, and it must not be confused with clicking the pane.
+func TestAttachDragResizesASplit(t *testing.T) {
+	a := startSession(t, 86, 12)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
+
+	start := a.dividerColumn()
+	if start < 0 {
+		t.Fatalf("no divider found:\n%s", a.text())
+	}
+
+	// Press on the border, move ten columns left, release. Mouse reports
+	// count from one, so the column is the cell plus one.
+	a.send(t, "\x1b[<0;"+itoa(start+1)+";4M")
+	time.Sleep(100 * time.Millisecond)
+	a.send(t, "\x1b[<32;"+itoa(start-9)+";4M")
+
+	a.waitForScreen(t, "the divider to follow the drag", func(string) bool {
+		d := a.dividerColumn()
+		return d >= 0 && d < start-5
+	})
+	a.send(t, "\x1b[<0;"+itoa(start-9)+";4m")
+}
+
+func itoa(v int) string {
+	if v == 0 {
+		return "0"
+	}
+	neg := v < 0
+	if neg {
+		v = -v
+	}
+	var buf [20]byte
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+// TestAttachReconnects: a server restarting is not the client's failure, and
+// exiting when it happens loses the user's place for a reason that had
+// nothing to do with them.
+func TestAttachReconnects(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+
+	p, err := pty.Start(bin, []string{"attach", "-s", "again"}, pty.Options{
+		Size: pty.Size{Cols: 80, Rows: 14},
+		Env:  append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(80, 14, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		if c, err := connect("again", nil); err == nil {
+			_ = c.Shutdown()
+			_ = c.Close()
+		}
+	})
+
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Stop the server out from under it.
+	c, err := connect("again", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Close()
+
+	// The client says so rather than vanishing, then finds its way back: it
+	// starts a server itself, exactly as it did the first time.
+	a.waitForScreen(t, "a session again", func(s string) bool {
+		return strings.Contains(s, "┌") && !strings.Contains(s, "OFFLINE")
+	})
+
+	a.send(t, "printf back-again\n")
+	a.waitForScreen(t, "the new session to work", func(s string) bool {
+		return strings.Contains(s, "back-again")
+	})
 }

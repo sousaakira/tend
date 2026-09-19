@@ -25,10 +25,15 @@ var ErrClosed = errors.New("client: connection closed")
 // a failed call rather than a hung client.
 const callTimeout = 30 * time.Second
 
-// Handler receives what the server sends unsolicited. Both methods are called
-// from the client's reader goroutine, so neither may block for long or call
-// back into the same client.
+// Handler receives what the server sends unsolicited. Every method is called
+// from the client's reader goroutine, so none may block for long or call back
+// into the same client.
 type Handler interface {
+	// Disconnected reports that the connection ended. It is how a client
+	// learns to stop drawing a session it can no longer see, and when to
+	// reconnect.
+	Disconnected()
+
 	// Event reports something that happened in the session.
 	Event(proto.Event)
 	// PaneOutput reports a pane's current screen. data is only valid for the
@@ -179,6 +184,7 @@ func (c *Client) Close() error {
 // readLoop dispatches everything the server sends.
 func (c *Client) readLoop() {
 	defer c.closeWG.Done()
+	defer c.handler.Disconnected()
 	defer c.failPending()
 
 	for {
@@ -253,6 +259,7 @@ type nopHandler struct{}
 
 func (nopHandler) Event(proto.Event)         {}
 func (nopHandler) PaneOutput(uint64, []byte) {}
+func (nopHandler) Disconnected()             {}
 
 // --- convenience wrappers --------------------------------------------------
 //
@@ -319,8 +326,15 @@ func (c *Client) SubscribePanes(panes []uint64) error {
 
 // PaneScreen fetches a pane's current screen.
 func (c *Client) PaneScreen(pane uint64) (proto.PaneScreenResult, error) {
+	return c.PaneScreenAt(pane, 0)
+}
+
+// PaneScreenAt fetches a pane as it was offset lines back through its history.
+func (c *Client) PaneScreenAt(pane uint64, offset int) (proto.PaneScreenResult, error) {
 	var out proto.PaneScreenResult
-	return out, c.Call(proto.MethodPaneScreen, proto.PaneScreenParams{Pane: pane}, &out)
+	return out, c.Call(proto.MethodPaneScreen, proto.PaneScreenParams{
+		Pane: pane, Offset: offset,
+	}, &out)
 }
 
 // AdjustSplit moves one edge of a pane. side is "left", "right", "up" or

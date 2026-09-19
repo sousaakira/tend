@@ -391,7 +391,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		return c.srv.paneScreen(session.PaneID(p.Pane))
+		return c.srv.paneScreen(session.PaneID(p.Pane), p.Offset)
 
 	case proto.MethodPaneAdjust:
 		var p proto.PaneAdjustParams
@@ -539,6 +539,7 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Panes[i].Pid = st.Pid
 		snap.Panes[i].ExitErr = st.ExitErr
 		snap.Panes[i].Rule = st.Rule
+		snap.Panes[i].Mouse = st.Mouse
 		if st.Title != "" {
 			snap.Panes[i].Title = st.Title
 		}
@@ -572,7 +573,7 @@ func (s *Server) tabLayout(id session.TabID, cols, rows int) (proto.TabLayoutRes
 	return out, nil
 }
 
-func (s *Server) paneScreen(id session.PaneID) (proto.PaneScreenResult, error) {
+func (s *Server) paneScreen(id session.PaneID, offset int) (proto.PaneScreenResult, error) {
 	rt, err := s.runtime(id)
 	if err != nil {
 		return proto.PaneScreenResult{}, err
@@ -581,8 +582,11 @@ func (s *Server) paneScreen(id session.PaneID) (proto.PaneScreenResult, error) {
 	rt.withScreen(func(scr *vt.Screen) {
 		out.Cols, out.Rows = scr.Size()
 		out.Title = scr.Title()
-		out.ANSI = string(vt.RenderScreen(scr))
 	})
+	ansi, actual, history := rt.scrolledScreen(offset)
+	out.ANSI = string(ansi)
+	out.Offset = actual
+	out.History = history
 	out.Text = rt.screenText()
 	return out, nil
 }

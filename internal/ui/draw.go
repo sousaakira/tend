@@ -14,6 +14,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
+	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/vt"
 )
 
@@ -62,6 +63,36 @@ func DefaultTheme() Theme {
 		Unknown: dim,
 		Exited:  dim,
 	}
+}
+
+// ThemeFrom applies a user's colour choices over the defaults. An empty value
+// keeps the default, so a file naming one colour changes one colour.
+func ThemeFrom(c config.Theme) Theme {
+	t := DefaultTheme()
+	apply := func(target *vt.Style, value string) {
+		if value == "" {
+			return
+		}
+		parsed, ok := config.ParseColor(value)
+		if !ok {
+			return // rejected at load; nothing sensible to do here
+		}
+		if parsed.RGB {
+			target.FG = vt.RGBColor(parsed.R, parsed.G, parsed.B)
+		} else {
+			target.FG = vt.IndexedColor(parsed.Index)
+		}
+		// A colour the user chose replaces dimming, which would fight it.
+		target.Attrs &^= vt.AttrDim
+	}
+	apply(&t.Border, c.Border)
+	apply(&t.BorderFocused, c.BorderFocused)
+	apply(&t.Title, c.Border)
+	apply(&t.TitleFocused, c.BorderFocused)
+	apply(&t.Working, c.Working)
+	apply(&t.Blocked, c.Blocked)
+	apply(&t.Idle, c.Idle)
+	return t
 }
 
 // StateStyle picks the colour for an agent state.
@@ -124,6 +155,15 @@ type Frame struct {
 	Session   string
 	Workspace string
 	Tab       string
+	// Offline marks that the session is unreachable. It is shown rather than
+	// hidden: a frozen screen with no explanation is the worst version of
+	// this, because the user cannot tell it from an agent that has stopped.
+	Offline bool
+	// Scroll is how far back a pane is being read, and ScrollDepth how far it
+	// could go. Both are shown: a view that says only "scrolled" leaves the
+	// user unable to tell a glance back from being lost in a long history.
+	Scroll      int
+	ScrollDepth int
 	// Zoomed marks that one pane is filling the area, so the status bar can
 	// say so — a zoomed pane and a session with one pane look identical
 	// otherwise.
@@ -426,6 +466,9 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	limit := dst.Cols()
 	x := 0
 
+	if f.Offline {
+		x = writeString(dst, x, y, " OFFLINE ", theme.StatusAlert, limit)
+	}
 	if f.Prefix {
 		x = writeString(dst, x, y, " PREFIX ", theme.StatusAlert, limit)
 	}
@@ -439,6 +482,9 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.Zoomed {
 		left += " · zoom"
+	}
+	if f.Scroll > 0 {
+		left += " · scroll " + itoa(uint64(f.Scroll)) + "/" + itoa(uint64(f.ScrollDepth))
 	}
 	x = writeString(dst, x, y, left+"  ", theme.StatusKey, limit)
 

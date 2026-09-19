@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	// scrollbackLines is how much history a pane keeps.
-	scrollbackLines = 5000
+	// defaultScrollback is how much history a pane keeps when unconfigured.
+	defaultScrollback = 5000
 	// readBuffer is the chunk size for pty reads. Agent output arrives in
 	// bursts of full redraws, so a small buffer costs syscalls for nothing.
 	readBuffer = 32 * 1024
@@ -62,6 +62,9 @@ type Config struct {
 	// ShutdownGrace is how long Close waits for panes to end on their own
 	// before killing them. Zero picks a default.
 	ShutdownGrace time.Duration
+	// Scrollback is how many lines of history each pane keeps. Zero picks a
+	// default.
+	Scrollback int
 }
 
 // PaneSpec describes a pane to open.
@@ -90,6 +93,8 @@ type PaneStatus struct {
 	Running bool
 	Pid     int
 	ExitErr string
+	// Mouse is the mouse reporting the pane's program asked for.
+	Mouse bool
 }
 
 // Server owns a running session.
@@ -130,6 +135,9 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.ShutdownGrace <= 0 {
 		cfg.ShutdownGrace = defaultShutdownGrace
+	}
+	if cfg.Scrollback <= 0 {
+		cfg.Scrollback = defaultScrollback
 	}
 
 	s := &Server{
@@ -353,7 +361,7 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 		return fmt.Errorf("server: starting %s: %w", spec.Command[0], err)
 	}
 
-	rt := newPaneRuntime(id, p, size, manifest)
+	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback)
 	s.runtimes[id] = rt
 	s.titles[id] = ""
 	if manifest != nil {
@@ -429,6 +437,17 @@ func (s *Server) RenderedScreen(id session.PaneID) ([]byte, error) {
 		return nil, err
 	}
 	return rt.renderedScreen(), nil
+}
+
+// ScrolledScreen renders a pane as it was `offset` lines ago, and reports how
+// far back it could go.
+func (s *Server) ScrolledScreen(id session.PaneID, offset int) (ansi []byte, actual, history int, err error) {
+	rt, err := s.runtime(id)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	ansi, actual, history = rt.scrolledScreen(offset)
+	return ansi, actual, history, nil
 }
 
 // WithScreen runs fn against a pane's terminal.

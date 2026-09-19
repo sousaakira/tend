@@ -8,9 +8,9 @@ spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo.
 
-> Status: usable. Panes are drawn, keys reach them, text reflows when you
-> resize, and detaching leaves everything running. No mouse yet, no config
-> file, and a client does not reconnect by itself if the server restarts.
+> Status: usable. Panes are drawn, keys and the mouse reach them, text reflows
+> when you resize, scrollback is readable, the client reconnects by itself, and
+> detaching leaves everything running.
 
 ## try it
 
@@ -47,8 +47,37 @@ is not one already, and draws it.
 
 `ctrl+b` is the prefix, and `ctrl+b ?` lists the keys: `|` and `-` split,
 `hjkl` and the arrows move focus, `HJKL` resize, `z` zooms a pane to the whole
-window, `c` opens a tab, `x` closes a pane, and `d` detaches leaving
-everything running.
+window, `[` scrolls back through its history, `c` opens a tab, `x` closes a
+pane, and `d` detaches leaving everything running.
+
+The mouse works too: click a pane to focus it, drag a border to resize, scroll
+to look back. A pane running something that wants the mouse itself — an editor,
+say — gets the clicks instead.
+
+## settings
+
+Optional, at `~/.config/tend/config.toml`. `tend config -init` writes a
+commented copy of the defaults; `tend config` says where it is and whether it
+loads.
+
+```toml
+[keys]
+prefix = "ctrl+a"
+
+[pane]
+shell = ["/bin/zsh"]
+scrollback = 20000
+
+[ui]
+mouse = true
+
+[ui.theme]
+border_focused = "blue"
+blocked = "#ff5f5f"
+```
+
+A misspelled setting is an error rather than being ignored, since a setting
+quietly dropped is one you believe is in effect.
 
 The rest of the commands work against the same server, from anywhere:
 
@@ -93,6 +122,13 @@ PANE  COMMAND  AGENT   STATE    TITLE
 1     claude   claude  working  my-project
 2     codex    codex   blocked  ~/proj
 3     htop     -       -        -
+```
+
+## install
+
+```bash
+make install     # into GOBIN, or ~/.local/bin
+make dist        # cross-compiled binaries for linux and macOS
 ```
 
 ## development

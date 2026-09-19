@@ -12,7 +12,7 @@ DEV_PKGS ?= ./...
 # `make` with no arguments runs the fast loop, not the first target in the file.
 .DEFAULT_GOAL := dev
 
-.PHONY: toolchain run dev watch test test-race check fmt vet bench build clean
+.PHONY: toolchain run dev watch test test-race check fmt vet bench build install dist clean
 
 ## toolchain: fail with a usable message instead of "go: No such file or directory".
 toolchain:
@@ -79,9 +79,38 @@ vet: toolchain
 bench: toolchain
 	$(GO) test -bench=. -benchmem -run=XXX ./internal/vt/
 
+# VERSION comes from a git tag when there is one, and from the commit
+# otherwise, so a binary can always be traced back to what built it.
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+LDFLAGS := -X main.version=$(VERSION)
+
+# INSTALL_DIR is GOBIN when set, and the usual per-user bin otherwise.
+INSTALL_DIR ?= $(shell $(GO) env GOBIN 2>/dev/null)
+ifeq ($(INSTALL_DIR),)
+INSTALL_DIR := $(HOME)/.local/bin
+endif
+
 build: toolchain
-	$(GO) build -o bin/tend ./cmd/tend
+	$(GO) build -ldflags "$(LDFLAGS)" -o bin/tend ./cmd/tend
+
+## install: build and put tend on PATH, in GOBIN or ~/.local/bin.
+install: toolchain
+	@mkdir -p "$(INSTALL_DIR)"
+	$(GO) build -ldflags "$(LDFLAGS)" -o "$(INSTALL_DIR)/tend" ./cmd/tend
+	@echo "installed $(INSTALL_DIR)/tend ($(VERSION))"
+	@command -v tend >/dev/null 2>&1 || echo "note: $(INSTALL_DIR) is not on PATH"
+
+## dist: cross-compile release binaries into dist/.
+dist: toolchain
+	@rm -rf dist && mkdir -p dist
+	@for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do \
+		os=$${target%/*}; arch=$${target#*/}; \
+		echo "  $$os/$$arch"; \
+		GOOS=$$os GOARCH=$$arch $(GO) build -ldflags "$(LDFLAGS)" \
+			-o "dist/tend-$$os-$$arch" ./cmd/tend || exit 1; \
+	done
+	@ls -1 dist
 
 clean:
-	rm -rf bin
+	rm -rf bin dist
 	$(GO) clean -testcache

@@ -11,7 +11,10 @@ import (
 	"os"
 )
 
-const version = "tend (development build)"
+// version is stamped at build time from git; see the Makefile. The fallback
+// is what a "go build ./cmd/tend" with no flags produces, which is worth
+// saying plainly rather than claiming a version it does not have.
+var version = "development build"
 
 const usage = `tend — terminal runtime for coding agents
 
@@ -27,6 +30,7 @@ commands:
   kill              close panes, or stop a session
   follow            print a session's events, for diagnosis
   serve             run a session server in the foreground
+  config            show or create the settings file
 
 commands that need no server:
   agents            list the agents tend can detect
@@ -75,8 +79,10 @@ func main() {
 		err = runAttach(args[1:])
 	case "follow":
 		err = runFollow(args[1:])
+	case "config":
+		err = runConfig(args[1:])
 	case "version":
-		fmt.Println(version)
+		fmt.Printf("tend %s\n", version)
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 	default:

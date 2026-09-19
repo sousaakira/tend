@@ -35,11 +35,11 @@ type paneRuntime struct {
 	exitErr  string
 }
 
-func newPaneRuntime(id session.PaneID, p *pty.Pty, size pty.Size, manifest *detect.Manifest) *paneRuntime {
+func newPaneRuntime(id session.PaneID, p *pty.Pty, size pty.Size, manifest *detect.Manifest, scrollback int) *paneRuntime {
 	rt := &paneRuntime{
 		id:      id,
 		pty:     p,
-		screen:  vt.NewScreen(int(size.Cols), int(size.Rows), scrollbackLines),
+		screen:  vt.NewScreen(int(size.Cols), int(size.Rows), scrollback),
 		running: true,
 	}
 	if manifest != nil {
@@ -138,6 +138,7 @@ func (rt *paneRuntime) status() PaneStatus {
 	defer rt.mu.Unlock()
 
 	st := PaneStatus{
+		Mouse:   rt.screen.Modes().Mouse != vt.MouseOff,
 		ID:      rt.id,
 		Title:   rt.title,
 		Agent:   rt.agentID,
@@ -171,6 +172,25 @@ func (rt *paneRuntime) renderedScreen() []byte {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	return vt.RenderScreen(rt.screen)
+}
+
+// scrolledScreen renders a view of the pane `offset` lines back through its
+// history, and reports how far back it could actually go.
+func (rt *paneRuntime) scrolledScreen(offset int) (ansi []byte, actual, history int) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	history = rt.screen.MainGrid().HistoryLen()
+	actual = min(max(offset, 0), history)
+	return vt.RenderScrolled(rt.screen, actual), actual, history
+}
+
+// wantsMouse reports whether the pane's own program asked for mouse reporting,
+// which decides whether a click belongs to it or to tend.
+func (rt *paneRuntime) wantsMouse() bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.screen.Modes().Mouse != vt.MouseOff
 }
 
 // withScreen runs fn against the pane's terminal while holding its lock.

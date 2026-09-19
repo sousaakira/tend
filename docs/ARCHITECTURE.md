@@ -349,9 +349,41 @@ Only `attach` and `new` do this. `ls`, `kill` and `follow` report a missing
 session instead — creating one on the way to listing it would report an empty
 session rather than the absence of one.
 
+### Mouse, scrolling and reconnecting
+
+**A click belongs to whoever asked for it.** A pane running something that
+requested mouse reporting gets the report forwarded; otherwise the click is
+tend's and focuses the pane. The server reports each pane's mouse mode for
+exactly this, since only it knows what the program inside asked for.
+
+Mouse input is read in the SGR encoding because the older ones pack
+coordinates into single bytes and cannot describe a click past column 223. A
+report split across two reads is held rather than forwarded in halves, with a
+bound on how long it is held: something that starts like a report and never
+ends must not swallow real input.
+
+**Scrolling is a view, not a mode.** The pane keeps running and the server
+keeps its live screen; what changes is only which rows this client asks to be
+drawn. That is why leaving the view needs no resynchronisation — nothing was
+ever out of step.
+
+**Reconnecting re-reads everything.** A server restarting is not the client's
+failure, and exiting when it happens loses the user's place for a reason that
+had nothing to do with them. After reconnecting, nothing about the old session
+is assumed: the panes on the other side may be different ones carrying the same
+numbers.
+
+### Settings
+
+Every setting has a working default, so the file is optional and a partial one
+is normal. An unknown key is an error rather than being ignored: a setting
+silently dropped is one the user believes is in effect, which is the most
+confusing way for configuration to fail. Settings are read before anything else
+is checked, so a broken file is reported wherever tend is being run from.
+
 ## Non-goals for the core milestone
 
 Plugins, SSH/multi-machine, kitty graphics, worktree management and session
-handoff are all deferred. So is mouse support, reflow on resize, and a client
-that reconnects by itself when a server restarts. The architecture should not make them hard to add,
+handoff are all deferred. So is restoring a layout after the server itself
+restarts: panes outlive clients, not the process that owns them. The architecture should not make them hard to add,
 but nothing ships for them until the core is solid.

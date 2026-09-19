@@ -206,6 +206,52 @@ func RenderScreen(s *Screen) []byte {
 	return e.buf
 }
 
+// RenderScrolled encodes a view of the screen as it was `offset` lines ago,
+// taking the rows above the viewport from the scrollback.
+//
+// Offset zero is the live screen, which is why scrolling is a view rather than
+// a mode down here: the terminal keeps running and the cursor keeps moving
+// while somebody reads what went past.
+func RenderScrolled(s *Screen, offset int) []byte {
+	if offset <= 0 {
+		return RenderScreen(s)
+	}
+	g := s.MainGrid()
+	if offset > g.HistoryLen() {
+		offset = g.HistoryLen()
+	}
+
+	cols, rows := s.Size()
+	var e encoder
+	e.reset()
+	e.buf = append(e.buf, 0x1b, '[', 'H')
+	e.setStyle(DefaultStyle)
+
+	// The window starts `offset` rows above the top of the viewport, so the
+	// first rows come from history and the rest from the screen itself.
+	for y := 0; y < rows; y++ {
+		if y > 0 {
+			e.buf = append(e.buf, '\r', '\n')
+		}
+		index := y - offset
+		var line *Row
+		if index < 0 {
+			line = g.HistoryLine(g.HistoryLen() + index)
+		} else {
+			line = g.Line(index)
+		}
+		if line != nil {
+			e.row(line, cols)
+		}
+	}
+
+	e.setStyle(DefaultStyle)
+	e.moveTo(0, 0)
+	// The cursor belongs to the live screen, not to a view of the past.
+	e.buf = append(e.buf, "\x1b[?25l"...)
+	return e.buf
+}
+
 // Painter draws a grid onto a real terminal, emitting only what changed.
 //
 // It keeps the last frame it sent. A full repaint of a large terminal is tens

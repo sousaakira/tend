@@ -25,6 +25,7 @@ const (
 	CommandFocusNext
 	CommandClosePane
 	CommandZoom
+	CommandScroll
 	CommandGrowLeft
 	CommandGrowRight
 	CommandGrowUp
@@ -60,6 +61,8 @@ func (c Command) String() string {
 		return "close-pane"
 	case CommandZoom:
 		return "zoom"
+	case CommandScroll:
+		return "scroll"
 	case CommandGrowLeft:
 		return "grow-left"
 	case CommandGrowRight:
@@ -103,6 +106,7 @@ var Keys = []struct {
 	{"o", CommandFocusNext, "focus next"},
 	{"x", CommandClosePane, "close pane"},
 	{"z", CommandZoom, "zoom pane"},
+	{"[", CommandScroll, "scroll back"},
 	{"HJKL", CommandGrowRight, "resize pane"},
 	{"c", CommandNewTab, "new tab"},
 	{"n", CommandNextTab, "next tab"},
@@ -117,11 +121,33 @@ var Keys = []struct {
 // The zero value is ready to use. It is not safe for concurrent use; one
 // reader feeds it.
 type Input struct {
+	// PrefixKey overrides the default. Zero uses Prefix; a prefix of none is
+	// expressed by setting it to a byte no keyboard produces, which Disabled
+	// does.
+	PrefixKey byte
+
 	armed bool
 	// pending holds an escape sequence being read after the prefix, so that
 	// an arrow key — three bytes that may arrive separately — is recognised
 	// rather than half-forwarded.
 	pending []byte
+	// partialMouse holds the beginning of a mouse report split across reads.
+	partialMouse []byte
+}
+
+// maxPartialMouse bounds how long a suspected mouse report is held. Beyond
+// this it was never one, and holding it would swallow real input.
+const maxPartialMouse = 32
+
+// Disabled is a prefix that no key produces, for a user who has turned the
+// prefix off and drives tend some other way.
+const Disabled byte = 0xFF
+
+func (in *Input) prefix() byte {
+	if in.PrefixKey == 0 {
+		return Prefix
+	}
+	return in.PrefixKey
 }
 
 // Armed reports whether the prefix key is waiting for a command, which the
@@ -139,7 +165,7 @@ type Result struct {
 // Feed processes one byte.
 func (in *Input) Feed(b byte) Result {
 	if !in.armed {
-		if b == Prefix {
+		if b == in.prefix() {
 			in.armed = true
 			in.pending = in.pending[:0]
 			return Result{}
@@ -155,17 +181,42 @@ func (in *Input) Feed(b byte) Result {
 // Bytes and commands are kept in order relative to each other, because a chunk
 // can hold both: a paste that ends mid-sequence, or a prefix typed fast enough
 // to arrive with the key after it.
-func (in *Input) FeedAll(data []byte) ([]byte, []Command) {
+func (in *Input) FeedAll(data []byte) ([]byte, []Command, []MouseEvent) {
+	if len(in.partialMouse) > 0 {
+		data = append(in.partialMouse, data...)
+		in.partialMouse = nil
+	}
+
 	var forward []byte
 	var commands []Command
-	for _, b := range data {
-		r := in.Feed(b)
+	var mice []MouseEvent
+
+	for i := 0; i < len(data); {
+		// Mouse reports are read before the key machine sees them: they are
+		// not keys, and the prefix has nothing to do with them.
+		ev, n, incomplete := parseMouse(data[i:])
+		if n > 0 {
+			mice = append(mice, ev)
+			i += n
+			continue
+		}
+		if incomplete {
+			rest := data[i:]
+			if len(rest) < maxPartialMouse {
+				in.partialMouse = append(in.partialMouse[:0], rest...)
+				return forward, commands, mice
+			}
+			// Too long to be a mouse report; treat it as ordinary input.
+		}
+
+		r := in.Feed(data[i])
 		forward = append(forward, r.Forward...)
 		if r.Command != CommandNone {
 			commands = append(commands, r.Command)
 		}
+		i++
 	}
-	return forward, commands
+	return forward, commands, mice
 }
 
 // command interprets a byte while the prefix is armed.
@@ -215,6 +266,8 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandClosePane}
 	case 'z':
 		return Result{Command: CommandZoom}
+	case '[':
+		return Result{Command: CommandScroll}
 	// Shifted movement keys resize instead of moving, which is the one
 	// convention every multiplexer shares.
 	case 'H':
@@ -237,8 +290,8 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandRefresh}
 	case '?':
 		return Result{Command: CommandHelp}
-	case Prefix:
-		return Result{Command: CommandLiteralPrefix, Forward: []byte{Prefix}}
+	case in.prefix():
+		return Result{Command: CommandLiteralPrefix, Forward: []byte{in.prefix()}}
 	}
 
 	// An unbound key cancels the prefix and is forwarded, so a mistyped

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sousaakira/tend/internal/client"
+	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/server"
@@ -141,7 +142,7 @@ func serverLog(socketPath string) string {
 func runServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	name := sessionFlag(fs)
-	interval := fs.Duration("interval", 150*time.Millisecond, "how often panes are re-examined")
+	interval := fs.Duration("interval", 0, "how often panes are re-examined (default: from the config file)")
 	cols := fs.Int("cols", 120, "default pane width")
 	rows := fs.Int("rows", 40, "default pane height")
 	fs.Usage = func() {
@@ -155,6 +156,15 @@ func runServe(args []string) error {
 		return err
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	detect := *interval
+	if detect <= 0 {
+		detect, _ = cfg.DetectInterval()
+	}
+
 	path, err := transport.SocketPath(*name)
 	if err != nil {
 		return err
@@ -166,7 +176,8 @@ func runServe(args []string) error {
 	defer ln.Close()
 
 	srv, err := server.New(server.Config{
-		DetectInterval: *interval,
+		DetectInterval: detect,
+		Scrollback:     cfg.Scrollback(),
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},
 	})
 	if err != nil {
@@ -406,6 +417,11 @@ func (h watchHandler) Event(ev proto.Event) {
 	case proto.EventPaneClosed:
 		fmt.Fprintf(os.Stderr, "%s pane %d closed\n", tag(), ev.Pane)
 	}
+}
+
+// Disconnected ends the follow: there is nothing left to report.
+func (h watchHandler) Disconnected() {
+	fmt.Fprintf(os.Stderr, "%s the session ended\n", tag())
 }
 
 func (h watchHandler) PaneOutput(pane uint64, data []byte) {

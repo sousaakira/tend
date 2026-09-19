@@ -20,9 +20,10 @@ import (
 // recorder collects what the server pushes, so a test can wait for it without
 // racing the reader goroutine.
 type recorder struct {
-	mu      sync.Mutex
-	events  []proto.Event
-	screens map[uint64]string
+	mu           sync.Mutex
+	events       []proto.Event
+	screens      map[uint64]string
+	disconnected bool
 }
 
 func newRecorder() *recorder {
@@ -40,6 +41,18 @@ func (r *recorder) PaneOutput(pane uint64, data []byte) {
 	defer r.mu.Unlock()
 	// The data is only valid for the call, so it is copied.
 	r.screens[pane] = string(data)
+}
+
+func (r *recorder) Disconnected() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.disconnected = true
+}
+
+func (r *recorder) wasDisconnected() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.disconnected
 }
 
 func (r *recorder) eventsOfKind(kind string) []proto.Event {
@@ -624,4 +637,19 @@ func TestServeReturnsWhenTheServerStops(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Serve did not return after the server stopped")
 	}
+}
+
+// TestDisconnectIsReported: a client has to learn that the session is gone, or
+// it goes on drawing a screen that nothing is behind.
+func TestDisconnectIsReported(t *testing.T) {
+	h := newHarness(t)
+	if _, err := h.client.Snapshot(); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = h.srv.Close()
+
+	waitFor(t, "the disconnect to be reported", func() bool {
+		return h.rec.wasDisconnected()
+	})
 }

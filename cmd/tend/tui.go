@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"sort"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/sousaakira/tend/internal/client"
+	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/session"
 	"github.com/sousaakira/tend/internal/ui"
@@ -26,6 +26,11 @@ const frameInterval = 16 * time.Millisecond
 // messageLinger is how long a status message stays before the pane list
 // returns.
 const messageLinger = 3 * time.Second
+
+// reconnectWindow is how long to keep trying after the server goes away.
+// Long enough to outlast a restart; short enough that a session which is truly
+// gone does not leave the client sitting on a dead screen.
+const reconnectWindow = 30 * time.Second
 
 // resizeStep is how far one resize key press moves a divider. Small enough to
 // aim with, large enough that adjusting a pane is not a drum solo.
@@ -47,19 +52,37 @@ func runAttach(args []string) error {
 		return err
 	}
 
+	// The settings are read before anything else is checked. A file that will
+	// not load is a problem wherever tend is being run from, and reporting
+	// the terminal first would hide it from anyone who noticed by piping the
+	// output somewhere.
+	cfg, err := config.Load()
+	if err != nil {
+		// Running with settings the user did not write, silently, is worse
+		// than refusing to start.
+		return err
+	}
+
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return fmt.Errorf("attach needs a terminal; use \"tend follow\" when output is redirected")
 	}
+	prefix, _ := cfg.PrefixKey()
+	if prefix == 0 {
+		prefix = ui.Disabled
+	}
 
 	t := &tui{
-		session: *name,
-		theme:   ui.DefaultTheme(),
-		painter: vt.NewPainter(),
-		screens: make(map[uint64]*vt.Screen),
-		sizes:   make(map[uint64]ui.Rect),
-		wake:    make(chan struct{}, 1),
-		input:   make(chan []byte, 64),
+		config:   cfg,
+		session:  *name,
+		theme:    ui.ThemeFrom(cfg.UI.Theme),
+		painter:  vt.NewPainter(),
+		screens:  make(map[uint64]*vt.Screen),
+		sizes:    make(map[uint64]ui.Rect),
+		wake:     make(chan struct{}, 1),
+		input:    make(chan []byte, 64),
+		lostConn: make(chan struct{}, 1),
 	}
+	t.keys.PrefixKey = prefix
 	return t.run()
 }
 
@@ -70,6 +93,7 @@ func runAttach(args []string) error {
 // delivering goroutine would put the screen at the mercy of how fast a pane
 // produces output.
 type tui struct {
+	config  config.Config
 	session string
 	theme   ui.Theme
 	client  *client.Client
@@ -87,11 +111,26 @@ type tui struct {
 	msgAt   time.Time
 	overlay []string
 	zoom    bool
+	offline bool
 	dirty   bool
 
-	keys  ui.Input
-	wake  chan struct{}
-	input chan []byte
+	// scrollPane is the pane being looked back through, zero when live.
+	// The pane keeps running while it is read: scrolling is a view, not a
+	// mode the session is put into.
+	scrollPane   uint64
+	scrollOffset int
+	scrollDepth  int
+	scrollScreen *vt.Screen
+
+	// dragPane and dragSide remember a divider grabbed with the mouse.
+	dragPane uint64
+	dragSide string
+	dragAt   int
+
+	keys     ui.Input
+	wake     chan struct{}
+	input    chan []byte
+	lostConn chan struct{}
 
 	cols, rows int
 	detach     bool
@@ -105,7 +144,7 @@ func (t *tui) run() error {
 	t.client = c
 	defer c.Close()
 
-	restore, err := enterFullScreen()
+	restore, err := enterFullScreen(t.config.UI.Mouse)
 	if err != nil {
 		return err
 	}
@@ -141,6 +180,14 @@ func (t *tui) run() error {
 				return nil
 			}
 
+		case <-t.lostConn:
+			if t.detach {
+				return nil
+			}
+			if err := t.reconnect(); err != nil {
+				return err
+			}
+
 		case <-t.wake:
 			// A push arrived; the ticker decides when it becomes a frame.
 
@@ -151,6 +198,61 @@ func (t *tui) run() error {
 			}
 		}
 	}
+}
+
+// reconnect re-establishes the session after the server goes away.
+//
+// A server restarting is not the client's failure, and a client that exits
+// when it happens loses the user's place for a reason that had nothing to do
+// with them. Panes are the server's, so after reconnecting everything is
+// re-read rather than assumed: the session on the other side may be a
+// different one.
+func (t *tui) reconnect() error {
+	t.setMessage("lost the session; reconnecting…", true)
+
+	deadline := time.Now().Add(reconnectWindow)
+	delay := 100 * time.Millisecond
+
+	for time.Now().Before(deadline) {
+		if t.detach {
+			return nil
+		}
+		c, err := openSession(t.session, t)
+		if err == nil {
+			old := t.client
+			t.client = c
+			if old != nil {
+				_ = old.Close()
+			}
+
+			t.mu.Lock()
+			t.offline = false
+			// Nothing about the old session survives: the panes on the other
+			// side may be different ones with the same numbers.
+			t.screens = make(map[uint64]*vt.Screen)
+			t.sizes = make(map[uint64]ui.Rect)
+			t.tab, t.focus, t.zoom = 0, 0, false
+			t.mu.Unlock()
+
+			t.painter.Invalidate()
+			if err := t.ensureSession(); err != nil {
+				return err
+			}
+			if err := t.refresh(); err != nil {
+				return err
+			}
+			t.setMessage("reconnected", false)
+			return nil
+		}
+
+		// Back off, but not so far that a server which comes straight back
+		// leaves the user waiting on an arbitrary timer.
+		time.Sleep(delay)
+		if delay < time.Second {
+			delay *= 2
+		}
+	}
+	return fmt.Errorf("lost the session %q and could not reconnect", t.session)
 }
 
 // --- session setup ---------------------------------------------------------
@@ -173,18 +275,8 @@ func (t *tui) ensureSession() error {
 			return err
 		}
 	}
-	_, _, err = t.client.NewTab(ws, "shell", proto.PaneSpec{Command: defaultShell()})
+	_, _, err = t.client.NewTab(ws, "shell", proto.PaneSpec{Command: t.config.Shell()})
 	return err
-}
-
-func defaultShell() []string {
-	if sh := os.Getenv("SHELL"); sh != "" {
-		return []string{sh}
-	}
-	if path, err := exec.LookPath("bash"); err == nil {
-		return []string{path}
-	}
-	return []string{"/bin/sh"}
 }
 
 // refresh re-reads the session and its layout.
@@ -364,6 +456,24 @@ func (t *tui) Event(ev proto.Event) {
 	t.markDirty()
 }
 
+// Disconnected marks the session as gone and asks the main loop to reconnect.
+//
+// The reconnect itself happens there rather than here: this runs on the dead
+// client's own reader goroutine, and dialling from it would leave the new
+// connection owned by a goroutine that is about to end.
+func (t *tui) Disconnected() {
+	t.mu.Lock()
+	t.offline = true
+	t.dirty = true
+	t.mu.Unlock()
+
+	select {
+	case t.lostConn <- struct{}{}:
+	default:
+	}
+	t.wakeUp()
+}
+
 // PaneOutput feeds a pane's screen into the copy this client draws from.
 func (t *tui) PaneOutput(pane uint64, data []byte) {
 	t.mu.Lock()
@@ -426,6 +536,11 @@ func (t *tui) buildFrame() ui.Frame {
 		Prefix:  t.keys.Armed(),
 		Overlay: t.overlay,
 		Zoomed:  t.zoom,
+		Offline: t.offline,
+	}
+	if t.scrollPane != 0 {
+		frame.Scroll = t.scrollOffset
+		frame.ScrollDepth = t.scrollDepth
 	}
 
 	info := make(map[uint64]proto.PaneInfo, len(t.snap.Panes))
@@ -466,7 +581,7 @@ func (t *tui) buildFrame() ui.Frame {
 			Agent:   p.Agent,
 			State:   p.State,
 			Command: commandName(p.Command),
-			Screen:  t.screens[r.Pane],
+			Screen:  t.screenFor(r.Pane),
 			Running: p.Running,
 			Focused: r.Pane == t.focus,
 		})
@@ -499,6 +614,15 @@ func (t *tui) dismissOverlay() bool {
 	t.overlay = nil
 	t.dirty = true
 	return true
+}
+
+// screenFor is what to draw for a pane: the live screen, or the scrolled view
+// when this client is looking back through it. The caller holds the lock.
+func (t *tui) screenFor(pane uint64) *vt.Screen {
+	if pane == t.scrollPane && t.scrollScreen != nil {
+		return t.scrollScreen
+	}
+	return t.screens[pane]
 }
 
 func (t *tui) setMessage(text string, alert bool) {
@@ -535,17 +659,48 @@ func (t *tui) readInput() {
 }
 
 func (t *tui) handleInput(data []byte) error {
-	forward, commands := t.keys.FeedAll(data)
+	forward, commands, mice := t.keys.FeedAll(data)
 	if len(forward) > 0 {
 		t.dismissOverlay()
+	}
+	for _, ev := range mice {
+		if err := t.handleMouse(ev); err != nil {
+			t.setMessage(err.Error(), true)
+		}
 	}
 
 	t.mu.Lock()
 	focus := t.focus
+	offline := t.offline
 	t.dirty = true // the prefix indicator may have changed
 	t.mu.Unlock()
 
-	if len(forward) > 0 && focus != 0 {
+	if offline {
+		// Keystrokes have nowhere to go, and a command would only fail. The
+		// exception is detaching, which is the user asking to stop waiting.
+		for _, cmd := range commands {
+			if cmd == ui.CommandDetach {
+				t.detach = true
+				return nil
+			}
+		}
+		return nil
+	}
+
+	// A chunk can hold both keys and commands — "q" leaving the scroll view
+	// and the prefix sequence after it often arrive together — so consuming
+	// the keys must not discard the commands that came with them.
+	if t.scrolling() {
+		handled, err := t.scrollKeys(forward)
+		if err != nil {
+			return err
+		}
+		if handled {
+			forward = nil
+		}
+	}
+
+	if len(forward) > 0 && focus != 0 && !t.scrolling() {
 		if err := t.client.SendInput(focus, forward); err != nil {
 			return err
 		}
@@ -577,7 +732,7 @@ func (t *tui) command(cmd ui.Command) error {
 		if cmd == ui.CommandSplitRows {
 			dir = "rows"
 		}
-		created, err := t.client.SplitPane(focus, dir, proto.PaneSpec{Command: defaultShell()})
+		created, err := t.client.SplitPane(focus, dir, proto.PaneSpec{Command: t.config.Shell()})
 		if err != nil {
 			return err
 		}
@@ -595,6 +750,13 @@ func (t *tui) command(cmd ui.Command) error {
 	case ui.CommandFocusNext:
 		t.focusNext(rects, focus)
 		return nil
+
+	case ui.CommandScroll:
+		if t.scrolling() {
+			t.leaveScroll()
+			return nil
+		}
+		return t.enterScroll()
 
 	case ui.CommandZoom:
 		t.mu.Lock()
@@ -626,7 +788,7 @@ func (t *tui) command(cmd ui.Command) error {
 		if ws == 0 {
 			return nil
 		}
-		newTab, _, err := t.client.NewTab(ws, "shell", proto.PaneSpec{Command: defaultShell()})
+		newTab, _, err := t.client.NewTab(ws, "shell", proto.PaneSpec{Command: t.config.Shell()})
 		if err != nil {
 			return err
 		}
@@ -774,18 +936,24 @@ func (t *tui) switchTab(forward bool, current uint64) {
 //
 // The alternate screen is what makes detaching leave the shell as it was
 // rather than buried under a session's worth of output.
-func enterFullScreen() (func(), error) {
+func enterFullScreen(mouse bool) (func(), error) {
 	fd := int(os.Stdin.Fd())
 	state, err := term.MakeRaw(fd)
 	if err != nil {
 		return nil, fmt.Errorf("attach: raw mode: %w", err)
 	}
 	io.WriteString(os.Stdout, "\x1b[?1049h\x1b[?25l\x1b[2J\x1b[H")
+	if mouse {
+		io.WriteString(os.Stdout, ui.EnableMouse)
+	}
 
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			io.WriteString(os.Stdout, "\x1b[0m\x1b[?25h\x1b[?1049l")
+			// Mouse reporting is always turned off, even if it was never
+			// turned on: a terminal left reporting makes every later click in
+			// that window emit gibberish.
+			io.WriteString(os.Stdout, ui.DisableMouse+"\x1b[0m\x1b[?25h\x1b[?1049l")
 			_ = term.Restore(fd, state)
 		})
 	}, nil
