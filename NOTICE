@@ -1,0 +1,14 @@
+tend
+Copyright 2026 Akira Sousa
+
+This product includes software derived from herdr
+(https://github.com/herdrdev/herdr), Copyright the herdr authors,
+licensed under the Apache License, Version 2.0.
+
+Portions of tend are an independent reimplementation in Go of herdr's
+architecture. The agent-detection manifests under manifests/ are derived
+from herdr's src/detect/manifests/ and remain under the Apache License,
+Version 2.0.
+
+tend is not affiliated with or endorsed by the herdr project, and does not
+use the herdr name or marks.
