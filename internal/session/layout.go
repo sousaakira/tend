@@ -294,7 +294,7 @@ func (n *node) layout(area Rect, out []PaneRect) []PaneRect {
 	return out
 }
 
-// neighbor finds the pane next to from on the given side.
+// Neighbor finds the pane next to from on the given side.
 //
 // It works on the computed rectangles rather than on the tree, because what a
 // user means by "the pane to the left" is spatial: the tree can nest the two
@@ -302,7 +302,7 @@ func (n *node) layout(area Rect, out []PaneRect) []PaneRect {
 // Candidates are ranked by edge distance first, then by how much of the
 // perpendicular edge they share, so moving focus across a column of stacked
 // panes lands on the one actually beside the cursor.
-func neighbor(rects []PaneRect, from PaneID, side Side) (PaneID, bool) {
+func Neighbor(rects []PaneRect, from PaneID, side Side) (PaneID, bool) {
 	var src Rect
 	ok := false
 	for _, r := range rects {

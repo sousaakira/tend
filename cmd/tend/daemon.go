@@ -325,19 +325,21 @@ func (h watchHandler) PaneOutput(pane uint64, data []byte) {
 	fmt.Printf("\n--- pane %d ---\n%s\n", pane, strings.TrimRight(string(data), "\n"))
 }
 
-// runAttach follows a session's events, and optionally a pane's screen.
+// runFollow prints a session's events, and optionally a pane's screen, as they
+// arrive.
 //
-// It is not the TUI. It is the smallest thing that proves the push path:
-// state changes and screens arriving unasked, over the socket, from a server
-// that was already running.
-func runAttach(args []string) error {
-	fs := flag.NewFlagSet("attach", flag.ExitOnError)
+// It is the diagnostic view of the push path, not the interface: no drawing,
+// no input, just what the server is saying. That makes it the right tool when
+// the question is whether the server is reporting something, rather than
+// whether the client is drawing it.
+func runFollow(args []string) error {
+	fs := flag.NewFlagSet("follow", flag.ExitOnError)
 	name := sessionFlag(fs)
 	watchPane := fs.Uint64("pane", 0, "also follow this pane's screen")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(),
-			"usage: tend attach [-s session] [-pane id]\n\n"+
-				"follows a session's events until interrupted. with -pane, also prints\n"+
+			"usage: tend follow [-s session] [-pane id]\n\n"+
+				"prints a session's events until interrupted. with -pane, also prints\n"+
 				"that pane's screen as it changes.\n\n")
 		fs.PrintDefaults()
 	}
@@ -356,14 +358,14 @@ func runAttach(args []string) error {
 			return err
 		}
 	}
-	fmt.Fprintf(os.Stderr, "%s attached to %q. ctrl-c to detach.\n", tag(), *name)
+	fmt.Fprintf(os.Stderr, "%s following %q. ctrl-c to stop.\n", tag(), *name)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(stop)
 	<-stop
 
-	fmt.Fprintf(os.Stderr, "\n%s detached; the session keeps running\n", tag())
+	fmt.Fprintf(os.Stderr, "\n%s stopped following; the session keeps running\n", tag())
 	return nil
 }
 

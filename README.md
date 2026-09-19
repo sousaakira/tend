@@ -8,9 +8,9 @@ spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo.
 
-> Status: early. The server runs as a daemon and panes outlive their clients,
-> so the CLI below is usable for real. The TUI client — the part that draws
-> panes and forwards keys — is still to come.
+> Status: early but usable. Panes are drawn, keys reach them, and detaching
+> leaves everything running. No mouse yet, no reflow on resize, and a client
+> does not reconnect by itself if the server restarts.
 
 ## try it
 
@@ -30,11 +30,30 @@ bin/tend session -- claude -- codex      # several panes in one process
 against a running server:
 
 ```bash
-bin/tend serve &                # start the session daemon
+bin/tend serve &        # start the session daemon
+bin/tend attach         # draw it and use it
+```
+
+```
+┌ 1 claude ●──────────────────────────┐┌ 2 codex ▲───────────────────────────┐
+│⠋ Pondering the refactor…            ││ Do you want to proceed?             │
+│                                     ││  ❯ 1. Yes                           │
+│                                     ││    2. No                            │
+└─────────────────────────────────────┘└─────────────────────────────────────┘
+ work · main · agents   1:claude ●  2:codex ▲
+```
+
+`ctrl+b` is the prefix. `ctrl+b ?` lists the keys; `|` and `-` split, `hjkl`
+and the arrows move focus, `x` closes a pane, `d` detaches and leaves
+everything running.
+
+The rest of the commands work against the same server, from anywhere:
+
+```bash
 bin/tend new -- claude          # open a pane; prints its id
 bin/tend new -split 1 -dir rows -- codex
 bin/tend ls                     # what is running
-bin/tend attach -pane 1         # follow events and a pane's screen
+bin/tend follow                 # watch state changes, for diagnosis
 bin/tend kill 2                 # close one pane
 bin/tend kill -server           # stop the session
 ```

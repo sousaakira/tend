@@ -22,6 +22,8 @@ const (
 	MethodPaneSubscribe = "pane.subscribe"
 	MethodPaneScreen    = "pane.screen"
 
+	MethodTabLayout = "tab.layout"
+
 	MethodServerShutdown = "server.shutdown"
 )
 
@@ -184,12 +186,42 @@ type PaneScreenParams struct {
 	Pane uint64 `json:"pane"`
 }
 
-// PaneScreenResult carries a pane's screen as text.
+// PaneScreenResult carries a pane's screen.
+//
+// Text is what a human or a script reads; ANSI is what a terminal draws. Both
+// are sent because they answer different questions, and a client that only
+// wants to list panes should not have to parse escape sequences to do it.
 type PaneScreenResult struct {
 	Text  string `json:"text"`
+	ANSI  string `json:"ansi,omitempty"`
 	Title string `json:"title,omitempty"`
 	Cols  int    `json:"cols"`
 	Rows  int    `json:"rows"`
+}
+
+// TabLayoutParams asks where a tab's panes go at a given size.
+//
+// The size is the client's, not the server's: the layout tree stores
+// proportions rather than cells, so two clients of different sizes get
+// different rectangles from the same tab without either being wrong.
+type TabLayoutParams struct {
+	Tab  uint64 `json:"tab"`
+	Cols int    `json:"cols"`
+	Rows int    `json:"rows"`
+}
+
+// PaneRect is where one pane sits, in cells.
+type PaneRect struct {
+	Pane uint64 `json:"pane"`
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+	Cols int    `json:"cols"`
+	Rows int    `json:"rows"`
+}
+
+// TabLayoutResult is the arrangement of a tab's panes.
+type TabLayoutResult struct {
+	Panes []PaneRect `json:"panes"`
 }
 
 // --- events ----------------------------------------------------------------

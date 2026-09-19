@@ -323,6 +323,14 @@ func (c *Client) PaneScreen(pane uint64) (proto.PaneScreenResult, error) {
 	return out, c.Call(proto.MethodPaneScreen, proto.PaneScreenParams{Pane: pane}, &out)
 }
 
+// TabLayout asks where a tab's panes go at the given size.
+func (c *Client) TabLayout(tab uint64, cols, rows int) (proto.TabLayoutResult, error) {
+	var out proto.TabLayoutResult
+	return out, c.Call(proto.MethodTabLayout, proto.TabLayoutParams{
+		Tab: tab, Cols: cols, Rows: rows,
+	}, &out)
+}
+
 // Shutdown asks the server to stop.
 func (c *Client) Shutdown() error {
 	return c.Call(proto.MethodServerShutdown, nil, nil)

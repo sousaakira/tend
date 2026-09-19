@@ -267,8 +267,47 @@ crashed server is removed on the next start, but only after checking that
 nothing is listening on it: removing a live server's socket would orphan it,
 leaving its panes running and unreachable.
 
+## The client
+
+`internal/ui` draws, `cmd/tend`'s attach drives. Drawing is pure — it takes a
+description and fills a grid of cells, reading no socket, terminal or clock —
+so a whole screenful is asserted in a test without any of those existing.
+
+**Panes arrive as screens, and are composited here.** The server renders each
+pane's terminal back to escape sequences (`vt.RenderScreen`), the client parses
+them into a terminal of its own, and compositing those into one grid is
+presentation, which is why it sits on this side of the socket.
+
+The round trip is the property that makes it work: rendering a screen and
+feeding the result to an empty screen of the same size reproduces it exactly.
+`TestRenderScreenRoundTrip` checks that against the content that breaks each
+choice in the encoder — trailing backgrounds, wide characters, combining marks,
+a full last row that could scroll.
+
+**Only changed rows are sent to the terminal.** A full repaint of a large
+terminal is tens of kilobytes; most frames change a handful of rows, and
+resending the rest is slow and visibly flickery. `vt.Painter` keeps the last
+frame and emits the difference.
+
+**Keys are a state machine over raw bytes**, not parsed events. Almost every
+byte belongs to the focused pane and must reach it untouched, including escape
+sequences the client has never heard of. Only the prefix and the one key after
+it are the client's; an unbound key cancels the prefix and is forwarded, so a
+mistyped command does not silently eat the next keystroke.
+
+**Geometry is not reimplemented.** Which pane is "to the left" has a careful
+answer — nearest edge, then largest shared border — and `session.Neighbor` is
+reused rather than copied, because two implementations would eventually be two
+that disagree.
+
+The TUI is tested by running it: tend's own pty runs tend's own binary, and
+tend's own terminal emulator reads what it drew. That makes it the one test
+exercising the whole stack at once, and the one that fails when any layer stops
+agreeing with another.
+
 ## Non-goals for the core milestone
 
 Plugins, SSH/multi-machine, kitty graphics, worktree management and session
-handoff are all deferred. The architecture should not make them hard to add,
+handoff are all deferred. So is mouse support, reflow on resize, and a client
+that reconnects by itself when a server restarts. The architecture should not make them hard to add,
 but nothing ships for them until the core is solid.

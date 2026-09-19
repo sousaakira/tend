@@ -186,7 +186,7 @@ func TestLayoutPreservesOrder(t *testing.T) {
 func TestNeighborNoCandidate(t *testing.T) {
 	rects := []PaneRect{{Pane: 1, Rect: Rect{W: 10, H: 10}}}
 	for _, side := range []Side{Left, Right, Up, Down} {
-		if _, ok := neighbor(rects, 1, side); ok {
+		if _, ok := Neighbor(rects, 1, side); ok {
 			t.Errorf("a lone pane has no neighbour %v", side)
 		}
 	}
@@ -194,7 +194,7 @@ func TestNeighborNoCandidate(t *testing.T) {
 
 func TestNeighborUnknownPane(t *testing.T) {
 	rects := []PaneRect{{Pane: 1, Rect: Rect{W: 10, H: 10}}}
-	if _, ok := neighbor(rects, 99, Left); ok {
+	if _, ok := Neighbor(rects, 99, Left); ok {
 		t.Error("an unknown pane has no neighbour")
 	}
 }
@@ -206,10 +206,10 @@ func TestNeighborIgnoresNonOverlapping(t *testing.T) {
 		{Pane: 1, Rect: Rect{X: 0, Y: 0, W: 10, H: 10}},
 		{Pane: 2, Rect: Rect{X: 10, Y: 10, W: 10, H: 10}}, // diagonal
 	}
-	if _, ok := neighbor(rects, 1, Right); ok {
+	if _, ok := Neighbor(rects, 1, Right); ok {
 		t.Error("a diagonal pane is not a neighbour to the right")
 	}
-	if _, ok := neighbor(rects, 1, Down); ok {
+	if _, ok := Neighbor(rects, 1, Down); ok {
 		t.Error("a diagonal pane is not a neighbour below")
 	}
 }
@@ -220,7 +220,7 @@ func TestNeighborPicksTheNearest(t *testing.T) {
 		{Pane: 2, Rect: Rect{X: 10, Y: 0, W: 10, H: 10}}, // adjacent
 		{Pane: 3, Rect: Rect{X: 20, Y: 0, W: 10, H: 10}}, // further
 	}
-	got, ok := neighbor(rects, 1, Right)
+	got, ok := Neighbor(rects, 1, Right)
 	if !ok || got != 2 {
 		t.Errorf("neighbour = %d (ok=%v), want the adjacent pane 2", got, ok)
 	}
@@ -233,7 +233,7 @@ func TestNeighborPrefersTheLargerOverlap(t *testing.T) {
 		{Pane: 2, Rect: Rect{X: 10, Y: 8, W: 10, H: 4}}, // overlaps rows 8-9
 		{Pane: 3, Rect: Rect{X: 10, Y: 0, W: 10, H: 8}}, // overlaps rows 0-7
 	}
-	got, ok := neighbor(rects, 1, Right)
+	got, ok := Neighbor(rects, 1, Right)
 	if !ok || got != 3 {
 		t.Errorf("neighbour = %d (ok=%v), want pane 3 with the larger overlap", got, ok)
 	}
@@ -250,7 +250,7 @@ func TestNeighborAllSides(t *testing.T) {
 	}
 	cases := map[Side]PaneID{Left: 2, Right: 3, Up: 4, Down: 5}
 	for side, want := range cases {
-		got, ok := neighbor(rects, 1, side)
+		got, ok := Neighbor(rects, 1, side)
 		if !ok || got != want {
 			t.Errorf("neighbour %v = %d (ok=%v), want %d", side, got, ok, want)
 		}

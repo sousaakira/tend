@@ -160,6 +160,19 @@ func (rt *paneRuntime) screenText() string {
 	return agent.ScreenText(rt.screen)
 }
 
+// renderedScreen encodes the pane's terminal as the escape sequences that
+// reproduce it, colours and all.
+//
+// This is what goes on the wire rather than plain text: a client drawing a
+// pane needs the styling, and re-rendering here means the client reuses the
+// same parser it already has instead of the two sides agreeing on a cell
+// format.
+func (rt *paneRuntime) renderedScreen() []byte {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return vt.RenderScreen(rt.screen)
+}
+
 // withScreen runs fn against the pane's terminal while holding its lock.
 //
 // It exists so a renderer can read cells without the screen being copied, and

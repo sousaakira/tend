@@ -22,7 +22,8 @@ commands, against a running server:
   ls                list a session's panes, or every session
   new               open a pane in a session
   kill              close panes, or stop a session
-  attach            follow a session's events and screens
+  attach            draw a session and use it
+  follow            print a session's events, for diagnosis
 
 commands that need no server:
   agents            list the agents tend can detect
@@ -66,6 +67,8 @@ func main() {
 		err = runKill(os.Args[2:])
 	case "attach":
 		err = runAttach(os.Args[2:])
+	case "follow":
+		err = runFollow(os.Args[2:])
 	case "version":
 		fmt.Println(version)
 	case "-h", "--help", "help":

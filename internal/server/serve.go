@@ -39,6 +39,7 @@ var Methods = []string{
 	proto.MethodPaneResize,
 	proto.MethodPaneSubscribe,
 	proto.MethodPaneScreen,
+	proto.MethodTabLayout,
 	proto.MethodServerShutdown,
 }
 
@@ -199,11 +200,11 @@ func (c *clientConn) pumpEvents(sub *Subscription, done <-chan struct{}) {
 // trade that decides it: a client can stall, and terminal output cannot be
 // resynchronised after a gap.
 func (c *clientConn) sendScreen(id session.PaneID) error {
-	text, err := c.srv.ScreenText(id)
+	ansi, err := c.srv.RenderedScreen(id)
 	if err != nil {
 		return nil // the pane went away; not this connection's problem
 	}
-	return c.conn.WritePaneBytes(proto.FrameOutput, uint64(id), []byte(text))
+	return c.conn.WritePaneBytes(proto.FrameOutput, uint64(id), ansi)
 }
 
 // forward sends one non-output event.
@@ -391,6 +392,13 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return c.srv.paneScreen(session.PaneID(p.Pane))
 
+	case proto.MethodTabLayout:
+		var p proto.TabLayoutParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.tabLayout(session.TabID(p.Tab), p.Cols, p.Rows)
+
 	case proto.MethodServerShutdown:
 		c.shutdown = true
 		return nil, nil
@@ -511,6 +519,32 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 	return snap
 }
 
+// tabLayout computes where a tab's panes go at the size the client asked for.
+func (s *Server) tabLayout(id session.TabID, cols, rows int) (proto.TabLayoutResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tab, ok := s.session.Tab(id)
+	if !ok {
+		return proto.TabLayoutResult{}, fmt.Errorf("%w: %d", session.ErrNoSuchTab, id)
+	}
+	if cols < 1 || rows < 1 {
+		return proto.TabLayoutResult{}, fmt.Errorf("layout size %dx%d is empty", cols, rows)
+	}
+
+	var out proto.TabLayoutResult
+	for _, r := range tab.Layout(session.Rect{W: cols, H: rows}) {
+		out.Panes = append(out.Panes, proto.PaneRect{
+			Pane: uint64(r.Pane),
+			X:    r.Rect.X,
+			Y:    r.Rect.Y,
+			Cols: r.Rect.W,
+			Rows: r.Rect.H,
+		})
+	}
+	return out, nil
+}
+
 func (s *Server) paneScreen(id session.PaneID) (proto.PaneScreenResult, error) {
 	rt, err := s.runtime(id)
 	if err != nil {
@@ -520,6 +554,7 @@ func (s *Server) paneScreen(id session.PaneID) (proto.PaneScreenResult, error) {
 	rt.withScreen(func(scr *vt.Screen) {
 		out.Cols, out.Rows = scr.Size()
 		out.Title = scr.Title()
+		out.ANSI = string(vt.RenderScreen(scr))
 	})
 	out.Text = rt.screenText()
 	return out, nil

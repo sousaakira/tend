@@ -370,7 +370,7 @@ func (s *Session) MoveFocus(side Side, area Rect) bool {
 	if t == nil {
 		return false
 	}
-	next, ok := neighbor(t.Layout(area), t.active, side)
+	next, ok := Neighbor(t.Layout(area), t.active, side)
 	if !ok {
 		return false
 	}

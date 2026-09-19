@@ -410,6 +410,16 @@ func (s *Server) ScreenText(id session.PaneID) (string, error) {
 	return rt.screenText(), nil
 }
 
+// RenderedScreen returns a pane's screen as escape sequences that reproduce
+// it. It is what a client draws from.
+func (s *Server) RenderedScreen(id session.PaneID) ([]byte, error) {
+	rt, err := s.runtime(id)
+	if err != nil {
+		return nil, err
+	}
+	return rt.renderedScreen(), nil
+}
+
 // WithScreen runs fn against a pane's terminal.
 //
 // It is how a renderer reads cells without copying the screen. fn must not
