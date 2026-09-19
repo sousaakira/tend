@@ -450,3 +450,79 @@ func TestCommandsThatInspectDoNotCreate(t *testing.T) {
 		t.Errorf("inspecting created %v", names)
 	}
 }
+
+// TestAttachZoomsAPane: a zoomed pane fills the area and the others go away,
+// and zooming again puts them back.
+func TestAttachZoomsAPane(t *testing.T) {
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
+
+	a.send(t, "\x02z")
+	a.waitForScreen(t, "one pane filling the screen", func(s string) bool {
+		return strings.Count(s, "┌") == 1 && strings.Contains(s, "zoom")
+	})
+
+	a.send(t, "\x02z")
+	a.waitForScreen(t, "both panes back", func(s string) bool {
+		return strings.Count(s, "┌") == 2 && !strings.Contains(s, "zoom")
+	})
+}
+
+// TestAttachResizesASplit checks the divider actually moves, by watching the
+// column the second pane starts at.
+func TestAttachResizesASplit(t *testing.T) {
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
+
+	// The divider starts in the middle.
+	divider := func() int {
+		for _, line := range a.lines() {
+			if i := strings.Index(line, "┐┌"); i >= 0 {
+				return i
+			}
+		}
+		return -1
+	}
+	start := divider()
+	if start < 0 {
+		t.Fatalf("could not find the divider:\n%s", a.text())
+	}
+
+	// Focus is on the new right-hand pane, so growing it leftwards moves the
+	// divider left.
+	a.send(t, "\x02H")
+	a.waitForScreen(t, "the divider to move left", func(string) bool {
+		d := divider()
+		return d >= 0 && d < start
+	})
+}
+
+// TestAttachShowsTabs: a second tab makes the bar appear, and a single tab
+// spends no row on saying there is one.
+func TestAttachShowsTabs(t *testing.T) {
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// One tab: the first row is the pane's own border, not a bar.
+	if first := a.lines()[0]; !strings.HasPrefix(first, "┌") {
+		t.Errorf("with one tab the top row is %q, want the pane border", first)
+	}
+
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a tab bar", func(string) bool {
+		return !strings.HasPrefix(a.lines()[0], "┌")
+	})
+	if first := a.lines()[0]; !strings.Contains(first, "shell") {
+		t.Errorf("tab bar = %q, want it to name the tabs", first)
+	}
+}

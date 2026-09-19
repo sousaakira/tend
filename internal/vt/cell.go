@@ -128,3 +128,25 @@ func (c Cell) IsBlank() bool { return c.R == 0 || c.R == ' ' }
 func blankCell(style Style) Cell {
 	return Cell{R: ' ', Style: style, Width: 1}
 }
+
+// spacerCell is the padding left at the end of a line when a double-width
+// character would not fit in the columns that remain.
+//
+// It holds no rune and is deliberately not a space. A space would be real
+// content: it would survive into the line's text, and reflow would carry it
+// into the middle of the rewrapped line as a gap nobody typed.
+func spacerCell(style Style) Cell {
+	return Cell{Style: style, Width: 0}
+}
+
+// isSpacer reports whether the cell at x is end-of-line padding rather than
+// the right half of a wide character.
+//
+// Both hold no rune of their own, so they are told apart by what precedes
+// them: a continuation always follows the double-width cell it belongs to.
+func isSpacer(r *Row, x int) bool {
+	if x < 0 || x >= r.Len() || !r.Cell(x).IsContinuation() {
+		return false
+	}
+	return x == 0 || r.Cell(x-1).Width != 2
+}

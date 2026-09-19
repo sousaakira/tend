@@ -218,6 +218,98 @@ func parentOf(root, child *node) (*node, int) {
 	return nil, 0
 }
 
+// pathTo returns the chain of splits from the root down to the leaf holding
+// target, ending with the leaf. It is nil when the pane is not in this tree.
+func (n *node) pathTo(target PaneID) []*node {
+	if n == nil {
+		return nil
+	}
+	if n.isLeaf() {
+		if n.pane == target {
+			return []*node{n}
+		}
+		return nil
+	}
+	for _, kid := range n.kids {
+		if sub := kid.pathTo(target); sub != nil {
+			return append([]*node{n}, sub...)
+		}
+	}
+	return nil
+}
+
+// minShare is the smallest fraction a pane may be squeezed to. A pane that can
+// be dragged to nothing is a pane that can be lost by accident.
+const minShare = 0.05
+
+// adjust moves the divider on one side of a pane, taking the space from the
+// neighbour across it.
+//
+// The divider that moves is the one belonging to the nearest enclosing split
+// that runs along the right axis and actually has something on that side.
+// Walking outwards from the pane is what makes the keys mean "this edge of
+// this pane" rather than "some divider somewhere above it".
+func (n *node) adjust(target PaneID, side Side, fraction float64) bool {
+	if n == nil || fraction == 0 {
+		return false
+	}
+	path := n.pathTo(target)
+	if len(path) < 2 {
+		return false // a lone pane has no divider to move
+	}
+
+	want := Columns
+	if side == Up || side == Down {
+		want = Rows
+	}
+	before := side == Left || side == Up
+
+	// From the innermost split outwards.
+	for i := len(path) - 2; i >= 0; i-- {
+		split := path[i]
+		if split.dir != want {
+			continue
+		}
+		idx := indexOf(split.kids, path[i+1])
+		if idx < 0 {
+			continue
+		}
+		other := idx + 1
+		if before {
+			other = idx - 1
+		}
+		if other < 0 || other >= len(split.kids) {
+			continue // nothing on that side at this level; try the next one out
+		}
+
+		// Growing the pane takes from the neighbour, and neither may be
+		// squeezed out of existence.
+		give := fraction
+		if give > split.sizes[other]-minShare {
+			give = split.sizes[other] - minShare
+		}
+		if give < minShare-split.sizes[idx] {
+			give = minShare - split.sizes[idx]
+		}
+		if give == 0 {
+			return false
+		}
+		split.sizes[idx] += give
+		split.sizes[other] -= give
+		return true
+	}
+	return false
+}
+
+func indexOf(kids []*node, want *node) int {
+	for i, kid := range kids {
+		if kid == want {
+			return i
+		}
+	}
+	return -1
+}
+
 // panes appends every pane in layout order: left to right, top to bottom.
 func (n *node) panes(out []PaneID) []PaneID {
 	if n == nil {

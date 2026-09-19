@@ -24,6 +24,11 @@ const (
 	CommandFocusDown
 	CommandFocusNext
 	CommandClosePane
+	CommandZoom
+	CommandGrowLeft
+	CommandGrowRight
+	CommandGrowUp
+	CommandGrowDown
 	CommandNewTab
 	CommandNextTab
 	CommandPrevTab
@@ -53,6 +58,16 @@ func (c Command) String() string {
 		return "focus-next"
 	case CommandClosePane:
 		return "close-pane"
+	case CommandZoom:
+		return "zoom"
+	case CommandGrowLeft:
+		return "grow-left"
+	case CommandGrowRight:
+		return "grow-right"
+	case CommandGrowUp:
+		return "grow-up"
+	case CommandGrowDown:
+		return "grow-down"
 	case CommandNewTab:
 		return "new-tab"
 	case CommandNextTab:
@@ -87,6 +102,8 @@ var Keys = []struct {
 	{"j ↓", CommandFocusDown, "focus down"},
 	{"o", CommandFocusNext, "focus next"},
 	{"x", CommandClosePane, "close pane"},
+	{"z", CommandZoom, "zoom pane"},
+	{"HJKL", CommandGrowRight, "resize pane"},
 	{"c", CommandNewTab, "new tab"},
 	{"n", CommandNextTab, "next tab"},
 	{"p", CommandPrevTab, "previous tab"},
@@ -196,6 +213,18 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandFocusNext}
 	case 'x':
 		return Result{Command: CommandClosePane}
+	case 'z':
+		return Result{Command: CommandZoom}
+	// Shifted movement keys resize instead of moving, which is the one
+	// convention every multiplexer shares.
+	case 'H':
+		return Result{Command: CommandGrowLeft}
+	case 'L':
+		return Result{Command: CommandGrowRight}
+	case 'K':
+		return Result{Command: CommandGrowUp}
+	case 'J':
+		return Result{Command: CommandGrowDown}
 	case 'c':
 		return Result{Command: CommandNewTab}
 	case 'n':

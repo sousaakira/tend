@@ -378,6 +378,30 @@ func (s *Session) MoveFocus(side Side, area Rect) bool {
 	return true
 }
 
+// AdjustSplit moves one edge of a pane by a number of cells, taking the space
+// from the neighbour across that edge.
+//
+// area is the region the tab is drawn in, because a divider is stored as a
+// proportion and the caller is asking in cells. Nothing to adjust is not an
+// error: a pane with no divider on that side is a key press that does nothing,
+// which is what a user expects at the edge of the screen.
+func (s *Session) AdjustSplit(pane PaneID, side Side, cells int, area Rect) error {
+	t, ok := s.index[pane]
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchPane, pane)
+	}
+
+	total := area.W
+	if side == Up || side == Down {
+		total = area.H
+	}
+	if total <= 0 || cells == 0 {
+		return nil
+	}
+	t.root.adjust(pane, side, float64(cells)/float64(total))
+	return nil
+}
+
 // SetPaneState records a detection result against a pane.
 func (s *Session) SetPaneState(id PaneID, agent string, state detect.State) error {
 	p, ok := s.Pane(id)

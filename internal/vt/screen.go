@@ -173,9 +173,17 @@ func (s *Screen) Resize(cols, rows int) {
 		return
 	}
 	fullRegion := s.top == 0 && s.bottom == s.rows-1
-
 	erase := s.eraseStyle()
-	s.main.Resize(cols, rows, erase)
+
+	if cols != s.cols {
+		// The width changed, so lines that wrapped at the old width are broken
+		// in the wrong places. Rewrapping is only right for the main screen:
+		// an application on the alternate screen owns every cell of it and
+		// redraws on the resize that is about to reach it.
+		s.reflow(cols, rows, erase)
+	} else {
+		s.main.Resize(cols, rows, erase)
+	}
 	s.alt.Resize(cols, rows, erase)
 
 	s.cols, s.rows = cols, rows
@@ -191,6 +199,21 @@ func (s *Screen) Resize(cols, rows int) {
 	}
 	s.resetTabs()
 	s.clampCursor()
+	s.cur.pendingWrap = false
+}
+
+// reflow rewraps the main screen to a new width, moving the cursor with the
+// character it was sitting on.
+func (s *Screen) reflow(cols, rows int, erase Style) {
+	cursorRow := s.main.HistoryLen() + s.cur.Y
+	lines, cursorLine, cursorOffset := collectLogical(s.main, cursorRow, s.cur.X)
+	out := wrapLogical(lines, cols, cursorLine, cursorOffset, erase)
+	applyReflow(s.main, out.rows, cols, rows, erase)
+
+	if !s.onAlt {
+		s.cur.Y = out.cursorRow - viewportOffset(len(out.rows), rows)
+		s.cur.X = out.cursorCol
+	}
 	s.cur.pendingWrap = false
 }
 
@@ -274,6 +297,15 @@ func (s *Screen) Print(r rune) {
 	// A double-width character cannot straddle the right margin.
 	if s.cur.X+w > s.cols {
 		if s.modes.AutoWrap {
+			// The columns it could not use are padding, not spaces. Writing
+			// spaces here would put a gap into the middle of the line the next
+			// time it is rewrapped.
+			if row := s.grid.Line(s.cur.Y); row != nil {
+				pad := spacerCell(s.eraseStyle())
+				for x := s.cur.X; x < s.cols; x++ {
+					row.SetCell(x, pad)
+				}
+			}
 			s.wrapLine()
 		} else {
 			s.cur.X = s.cols - w

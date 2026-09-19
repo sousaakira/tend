@@ -105,13 +105,29 @@ type Pane struct {
 	Focused bool
 }
 
+// Tab is one tab in the bar across the top.
+type Tab struct {
+	ID     uint64
+	Name   string
+	Panes  int
+	Active bool
+	// Alert marks a tab holding an agent that needs an answer, so a blocked
+	// agent in a tab you are not looking at is still visible.
+	Alert bool
+}
+
 // Frame is everything to draw.
 type Frame struct {
 	Panes []Pane
+	Tabs  []Tab
 
 	Session   string
 	Workspace string
 	Tab       string
+	// Zoomed marks that one pane is filling the area, so the status bar can
+	// say so — a zoomed pane and a session with one pane look identical
+	// otherwise.
+	Zoomed bool
 
 	// Message is shown in place of the pane list, for a moment, after an
 	// action or an error.
@@ -132,6 +148,17 @@ type Frame struct {
 // laid out above it.
 const StatusRows = 1
 
+// TabRows is how many rows the tab bar takes for a given number of tabs.
+//
+// One tab needs no bar: a row spent saying "there is one of these" is a row
+// not spent on the terminal the user is actually looking at.
+func TabRows(tabs int) int {
+	if tabs > 1 {
+		return 1
+	}
+	return 0
+}
+
 // Draw fills dst with the frame.
 //
 // dst is cleared first: a frame describes the whole screen, so anything left
@@ -140,6 +167,7 @@ const StatusRows = 1
 func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	dst.Clear(vt.DefaultStyle)
 
+	drawTabs(dst, f, theme)
 	for _, p := range f.Panes {
 		drawPane(dst, p, theme)
 	}
@@ -148,6 +176,41 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	// Last, so it sits over the panes rather than under them.
 	if len(f.Overlay) > 0 {
 		drawOverlay(dst, f.Overlay, theme)
+	}
+}
+
+// drawTabs draws the bar across the top.
+func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
+	if TabRows(len(f.Tabs)) == 0 {
+		return
+	}
+	row := dst.Line(0)
+	if row == nil {
+		return
+	}
+	for x := 0; x < dst.Cols(); x++ {
+		row.SetCell(x, vt.Cell{R: ' ', Style: theme.Status, Width: 1})
+	}
+
+	x := 0
+	for _, tab := range f.Tabs {
+		label := tab.Name
+		if label == "" {
+			label = itoa(tab.ID)
+		}
+		style := theme.Status
+		if tab.Active {
+			style = theme.StatusKey
+		}
+		if tab.Alert && !tab.Active {
+			// A blocked agent in a tab you are not looking at is the one thing
+			// the bar exists to tell you.
+			style = theme.StatusAlert
+		}
+		x = writeString(dst, x, 0, " "+label+" ", style, dst.Cols())
+		if x >= dst.Cols() {
+			break
+		}
 	}
 }
 
@@ -373,6 +436,9 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.Tab != "" {
 		left += " · " + f.Tab
+	}
+	if f.Zoomed {
+		left += " · zoom"
 	}
 	x = writeString(dst, x, y, left+"  ", theme.StatusKey, limit)
 

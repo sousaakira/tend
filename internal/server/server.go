@@ -389,6 +389,17 @@ func (s *Server) Write(id session.PaneID, data []byte) error {
 	return err
 }
 
+// AdjustSplit moves one edge of a pane within its tab's layout, taking the
+// space from the neighbour across it.
+func (s *Server) AdjustSplit(id session.PaneID, side session.Side, cells int, area session.Rect) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrClosed
+	}
+	return s.session.AdjustSplit(id, side, cells, area)
+}
+
 // Resize changes a pane's terminal size.
 func (s *Server) Resize(id session.PaneID, size pty.Size) error {
 	rt, err := s.runtime(id)

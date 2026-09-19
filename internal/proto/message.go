@@ -22,6 +22,8 @@ const (
 	MethodPaneSubscribe = "pane.subscribe"
 	MethodPaneScreen    = "pane.screen"
 
+	MethodPaneAdjust = "pane.adjust"
+
 	MethodTabLayout = "tab.layout"
 
 	MethodServerShutdown = "server.shutdown"
@@ -170,6 +172,24 @@ type PaneResizeParams struct {
 	Pane uint64 `json:"pane"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
+}
+
+// PaneAdjustParams moves one edge of a pane, taking the space from the
+// neighbour across it.
+//
+// Cells and the area are both given because a divider is stored as a
+// proportion of its split while the user is asking in cells, and only the
+// client knows how many cells the tab is being drawn in.
+type PaneAdjustParams struct {
+	Pane string `json:"-"`
+
+	Target uint64 `json:"target"`
+	// Side is "left", "right", "up" or "down": the edge of the pane to move.
+	Side string `json:"side"`
+	// Cells is how far to move it. Negative shrinks.
+	Cells int `json:"cells"`
+	Cols  int `json:"cols"`
+	Rows  int `json:"rows"`
 }
 
 // PaneSubscribeParams chooses which panes stream their output to this client.

@@ -514,3 +514,118 @@ func TestInvariantsSurviveHeavyEditing(t *testing.T) {
 	}
 	assertTiles(t, rects, Rect{W: 200, H: 60})
 }
+
+// --- adjusting dividers ----------------------------------------------------
+
+func TestAdjustSplitMovesTheDivider(t *testing.T) {
+	s, _, tab, left := fixture(t)
+	if _, err := s.SplitPane(left.ID, Columns, PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+
+	area := Rect{W: 100, H: 20}
+	if got := tab.Layout(area); got[0].Rect.W != 50 {
+		t.Fatalf("started at %d columns, want 50", got[0].Rect.W)
+	}
+
+	// Growing the left pane rightwards takes from its neighbour.
+	if err := s.AdjustSplit(left.ID, Right, 10, area); err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+
+	rects := tab.Layout(area)
+	if rects[0].Rect.W != 60 || rects[1].Rect.W != 40 {
+		t.Errorf("widths = %d,%d, want 60,40", rects[0].Rect.W, rects[1].Rect.W)
+	}
+	// Whatever moves, the panes must still tile exactly.
+	assertTiles(t, rects, area)
+}
+
+func TestAdjustSplitShrinks(t *testing.T) {
+	s, _, tab, left := fixture(t)
+	right, _ := s.SplitPane(left.ID, Columns, PaneSpec{})
+	check(t, s)
+
+	area := Rect{W: 100, H: 20}
+	// The right pane growing leftwards is the same divider, moved the other way.
+	if err := s.AdjustSplit(right.ID, Left, 20, area); err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+
+	rects := tab.Layout(area)
+	if rects[0].Rect.W != 30 || rects[1].Rect.W != 70 {
+		t.Errorf("widths = %d,%d, want 30,70", rects[0].Rect.W, rects[1].Rect.W)
+	}
+	assertTiles(t, rects, area)
+}
+
+// TestAdjustSplitWalksOutwards: the divider that moves belongs to the nearest
+// enclosing split with something on that side, so the keys mean "this edge of
+// this pane" rather than "some divider above it".
+func TestAdjustSplitWalksOutwards(t *testing.T) {
+	s, _, tab, left := fixture(t)
+	right, _ := s.SplitPane(left.ID, Columns, PaneSpec{})
+	bottomRight, _ := s.SplitPane(right.ID, Rows, PaneSpec{})
+	check(t, s)
+
+	area := Rect{W: 100, H: 20}
+	// The bottom-right pane has no pane to its left inside its own row split,
+	// so moving left has to reach the column split one level out.
+	if err := s.AdjustSplit(bottomRight.ID, Left, 10, area); err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+
+	rects := tab.Layout(area)
+	if rects[0].Rect.W != 40 {
+		t.Errorf("the left pane is %d columns, want 40", rects[0].Rect.W)
+	}
+	assertTiles(t, rects, area)
+}
+
+// TestAdjustSplitCannotSqueezeAPaneAway: a pane that can be dragged to nothing
+// is a pane that can be lost by accident.
+func TestAdjustSplitCannotSqueezeAPaneAway(t *testing.T) {
+	s, _, tab, left := fixture(t)
+	if _, err := s.SplitPane(left.ID, Columns, PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	area := Rect{W: 100, H: 20}
+
+	for i := 0; i < 20; i++ {
+		if err := s.AdjustSplit(left.ID, Right, 20, area); err != nil {
+			t.Fatal(err)
+		}
+		check(t, s)
+	}
+	rects := tab.Layout(area)
+	if rects[1].Rect.W < 1 {
+		t.Errorf("the neighbour was squeezed to %d columns", rects[1].Rect.W)
+	}
+	assertTiles(t, rects, area)
+}
+
+// TestAdjustSplitAtTheEdgeDoesNothing: a key press at the edge of the screen
+// should do nothing rather than fail.
+func TestAdjustSplitAtTheEdgeDoesNothing(t *testing.T) {
+	s, _, tab, only := fixture(t)
+	area := Rect{W: 80, H: 20}
+
+	if err := s.AdjustSplit(only.ID, Left, 10, area); err != nil {
+		t.Errorf("a lone pane should be a no-op, not an error: %v", err)
+	}
+	check(t, s)
+	if got := tab.Layout(area); got[0].Rect.W != 80 {
+		t.Errorf("width = %d, want the whole area", got[0].Rect.W)
+	}
+}
+
+func TestAdjustSplitRejectsAnUnknownPane(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	if err := s.AdjustSplit(PaneID(999), Left, 5, Rect{W: 80, H: 20}); !errors.Is(err, ErrNoSuchPane) {
+		t.Errorf("err = %v, want ErrNoSuchPane", err)
+	}
+}

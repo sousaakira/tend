@@ -8,9 +8,9 @@ spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo.
 
-> Status: early but usable. Panes are drawn, keys reach them, and detaching
-> leaves everything running. No mouse yet, no reflow on resize, and a client
-> does not reconnect by itself if the server restarts.
+> Status: usable. Panes are drawn, keys reach them, text reflows when you
+> resize, and detaching leaves everything running. No mouse yet, no config
+> file, and a client does not reconnect by itself if the server restarts.
 
 ## try it
 
@@ -45,8 +45,9 @@ is not one already, and draws it.
  work · main · agents   1:claude ●  2:codex ▲
 ```
 
-`ctrl+b` is the prefix. `ctrl+b ?` lists the keys; `|` and `-` split, `hjkl`
-and the arrows move focus, `x` closes a pane, `d` detaches and leaves
+`ctrl+b` is the prefix, and `ctrl+b ?` lists the keys: `|` and `-` split,
+`hjkl` and the arrows move focus, `HJKL` resize, `z` zooms a pane to the whole
+window, `c` opens a tab, `x` closes a pane, and `d` detaches leaving
 everything running.
 
 The rest of the commands work against the same server, from anywhere:

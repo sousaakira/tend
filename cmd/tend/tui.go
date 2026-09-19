@@ -27,6 +27,10 @@ const frameInterval = 16 * time.Millisecond
 // returns.
 const messageLinger = 3 * time.Second
 
+// resizeStep is how far one resize key press moves a divider. Small enough to
+// aim with, large enough that adjusting a pane is not a drum solo.
+const resizeStep = 3
+
 // runAttach draws a session and forwards keys to it.
 func runAttach(args []string) error {
 	fs := flag.NewFlagSet("attach", flag.ExitOnError)
@@ -82,6 +86,7 @@ type tui struct {
 	alert   bool
 	msgAt   time.Time
 	overlay []string
+	zoom    bool
 	dirty   bool
 
 	keys  ui.Input
@@ -220,11 +225,20 @@ func (t *tui) refresh() error {
 	t.rects = layout.Panes
 	if !paneInLayout(layout.Panes, t.focus) {
 		t.focus = firstPane(layout.Panes)
+		// The pane being zoomed into is gone, so the zoom goes with it.
+		t.zoom = false
+	}
+	if len(layout.Panes) < 2 {
+		t.zoom = false // nothing to zoom away from
 	}
 	focus := t.focus
 	t.mu.Unlock()
 
-	if err := t.syncPaneSizes(layout.Panes); err != nil {
+	t.mu.Lock()
+	effective := t.paneRects()
+	t.mu.Unlock()
+
+	if err := t.syncPaneSizes(effective); err != nil {
 		return err
 	}
 	if err := t.subscribe(layout.Panes); err != nil {
@@ -237,10 +251,51 @@ func (t *tui) refresh() error {
 	return nil
 }
 
-// layoutArea is the region panes are laid out in: the terminal minus the
-// status bar.
+// layoutArea is the region panes are laid out in: the terminal minus the tab
+// bar above and the status bar below.
 func (t *tui) layoutArea() ui.Rect {
-	return ui.Rect{Cols: t.cols, Rows: t.rows - ui.StatusRows}
+	top := ui.TabRows(t.tabCount())
+	return ui.Rect{Y: top, Cols: t.cols, Rows: t.rows - top - ui.StatusRows}
+}
+
+func (t *tui) tabCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	n := 0
+	for _, w := range t.snap.Workspaces {
+		n += len(w.Tabs)
+	}
+	return n
+}
+
+// paneRects is where panes actually go, which is the tab's layout unless one
+// pane is zoomed and has the area to itself. The caller holds the lock.
+func (t *tui) paneRects() []proto.PaneRect {
+	area := ui.Rect{Y: ui.TabRows(t.countTabsLocked()), Cols: t.cols,
+		Rows: t.rows - ui.TabRows(t.countTabsLocked()) - ui.StatusRows}
+
+	if t.zoom && t.focus != 0 {
+		return []proto.PaneRect{{
+			Pane: t.focus, X: area.X, Y: area.Y, Cols: area.Cols, Rows: area.Rows,
+		}}
+	}
+
+	// The layout comes back relative to the area, so it is shifted down past
+	// the tab bar here rather than the server knowing about one.
+	out := make([]proto.PaneRect, len(t.rects))
+	for i, r := range t.rects {
+		out[i] = r
+		out[i].Y += area.Y
+	}
+	return out
+}
+
+func (t *tui) countTabsLocked() int {
+	n := 0
+	for _, w := range t.snap.Workspaces {
+		n += len(w.Tabs)
+	}
+	return n
 }
 
 // syncPaneSizes tells the server what size each pane is being drawn at, so its
@@ -370,6 +425,7 @@ func (t *tui) buildFrame() ui.Frame {
 		Alert:   t.alert,
 		Prefix:  t.keys.Armed(),
 		Overlay: t.overlay,
+		Zoomed:  t.zoom,
 	}
 
 	info := make(map[uint64]proto.PaneInfo, len(t.snap.Panes))
@@ -384,10 +440,24 @@ func (t *tui) buildFrame() ui.Frame {
 			if tab.ID == t.tab {
 				frame.Tab = tab.Name
 			}
+			label := ui.Tab{
+				ID:     tab.ID,
+				Name:   tab.Name,
+				Panes:  len(tab.Panes),
+				Active: tab.ID == t.tab,
+			}
+			// A blocked agent in a tab you are not looking at is the one thing
+			// the bar exists to tell you about.
+			for _, id := range tab.Panes {
+				if info[id].State == "blocked" {
+					label.Alert = true
+				}
+			}
+			frame.Tabs = append(frame.Tabs, label)
 		}
 	}
 
-	for _, r := range t.rects {
+	for _, r := range t.paneRects() {
 		p := info[r.Pane]
 		frame.Panes = append(frame.Panes, ui.Pane{
 			ID:      r.Pane,
@@ -526,6 +596,22 @@ func (t *tui) command(cmd ui.Command) error {
 		t.focusNext(rects, focus)
 		return nil
 
+	case ui.CommandZoom:
+		t.mu.Lock()
+		t.zoom = !t.zoom
+		t.mu.Unlock()
+		return t.refresh()
+
+	case ui.CommandGrowLeft, ui.CommandGrowRight, ui.CommandGrowUp, ui.CommandGrowDown:
+		if focus == 0 {
+			return nil
+		}
+		area := t.layoutArea()
+		if err := t.client.AdjustSplit(focus, growSide(cmd), resizeStep, area.Cols, area.Rows); err != nil {
+			return err
+		}
+		return t.refresh()
+
 	case ui.CommandClosePane:
 		if focus == 0 {
 			return nil
@@ -566,6 +652,20 @@ func (t *tui) command(cmd ui.Command) error {
 		return nil
 	}
 	return nil
+}
+
+// growSide names the edge a resize key moves.
+func growSide(cmd ui.Command) string {
+	switch cmd {
+	case ui.CommandGrowLeft:
+		return "left"
+	case ui.CommandGrowRight:
+		return "right"
+	case ui.CommandGrowUp:
+		return "up"
+	default:
+		return "down"
+	}
 }
 
 func sideFor(cmd ui.Command) session.Side {

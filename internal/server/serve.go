@@ -39,6 +39,7 @@ var Methods = []string{
 	proto.MethodPaneResize,
 	proto.MethodPaneSubscribe,
 	proto.MethodPaneScreen,
+	proto.MethodPaneAdjust,
 	proto.MethodTabLayout,
 	proto.MethodServerShutdown,
 }
@@ -392,6 +393,18 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return c.srv.paneScreen(session.PaneID(p.Pane))
 
+	case proto.MethodPaneAdjust:
+		var p proto.PaneAdjustParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		side, err := parseSide(p.Side)
+		if err != nil {
+			return nil, err
+		}
+		return nil, c.srv.AdjustSplit(session.PaneID(p.Target), side, p.Cells,
+			session.Rect{W: p.Cols, H: p.Rows})
+
 	case proto.MethodTabLayout:
 		var p proto.TabLayoutParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -442,6 +455,20 @@ func parseDirection(s string) (session.Direction, error) {
 		return session.Rows, nil
 	}
 	return 0, fmt.Errorf("unknown direction %q; use \"columns\" or \"rows\"", s)
+}
+
+func parseSide(s string) (session.Side, error) {
+	switch s {
+	case "left":
+		return session.Left, nil
+	case "right":
+		return session.Right, nil
+	case "up":
+		return session.Up, nil
+	case "down":
+		return session.Down, nil
+	}
+	return 0, fmt.Errorf("unknown side %q; use left, right, up or down", s)
 }
 
 func paneSpec(p proto.PaneSpec) PaneSpec {

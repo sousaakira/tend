@@ -86,9 +86,9 @@ the alternate screen; mouse and paste modes; titles; and cursor reports.
 
 Deliberate gaps, each a decision rather than an oversight:
 
-- **No reflow.** Narrowing a pane truncates instead of rewrapping. `Row`
-  already tracks the wrapped flag reflow needs; the algorithm lands when the
-  renderer does.
+- **Reflow is main-screen only.** An application on the alternate screen owns
+  every cell of it and redraws on the resize that is about to reach it, so
+  rewrapping there would fight a redraw that is already coming.
 - **No character sets.** tend is UTF-8 only. `ESC ( B` and friends are
   consumed and ignored.
 - **No 8-bit C1 controls**, for the UTF-8 reason in the package comment.
@@ -140,6 +140,30 @@ Two rules carried over from that lineage, both learned the hard way:
   scroll; agent state does not move.
 - Gate on controls that are invariant for a state. Never match incidental text
   that happens to appear on screen.
+
+### Reflow
+
+Narrowing a pane used to leave every line broken where it was: text wrapped at
+120 columns kept its break at column 120 inside an 80 column pane. The
+information needed to undo that was already recorded — `Row.wrapped` marks a
+line that continues because it ran out of width, as opposed to one that ended
+because the program wrote a newline — and reflow spends it.
+
+The property is that **where the breaks fall is the only thing reflow may
+change**. `TestReflowRoundTrip` takes content through six widths and checks the
+unwrapped text after every one.
+
+Two details are less obvious than they look:
+
+- **The cursor is tracked as an offset into its logical line**, because that is
+  the only description of its position that survives rewrapping. Its row and
+  column both change; the character it sits on does not.
+- **A wide character that will not fit leaves a spacer, not a space.** The
+  distinction is invisible until the line is rewrapped a second time, when a
+  space would reappear as a gap in the middle of the text. A spacer and the
+  right half of a wide character both hold no rune, and are told apart by what
+  precedes them: a continuation always follows the double-width cell it
+  belongs to.
 
 ## The pty layer
 

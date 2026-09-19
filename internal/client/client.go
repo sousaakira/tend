@@ -323,6 +323,14 @@ func (c *Client) PaneScreen(pane uint64) (proto.PaneScreenResult, error) {
 	return out, c.Call(proto.MethodPaneScreen, proto.PaneScreenParams{Pane: pane}, &out)
 }
 
+// AdjustSplit moves one edge of a pane. side is "left", "right", "up" or
+// "down"; cols and rows are the size the tab is being drawn in.
+func (c *Client) AdjustSplit(pane uint64, side string, cells, cols, rows int) error {
+	return c.Call(proto.MethodPaneAdjust, proto.PaneAdjustParams{
+		Target: pane, Side: side, Cells: cells, Cols: cols, Rows: rows,
+	}, nil)
+}
+
 // TabLayout asks where a tab's panes go at the given size.
 func (c *Client) TabLayout(tab uint64, cols, rows int) (proto.TabLayoutResult, error) {
 	var out proto.TabLayoutResult
