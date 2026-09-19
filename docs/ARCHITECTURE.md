@@ -189,6 +189,40 @@ fails by drifting rather than by crashing — a stale index, focus on a closed
 pane, split shares no longer summing to one — and each of those renders wrongly
 instead of stopping, which makes them expensive to find later.
 
+## The server
+
+`internal/server` pairs the pure records in `internal/session` with the live
+halves they describe: a pty, a terminal and a detector per pane. The split is
+the point — a pane's identity and place in the layout outlive its process.
+
+**Locking.** Two levels, always taken in this order: the server's lock, which
+guards the session tree and the runtime map; then a pane runtime's own lock,
+which guards that pane's terminal. Pane output never touches the server's lock,
+so one busy agent cannot serialise every other pane through a single mutex.
+Callbacks from inside a terminal — a title report, for instance — record into
+the runtime and let the detection loop carry the result up, rather than
+reaching for the session lock while a pane is parsing bytes.
+
+**One detection loop, not one per pane.** Detection is per-pane work on a
+shared schedule. A goroutine and a timer per pane would scale the cost of an
+idle workspace with its size. A pane whose screen has not changed is skipped
+entirely, so the interval bounds how stale a state can be rather than how much
+work is done.
+
+**A slow client loses events rather than stalling the runtime.** Subscriptions
+are buffered and the server never blocks on one; a subscriber that stops
+reading has events dropped and counted, so it can tell "nothing happened" from
+"I fell behind" and resynchronise. A stuck client must not be able to freeze
+the agents it is watching.
+
+**Shutdown is bounded.** Closing a pane hangs it up, and the hangup is what
+ends the goroutine reading it — closing the terminal alone does not. The pty
+master is not registered with Go's poller, so a read already blocked on it is a
+plain syscall that `Close` cannot interrupt, and the reader would park forever.
+A pane that ignores the hangup is killed when the grace period expires. Panes
+tend hangs up on purpose do not report the resulting hangup as a failure, or
+every pane the user closes would show an error.
+
 ## Non-goals for the core milestone
 
 Plugins, SSH/multi-machine, kitty graphics, worktree management and session

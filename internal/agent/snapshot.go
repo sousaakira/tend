@@ -6,6 +6,9 @@
 package agent
 
 import (
+	"errors"
+	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/detect"
@@ -107,4 +110,29 @@ func (d *Detector) Update(s *vt.Screen) (detect.Result, bool) {
 	d.ruleID = res.RuleID
 	d.known = true
 	return res, true
+}
+
+// ResolveManifest picks the detection manifest for a command.
+//
+// An explicit name must exist, because naming an agent that is not there is a
+// mistake worth reporting. An empty name is inferred from the command's own
+// name, and a command matching nothing yields no manifest and no error: plenty
+// of useful panes are not agents, and a shell should not fail to open because
+// nobody wrote rules for it.
+func ResolveManifest(c *detect.Catalog, explicit, command string) (*detect.Manifest, error) {
+	if c == nil {
+		return nil, errors.New("agent: no manifest catalog")
+	}
+	if explicit != "" {
+		m, ok := c.Lookup(explicit)
+		if !ok {
+			return nil, fmt.Errorf("agent: unknown agent %q", explicit)
+		}
+		return m, nil
+	}
+	base := strings.TrimSuffix(filepath.Base(command), ".exe")
+	if m, ok := c.Lookup(base); ok {
+		return m, nil
+	}
+	return nil, nil
 }

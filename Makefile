@@ -58,12 +58,15 @@ run: toolchain
 test: toolchain
 	$(GO) test ./...
 
-## test-race: full run under the race detector. Slow; for concurrent code.
+## test-race: full run under the race detector.
 test-race: toolchain
 	$(GO) test -race ./...
 
 ## check: what must pass before committing.
-check: toolchain fmt vet test
+# The race detector is part of the gate, not an extra: the server runs a
+# goroutine per pane plus a detection loop, and a race found after committing
+# is a race found the expensive way.
+check: toolchain fmt vet test test-race
 
 fmt:
 	@out="$$(gofmt -l .)"; \

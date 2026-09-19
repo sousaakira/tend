@@ -74,32 +74,26 @@ func runWatch(args []string) error {
 
 // resolveAgent picks the manifest, falling back to the command's own name so
 // that `tend watch -- claude` needs no flag.
+//
+// watch requires one: watching a command with no detector would report nothing
+// forever, which is worse than saying so up front. The server takes the same
+// resolution but treats "no match" as fine, since most panes are not agents.
 func resolveAgent(name, command string) (*detect.Manifest, error) {
 	catalog, err := detect.Bundled()
 	if err != nil {
 		return nil, err
 	}
-	if name != "" {
-		m, ok := catalog.Lookup(name)
-		if !ok {
-			return nil, fmt.Errorf("unknown agent %q; run \"tend agents\" to list them", name)
-		}
-		return m, nil
+	m, err := agent.ResolveManifest(catalog, name, command)
+	if err != nil {
+		return nil, fmt.Errorf("%w; run \"tend agents\" to list them", err)
 	}
-
-	base := strings.TrimSuffix(filepath.Base(command), ".exe")
-	m, ok := catalog.Lookup(base)
-	if !ok {
+	if m == nil {
+		base := strings.TrimSuffix(filepath.Base(command), ".exe")
 		return nil, fmt.Errorf("no manifest matches command %q; pass -agent, or run \"tend agents\"", base)
 	}
 	return m, nil
 }
 
-// openCapture returns an io.WriteCloser rather than an *os.File on purpose.
-// Returning a nil *os.File and assigning it to an interface field yields an
-// interface that is not nil but holds a nil pointer, so a nil check passes and
-// the first write fails with "invalid argument". Returning the interface type
-// makes the empty case a genuine nil.
 func openCapture(path string) (io.WriteCloser, error) {
 	if path == "" {
 		return nil, nil

@@ -8,9 +8,10 @@ spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo.
 
-> Status: early. The terminal core, agent detection for 22 agents, and the pty
-> layer work and are tested, and the CLI below runs. The server and the TUI
-> client — the parts that make it a multiplexer — are still to come.
+> Status: early. The terminal core, agent detection for 22 agents, the pty
+> layer, session state and the server all work and are tested. The wire
+> protocol and the TUI client are still to come, so there is nothing to attach
+> to or detach from yet.
 
 ## try it
 
@@ -23,6 +24,8 @@ bin/tend watch -capture out.raw -- codex
 bin/tend detect -agent claude out.raw    # replay a capture offline
 bin/tend explain -agent claude out.raw   # ...and see how every rule voted
 bin/tend screen out.raw                  # ...and what the terminal core made of it
+
+bin/tend session -- claude -- codex      # several panes in one server
 ```
 
 `watch` runs one command on a pseudo-terminal, mirrors its output, and prints
@@ -38,6 +41,17 @@ state changes to stderr:
 `-capture` writes the raw bytes, which `detect`, `explain` and `screen` replay
 offline. That loop is how a detection rule gets debugged: capture the state
 once, then iterate against the file instead of against a live agent.
+
+`session` runs each command as a pane in one server and reports their state as
+it changes. It does not draw the panes — that is the client's job, and the
+client does not exist yet — but it is the multiplexer underneath:
+
+```
+PANE  COMMAND  AGENT   STATE    TITLE
+1     claude   claude  working  my-project
+2     codex    codex   blocked  ~/proj
+3     htop     -       -        -
+```
 
 ## development
 

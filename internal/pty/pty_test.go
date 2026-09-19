@@ -122,3 +122,73 @@ func TestDefaultSizeIsUsedWhenInvalid(t *testing.T) {
 		t.Errorf("stty size = %q, want it to contain %q", strings.TrimSpace(buf.String()), want)
 	}
 }
+
+// TestCloseUnblocksAPendingRead is the contract the server depends on for
+// shutdown, and it does not come for free.
+//
+// Closing the master alone does not interrupt a Read already blocked on it:
+// the descriptor is not registered with Go's poller, so the read is a plain
+// syscall and the goroutine would stay parked forever. Close sends SIGHUP
+// first, which ends the process and so ends the read.
+func TestCloseUnblocksAPendingRead(t *testing.T) {
+	p, err := Start("/bin/sh", []string{"-c", "sleep 30"}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, p)
+		readDone <- err
+	}()
+	time.Sleep(50 * time.Millisecond) // let the read block
+
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	select {
+	case <-readDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read did not unblock after Close")
+	}
+
+	waitDone := make(chan error, 1)
+	go func() { waitDone <- p.Wait() }()
+	select {
+	case <-waitDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return after Close")
+	}
+}
+
+// TestKillEndsAProcessThatIgnoresHangup is the escalation path.
+func TestKillEndsAProcessThatIgnoresHangup(t *testing.T) {
+	p, err := Start("/bin/sh", []string{"-c", "trap '' HUP; sleep 30"}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = p.Kill() }()
+
+	readDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, p)
+		readDone <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	_ = p.Close() // SIGHUP, which this process ignores
+	select {
+	case <-readDone:
+		t.Log("the shell exited on hangup anyway; the escalation is still exercised below")
+	case <-time.After(300 * time.Millisecond):
+		// Still running, as expected. Escalate.
+	}
+
+	if err := p.Kill(); err != nil {
+		t.Fatalf("Kill: %v", err)
+	}
+	select {
+	case <-readDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read did not unblock after Kill")
+	}
+}

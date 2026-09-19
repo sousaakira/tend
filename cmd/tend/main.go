@@ -23,6 +23,7 @@ commands:
   explain           show how every rule voted, for one capture
   screen            render captured terminal output as tend parses it
   watch             run a command on a pty and report its agent state
+  session           run several commands as panes in one server
   version           print the version
 
 run "tend <command> -h" for a command's options.
@@ -46,6 +47,8 @@ func main() {
 		err = runScreen(os.Args[2:])
 	case "watch":
 		err = runWatch(os.Args[2:])
+	case "session":
+		err = runSession(os.Args[2:])
 	case "version":
 		fmt.Println(version)
 	case "-h", "--help", "help":
