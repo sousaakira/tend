@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -174,5 +175,18 @@ func TestBadTargetsAreNamedNotGuessed(t *testing.T) {
 		"pane_id": PaneID(h.pane), "keys": []string{"chorus"},
 	})); code != "invalid_key" {
 		t.Errorf("code = %q, want invalid_key", code)
+	}
+}
+
+// TestAWorktreeRootIsNeverRelative: with no directory configured, a new
+// worktree was created as "project/branch" relative to the repository — inside
+// the checkout it was meant to sit beside. Whatever the setting says, git must
+// be handed an absolute path.
+func TestAWorktreeRootIsNeverRelative(t *testing.T) {
+	for _, setting := range []string{"", "relative/dir", "~/elsewhere", "/abs/dir"} {
+		a := &API{worktreeDir: setting}
+		if root := a.worktreeRoot(); !filepath.IsAbs(root) {
+			t.Errorf("setting %q gave the root %q", setting, root)
+		}
 	}
 }

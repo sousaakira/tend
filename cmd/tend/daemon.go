@@ -303,6 +303,7 @@ func runServe(args []string) error {
 	fmt.Fprintf(os.Stderr, "%s automation on %s\n", tag(), apiPath)
 
 	automation := api.New(srv, version, cfg.Shell())
+	automation.SetWorktreeDir(cfg.Worktrees.Directory)
 	defer automation.Close()
 	go func() {
 		if err := automation.Serve(apiLn); err != nil {

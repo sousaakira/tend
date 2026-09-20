@@ -132,6 +132,17 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   (`pane.copy_motion`, `pane.copy_search`) with herdr's word classes and
   separator set; search is literal, smart-case, and matches across wrapped rows.
   Verified inside the real Claude Code: searched, selected and copied its text.
+- **Worktrees** (herdr's `worktree.rs` and `app/api/worktrees.rs`): `tend
+  worktree list|create|open|remove` and `worktree.list|create|open|remove`
+  over the socket. A new worktree goes to `[worktrees] directory`
+  (`~/.tend/worktrees`, herdr's is `~/.herdr/worktrees`) as
+  `<repo>/<branch-slug>`; a branch nobody named gets herdr's generated
+  `worktree/<adjective>-<noun>-<hex>`; an existing branch is checked out rather
+  than recreated. It opens as a space rooted in the checkout and filed in a
+  group named after the repository — herdr's "membership", which tend's groups
+  already are. Removing follows herdr's order: forced, the space closes first;
+  not forced, git is asked first and a dirty worktree keeps its space.
+  Verified with real git end to end.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -266,11 +277,16 @@ Copy mode is ported (see "Ported, and checked"). Left:
   up can shift the rows under the cursor.
 - Highlighting every match while searching; herdr keeps a window of them.
 
-### 6. Worktrees — medium
+### 6. Worktrees — done over the CLI and socket; no overlay yet
 
-- herdr: `worktree.rs` (954), `workspace/git/`, `client/shell/worktrees.rs`,
-  `worktree_overlays.rs`, `cli/worktree.rs`; API `worktree.create|list|open|
-  remove`.
+Ported (see "Ported, and checked"). Left:
+
+- The overlays (`client/shell/worktrees.rs`, `worktree_overlays.rs`): picking
+  and creating worktrees from inside the client. Today it is the command line.
+- A forced removal that git then refuses leaves the space closed. herdr
+  restores the panes it shut down (`restore_shutdown_worktree_panes`).
+- `trust_repository` (`safe.directory`) for repositories owned by another user.
+- The `worktree.*` events.
 
 ### 7. Moving and swapping — medium
 

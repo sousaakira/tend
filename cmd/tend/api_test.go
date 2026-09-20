@@ -295,3 +295,94 @@ command = ["/bin/sh", "-c", "printf i-am-the-plugin-pane\\n; sleep 30"]
 	}
 	t.Error("the pane the plugin opened never ran its command")
 }
+
+// TestAWorktreeBecomesASpace is worktrees end to end with the real binary and
+// real git: a checkout made for an agent, opened as a space in the
+// repository's group, found in the list, and removed with its space. If it
+// regresses, two agents on one project go back to sharing a checkout.
+func TestAWorktreeBecomesASpace(t *testing.T) {
+	runtimeDir := t.TempDir()
+	configDir := t.TempDir()
+	worktrees := t.TempDir()
+	cfg := filepath.Join(configDir, "tend.toml")
+	if err := os.WriteFile(cfg, []byte("[worktrees]\ndirectory = \""+worktrees+"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	t.Setenv("TEND_CONFIG", cfg)
+	bin := buildBinary(t)
+
+	repo := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitEnv := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"commit", "-q", "--allow-empty", "-m", "first"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir, cmd.Env = repo, gitEnv
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "TEND_CONFIG="+cfg, "SHELL=/bin/sh")
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env, cmd.Dir = env, repo
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	if out, err := run("new", "-s", "wt", "--", "/bin/sh"); err != nil {
+		t.Fatalf("tend new: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { stopSession(t, "wt") })
+
+	out, err := run("worktree", "create", "-s", "wt", "-json", "feature/login")
+	if err != nil {
+		t.Fatalf("worktree create: %v\n%s", err, out)
+	}
+	want := filepath.Join(worktrees, "project", "feature-login")
+	if !strings.Contains(out, want) {
+		t.Fatalf("the worktree is not where the settings say: %s", out)
+	}
+	if _, err := os.Stat(filepath.Join(want, ".git")); err != nil {
+		t.Fatalf("no checkout at %s: %v", want, err)
+	}
+
+	// Open as a space, filed under the repository.
+	out, err = run("api", "-s", "wt", "workspace.list")
+	if err != nil || !strings.Contains(out, `"group":"project"`) || !strings.Contains(out, want) {
+		t.Fatalf("the new space is not in the repository's group: %s %v", out, err)
+	}
+
+	out, err = run("worktree", "list", "-s", "wt")
+	if err != nil || !strings.Contains(out, "feature/login") || !strings.Contains(out, "w_2") {
+		t.Fatalf("worktree list = %q, %v", out, err)
+	}
+
+	// A change in it makes an unforced remove refuse, and keep the space.
+	if err := os.WriteFile(filepath.Join(want, "draft"), []byte("wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run("worktree", "remove", "-s", "wt", "w_2"); err == nil || !strings.Contains(out, "worktree_dirty") {
+		t.Fatalf("removing a dirty worktree = %q, %v; want a refusal", out, err)
+	}
+	if out, _ := run("api", "-s", "wt", "workspace.list"); !strings.Contains(out, "w_2") {
+		t.Fatal("a refused removal closed the space anyway")
+	}
+
+	if out, err := run("worktree", "remove", "-s", "wt", "-force", "w_2"); err != nil {
+		t.Fatalf("forced remove: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(want); !os.IsNotExist(err) {
+		t.Error("the checkout is still there after removing it")
+	}
+	if out, _ := run("api", "-s", "wt", "workspace.list"); strings.Contains(out, "w_2") {
+		t.Error("the space is still open after its worktree was removed")
+	}
+}

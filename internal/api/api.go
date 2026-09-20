@@ -150,6 +150,8 @@ type API struct {
 	// shellCmd is what a pane opened through this socket runs when the caller
 	// names no command, which is the same login shell the client would use.
 	shellCmd []string
+	// worktreeDir is where a new worktree goes, from the settings file.
+	worktreeDir string
 
 	mu    sync.Mutex
 	conns map[net.Conn]struct{}
@@ -164,6 +166,9 @@ func New(srv *server.Server, build string, shell []string) *API {
 	}
 	return &API{srv: srv, build: build, shellCmd: shell, conns: make(map[net.Conn]struct{})}
 }
+
+// SetWorktreeDir says where new worktrees go.
+func (a *API) SetWorktreeDir(dir string) { a.worktreeDir = dir }
 
 // shell is the command a pane opened through this socket runs by default.
 func (a *API) shell() []string { return append([]string(nil), a.shellCmd...) }

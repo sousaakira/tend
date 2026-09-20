@@ -136,6 +136,9 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 	if result, mine, err := a.callPlugins(req); mine {
 		return result, err
 	}
+	if result, mine, err := a.callWorktrees(req); mine {
+		return result, err
+	}
 	switch req.Method {
 	case MethodSessionSnapshot:
 		return a.sessionSnapshot(), nil

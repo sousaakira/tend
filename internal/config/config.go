@@ -20,10 +20,18 @@ import (
 
 // Config is everything tend can be told.
 type Config struct {
-	Keys   Keys   `toml:"keys"`
-	Pane   Pane   `toml:"pane"`
-	UI     UI     `toml:"ui"`
-	Server Server `toml:"server"`
+	Keys      Keys      `toml:"keys"`
+	Pane      Pane      `toml:"pane"`
+	UI        UI        `toml:"ui"`
+	Server    Server    `toml:"server"`
+	Worktrees Worktrees `toml:"worktrees"`
+}
+
+// Worktrees configures where new worktrees go.
+type Worktrees struct {
+	// Directory holds a new worktree as <directory>/<repository>/<branch>.
+	// herdr keeps them under ~/.herdr/worktrees; tend under ~/.tend/worktrees.
+	Directory string `toml:"directory"`
 }
 
 // Keys configures the keyboard.
@@ -77,10 +85,11 @@ type Server struct {
 // Defaults returns the configuration tend uses when told nothing.
 func Defaults() Config {
 	return Config{
-		Keys:   Keys{Prefix: "ctrl+b"},
-		Pane:   Pane{Scrollback: 5000},
-		UI:     UI{Mouse: true, Sidebar: true},
-		Server: Server{DetectInterval: "150ms", Persist: true},
+		Keys:      Keys{Prefix: "ctrl+b"},
+		Pane:      Pane{Scrollback: 5000},
+		UI:        UI{Mouse: true, Sidebar: true},
+		Server:    Server{DetectInterval: "150ms", Persist: true},
+		Worktrees: Worktrees{Directory: "~/.tend/worktrees"},
 	}
 }
 
@@ -311,4 +320,9 @@ detect_interval = "150ms"
 # tabs and splits, each pane in the directory it was in and under what it had
 # said. Programs do not survive a restart; the place does.
 persist = true
+
+[worktrees]
+# Where "tend worktree create" puts a new checkout, as
+# <directory>/<repository>/<branch>.
+directory = "~/.tend/worktrees"
 `
