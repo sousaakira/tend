@@ -1322,6 +1322,27 @@ func (a *attached) sidebarText() string {
 	return b.String()
 }
 
+// openMenuOn right-clicks a point until the menu it should open is there.
+//
+// A right-click lands wherever the screen happens to be at that instant, and
+// after a reconnect or a redraw that can be before the row it is aiming at has
+// been drawn. Insisting is what a person does; waiting a fixed time and hoping
+// is what makes a test flake.
+func (a *attached) openMenuOn(t *testing.T, col, row int, want string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		a.rightClickAt(t, col, row)
+		for i := 0; i < 6; i++ {
+			if strings.Contains(a.text(), want) {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	t.Fatalf("no menu with %q after right-clicking %d,%d:\n%s", want, col, row, a.text())
+}
+
 // rightClickAt opens a context menu where a right-click would.
 func (a *attached) rightClickAt(t *testing.T, col, row int) {
 	t.Helper()
@@ -1355,10 +1376,7 @@ func TestAttachMenuClosesAPane(t *testing.T) {
 		return strings.Count(s, "┌") == 2
 	})
 
-	a.rightClickAt(t, 50, 6)
-	a.waitForScreen(t, "the menu", func(s string) bool {
-		return strings.Contains(s, "close pane") && strings.Contains(s, "split right")
-	})
+	a.openMenuOn(t, 50, 6, "close pane")
 
 	a.clickAt(t, 52, a.lineContaining(t, "close pane"))
 	a.waitForScreen(t, "the pane to close", func(s string) bool {
@@ -1376,10 +1394,7 @@ func TestAttachMenuClosesASpace(t *testing.T) {
 		return strings.Contains(s, "space 2")
 	})
 
-	a.rightClickAt(t, 6, a.lineContaining(t, "space 2"))
-	a.waitForScreen(t, "the space menu", func(s string) bool {
-		return strings.Contains(s, "close space")
-	})
+	a.openMenuOn(t, 6, a.lineContaining(t, "space 2"), "close space")
 	a.clickAt(t, 8, a.lineContaining(t, "close space"))
 
 	a.waitForScreen(t, "the space to go", func(string) bool {
@@ -1419,10 +1434,7 @@ func TestAttachMenuButtonAndEscape(t *testing.T) {
 // menu, the way a user would.
 func (a *attached) groupSpace(t *testing.T, space, group string) {
 	t.Helper()
-	a.rightClickAt(t, 6, a.lineContaining(t, space))
-	a.waitForScreen(t, "the space menu", func(s string) bool {
-		return strings.Contains(s, "group...")
-	})
+	a.openMenuOn(t, 6, a.lineContaining(t, space), "group...")
 	a.clickAt(t, 8, a.lineContaining(t, "group..."))
 	a.waitForScreen(t, "the group prompt", func(s string) bool {
 		return strings.Contains(s, "empty to ungroup")
@@ -1477,10 +1489,7 @@ func TestAttachUngroupsFromTheGroupMenu(t *testing.T) {
 		return strings.Contains(a.sidebarText(), "clients")
 	})
 
-	a.rightClickAt(t, 4, a.lineContaining(t, "clients"))
-	a.waitForScreen(t, "the group menu", func(s string) bool {
-		return strings.Contains(s, "ungroup")
-	})
+	a.openMenuOn(t, 4, a.lineContaining(t, "clients"), "ungroup")
 	a.clickAt(t, 6, a.lineContaining(t, "ungroup"))
 
 	a.waitForScreen(t, "the group to go", func(string) bool {
@@ -1574,10 +1583,7 @@ func TestAttachClosingTheLastSpaceLeavesAnEmptySession(t *testing.T) {
 	a := startSession(t, 100, 16)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 
-	a.rightClickAt(t, 6, a.lineContaining(t, "main"))
-	a.waitForScreen(t, "the space menu", func(s string) bool {
-		return strings.Contains(s, "close space")
-	})
+	a.openMenuOn(t, 6, a.lineContaining(t, "main"), "close space")
 	a.clickAt(t, 8, a.lineContaining(t, "close space"))
 
 	a.waitForScreen(t, "the session to empty", func(s string) bool {
@@ -1639,10 +1645,7 @@ func TestAttachOffersToRestartAnOlderServer(t *testing.T) {
 	// And the thing that could not be done before can be done now, which is
 	// the only proof that the replacement is this binary.
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-	a.rightClickAt(t, 6, a.lineContaining(t, "main"))
-	a.waitForScreen(t, "the space menu", func(s string) bool {
-		return strings.Contains(s, "close space")
-	})
+	a.openMenuOn(t, 6, a.lineContaining(t, "main"), "close space")
 	a.clickAt(t, 8, a.lineContaining(t, "close space"))
 	a.waitForScreen(t, "the space to close", func(s string) bool {
 		return !strings.Contains(a.sidebarText(), "main")
@@ -1936,10 +1939,7 @@ func (a *attached) reversedOn(row int) string {
 func TestAttachMarksTheMenuItemUnderThePointer(t *testing.T) {
 	a := startSession(t, 100, 20)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-	a.rightClickAt(t, 50, 6)
-	a.waitForScreen(t, "the menu", func(s string) bool {
-		return strings.Contains(s, "split right") && strings.Contains(s, "zoom")
-	})
+	a.openMenuOn(t, 50, 6, "zoom")
 
 	// Nothing is marked to begin with: the pointer is on the thing the menu
 	// was opened on, not on a choice.
@@ -2369,5 +2369,78 @@ sleep 30
 	}
 	if got := a.reversedOn(anchor - 1); strings.Contains(got, want) {
 		t.Errorf("the mark stayed on row %d: it should have followed the text", anchor)
+	}
+}
+
+// TestAttachHoldsASelectionStillUnderAnimation is the bug that produced a
+// clipboard full of blank lines: staying put was left out of the candidate
+// shifts, so a screen that had not scrolled still got whichever offset lined
+// up best. A program with a spinner repaints constantly, and the selection
+// walked a little further off with every frame until it was past the bottom
+// of the screen marking nothing.
+func TestAttachHoldsASelectionStillUnderAnimation(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Fixed content with one line changing ten times a second.
+	prog := fakeAgentBin(t, "spinner", `
+printf '\033[?1049h\033[?1002h\033[?1006h'
+printf '\033[H'
+i=1
+while [ $i -lt 11 ]; do printf '\033[K CONTENT-%02d\n' $i; i=$((i+1)); done
+n=0
+while true; do
+  printf '\033[1;1H\033[K working %d' $n
+  n=$((n+1))
+  sleep 0.1
+done
+`)
+	a.send(t, prog+"\n")
+	a.waitForScreen(t, "the program", func(s string) bool {
+		return strings.Contains(s, "CONTENT-05")
+	})
+	time.Sleep(400 * time.Millisecond)
+
+	row := a.lineContaining(t, "CONTENT-05")
+	col := columnOfString(a.lines()[row-1], "CONTENT") + 1
+
+	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(row)+"M")
+	time.Sleep(100 * time.Millisecond)
+	a.send(t, "\x1b[<32;"+itoa(col+9)+";"+itoa(row)+"M")
+	time.Sleep(1500 * time.Millisecond) // fifteen or so repaints
+	a.send(t, "\x1b[<0;"+itoa(col+9)+";"+itoa(row)+"m")
+
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied ")
+	})
+	// Still on the line it was put on, and still marking it.
+	if got := strings.TrimSpace(a.reversedOn(row - 1)); got != "CONTENT-05" {
+		t.Errorf("the mark drifted to %q; it should have stayed on CONTENT-05", got)
+	}
+	if strings.Contains(a.text(), "nothing to copy") {
+		t.Errorf("the selection ended up on nothing:\n%s", a.text())
+	}
+}
+
+// TestAttachRefusesToCopyBlankness: saying "copied" for a selection of blank
+// lines is worse than saying nothing, because the user pastes and finds the
+// last real thing they copied replaced by empty lines.
+func TestAttachRefusesToCopyBlankness(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf MARKER\n", "the marker", func(s string) bool {
+		return strings.Contains(s, "MARKER")
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	// Empty rows well below the prompt.
+	row := a.lineContaining(t, "MARKER") + 4
+	a.dragFromTo(t, 0, 40, row, 60, row+2)
+
+	a.waitForScreen(t, "the refusal", func(s string) bool {
+		return strings.Contains(s, "nothing to copy")
+	})
+	if strings.Contains(a.text(), "copied ") {
+		t.Errorf("blank lines should not be reported as copied:\n%s", a.text())
 	}
 }

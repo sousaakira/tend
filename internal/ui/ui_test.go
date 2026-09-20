@@ -1605,3 +1605,32 @@ func TestDetectShiftRefusesWhatItCannotTell(t *testing.T) {
 		t.Error("nothing should say nothing")
 	}
 }
+
+// TestDetectShiftPrefersStayingPut is the bug this had: staying put was left
+// out of the candidates, so a screen that had not scrolled still got whichever
+// offset happened to line up best. Three coincidental matches are easy, and a
+// program that animates repaints constantly — the selection walked a little
+// further off with every frame until it marked nothing at all.
+func TestDetectShiftPrefersStayingPut(t *testing.T) {
+	// A screen with a spinner on it: one line changes, the rest do not.
+	before := numbered(10, 12)
+	after := append([]string{}, before...)
+	after[0] = "working ⠋"
+
+	if shift, ok := DetectShift(before, after); ok {
+		t.Errorf("an animated line read as a shift of %d", shift)
+	}
+
+	// Two lines changing is still not a scroll.
+	after[11] = "working ⠙ still"
+	if shift, ok := DetectShift(before, after); ok {
+		t.Errorf("two changed lines read as a shift of %d", shift)
+	}
+
+	// A real scroll under the same animation is still found.
+	scrolled := numbered(7, 12)
+	scrolled[0] = "working ⠹"
+	if shift, ok := DetectShift(before, scrolled); !ok || shift != 3 {
+		t.Errorf("a scroll with a spinner on it = %d, %v; want 3", shift, ok)
+	}
+}

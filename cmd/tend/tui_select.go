@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sousaakira/tend/internal/clipboard"
@@ -241,6 +242,11 @@ func (t *tui) followRepaint() {
 	if shift, ok := ui.DetectShift(t.lastPicture, now); ok {
 		t.sel.AnchorY += shift
 		t.sel.CursorY += shift
+		// Kept inside the window. A pane like this has no text outside it —
+		// what scrolled away is in the program's memory and nowhere tend can
+		// reach — so an end that drifts past the edge marks nothing, and a
+		// selection of nothing copies blank lines.
+		t.clampSelectionLocked(len(now))
 		t.lastPicture = now
 		t.dirty = true
 		return
@@ -255,6 +261,15 @@ func (t *tui) followRepaint() {
 	if settled {
 		t.lastPicture = now
 	}
+}
+
+// clampSelectionLocked keeps both ends of a selection on the screen.
+func (t *tui) clampSelectionLocked(rows int) {
+	if rows <= 0 {
+		return
+	}
+	t.sel.AnchorY = min(max(t.sel.AnchorY, 0), rows-1)
+	t.sel.CursorY = min(max(t.sel.CursorY, 0), rows-1)
 }
 
 // sameLines reports whether two pictures of a screen are identical.
@@ -319,8 +334,11 @@ func (t *tui) endSelection() bool {
 		t.setMessage("copy failed: "+err.Error(), true)
 		return true
 	}
-	if text == "" {
-		t.wakeUp()
+	if strings.TrimSpace(text) == "" {
+		// Blank is not something to put on a clipboard, and saying "copied"
+		// for it is worse than saying nothing: the user pastes and finds the
+		// last real thing they copied replaced by empty lines.
+		t.setMessage("nothing to copy there", false)
 		return true
 	}
 	t.copyToClipboard(text, sel.Block)

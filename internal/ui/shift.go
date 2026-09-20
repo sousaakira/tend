@@ -34,7 +34,14 @@ func DetectShift(before, after []string) (int, bool) {
 		return 0, false
 	}
 
-	bestShift, bestScore, runnerUp := 0, 0, 0
+	// Staying put is one of the candidates, and the one to beat. Leaving it
+	// out was a real bug: a screen that had not scrolled at all still got
+	// whichever non-zero offset happened to line up best, three coincidental
+	// matches being easy in any output with a repeating shape. A program that
+	// animates — a spinner, a progress line — repaints constantly, and the
+	// selection walked a little further off with every frame until it was
+	// somewhere past the bottom of the screen marking nothing.
+	bestShift, bestScore, runnerUp := 0, scoreShift(before, after, 0), 0
 	for shift := -ShiftRows; shift <= ShiftRows; shift++ {
 		if shift == 0 {
 			continue
@@ -48,7 +55,7 @@ func DetectShift(before, after []string) (int, bool) {
 		}
 	}
 
-	if bestScore < minShiftMatches {
+	if bestShift == 0 || bestScore < minShiftMatches {
 		return 0, false
 	}
 	// A tie is not an answer. Output with a repeating shape lines up equally
