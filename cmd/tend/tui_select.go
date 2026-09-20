@@ -240,15 +240,19 @@ func (t *tui) followRepaint() {
 	t.prevPicture = now
 
 	if shift, ok := ui.DetectShift(t.lastPicture, now); ok {
-		t.sel.AnchorY += shift
-		t.sel.CursorY += shift
-		// Kept inside the window. A pane like this has no text outside it —
-		// what scrolled away is in the program's memory and nowhere tend can
-		// reach — so an end that drifts past the edge marks nothing, and a
-		// selection of nothing copies blank lines.
-		t.clampSelectionLocked(len(now))
+		// Followed only while both ends stay in the window. A pane like this
+		// has no text outside it — what scrolled away is in the program's
+		// memory and nowhere tend can reach — so following text off the edge
+		// walks the selection onto rows that hold nothing, and clamping it
+		// there collapses both ends onto the same blank line. Leaving the
+		// mark where it is keeps it on the part still showing, which is the
+		// most that can be copied.
+		if fits(t.sel.AnchorY+shift, len(now)) && fits(t.sel.CursorY+shift, len(now)) {
+			t.sel.AnchorY += shift
+			t.sel.CursorY += shift
+			t.dirty = true
+		}
 		t.lastPicture = now
-		t.dirty = true
 		return
 	}
 
@@ -263,14 +267,8 @@ func (t *tui) followRepaint() {
 	}
 }
 
-// clampSelectionLocked keeps both ends of a selection on the screen.
-func (t *tui) clampSelectionLocked(rows int) {
-	if rows <= 0 {
-		return
-	}
-	t.sel.AnchorY = min(max(t.sel.AnchorY, 0), rows-1)
-	t.sel.CursorY = min(max(t.sel.CursorY, 0), rows-1)
-}
+// fits reports whether a row is inside a window of that many rows.
+func fits(y, rows int) bool { return rows > 0 && y >= 0 && y < rows }
 
 // sameLines reports whether two pictures of a screen are identical.
 func sameLines(a, b []string) bool {

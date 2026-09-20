@@ -2444,3 +2444,55 @@ func TestAttachRefusesToCopyBlankness(t *testing.T) {
 		t.Errorf("blank lines should not be reported as copied:\n%s", a.text())
 	}
 }
+
+// TestAttachKeepsTheMarkOnScreenWhenTextScrollsAway: a pane holding its own
+// scrollback has no text outside the window, so following a scroll past the
+// edge walks the selection onto rows that hold nothing. Clamping it there
+// collapses both ends onto the same blank line, which is how a copy came back
+// empty. The mark stays on the part still showing instead.
+func TestAttachKeepsTheMarkOnScreenWhenTextScrollsAway(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	prog := fakeAgentBin(t, "fast", `
+printf '\033[?1049h\033[?1002h\033[?1006h'
+top=1
+while true; do
+  printf '\033[H'
+  i=$top
+  while [ $i -lt $((top+11)) ]; do printf '\033[K TEXT-%03d\n' $i; i=$((i+1)); done
+  top=$((top+2))
+  sleep 0.2
+done
+`)
+	a.send(t, prog+"\n")
+	a.waitForScreen(t, "the program", func(s string) bool {
+		return strings.Contains(s, "TEXT-0")
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	row := a.lineContaining(t, "TEXT-0")
+	col := columnOfString(a.lines()[row-1], "TEXT") + 1
+
+	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(row)+"M")
+	time.Sleep(100 * time.Millisecond)
+	a.send(t, "\x1b[<32;"+itoa(col+8)+";"+itoa(row)+"M")
+	time.Sleep(2000 * time.Millisecond) // the marked text scrolls well away
+	a.send(t, "\x1b[<0;"+itoa(col+8)+";"+itoa(row)+"m")
+
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied ") || strings.Contains(s, "nothing to copy")
+	})
+	if strings.Contains(a.text(), "nothing to copy") {
+		t.Errorf("the selection collapsed onto blankness:\n%s", a.text())
+	}
+	// And what it took is a line of the program's, not empty space. The exact
+	// count is not the point and would only pin the test to the fixture.
+	status := strings.TrimSpace(a.lines()[len(a.lines())-1])
+	if !strings.Contains(status, "copied ") {
+		t.Errorf("expected a marked line to be copied: %q", status)
+	}
+	if strings.Contains(status, "copied 0 ") {
+		t.Errorf("copied nothing: %q", status)
+	}
+}
