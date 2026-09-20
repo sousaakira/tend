@@ -15,6 +15,7 @@ var commands = []struct{ name, help string }{
 	{"ls", "list panes, or sessions"},
 	{"new", "open a pane in a session"},
 	{"kill", "close panes, or stop a session's server"},
+	{"handoff", "replace a session's server, keeping its programs"},
 	{"follow", "stream a session's events"},
 	{"serve", "run a session server in the foreground"},
 	{"bridge", "carry a session over stdin and stdout, for ssh"},

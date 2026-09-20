@@ -22,3 +22,10 @@ func (p *Pty) Wait() error               { return ErrUnsupported }
 func (p *Pty) Signal(os.Signal) error    { return ErrUnsupported }
 func (p *Pty) Kill() error               { return ErrUnsupported }
 func (p *Pty) Close() error              { return nil }
+
+// The handoff half of the interface, which has nothing to hand over here.
+func Adopt(*os.File, int) (*Pty, error) { return nil, ErrUnsupported }
+func (p *Pty) Pause()                   {}
+func (p *Pty) Resume()                  {}
+func (p *Pty) Dup() (*os.File, error)   { return nil, ErrUnsupported }
+func (p *Pty) Release() error           { return nil }

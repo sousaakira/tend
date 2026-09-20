@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -179,6 +180,7 @@ func runServe(args []string) error {
 	interval := fs.Duration("interval", 0, "how often panes are re-examined (default: from the config file)")
 	cols := fs.Int("cols", 120, "default pane width")
 	rows := fs.Int("rows", 40, "default pane height")
+	inherited := fs.Bool("inherit", false, "take over from the server that started this one (not for use by hand)")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(),
 			"usage: tend serve [options]\n\n"+
@@ -203,11 +205,6 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	ln, err := transport.Listen(path)
-	if err != nil {
-		return err
-	}
-	defer ln.Close()
 
 	stateFile := ""
 	if cfg.Server.Persist {
@@ -215,17 +212,50 @@ func runServe(args []string) error {
 			return err
 		}
 	}
-
-	srv, err := server.New(server.Config{
+	srvCfg := server.Config{
 		Build:          version,
 		StateFile:      stateFile,
 		DetectInterval: detect,
 		Scrollback:     cfg.Scrollback(),
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},
-	})
-	if err != nil {
-		return err
 	}
+
+	// The replacement is whatever binary is at this one's path by then, which
+	// after an install is the new build — that being the point. It is started
+	// the way this one was, plus the word that says its panes are waiting.
+	self, selfErr := os.Executable()
+	replacement := []string{self, "serve", "-s", *name, "-inherit",
+		"-cols", strconv.Itoa(*cols), "-rows", strconv.Itoa(*rows)}
+	if *interval > 0 {
+		replacement = append(replacement, "-interval", interval.String())
+	}
+
+	var (
+		srv *server.Server
+		ln  net.Listener
+	)
+	if *inherited {
+		// Replace is set through a listener that does not exist until the
+		// server does, hence the indirection.
+		if selfErr == nil {
+			srvCfg.Replace = func(h *server.Handoff) error { return replaceWith(ln, replacement)(h) }
+		}
+		if srv, ln, err = inherit(srvCfg); err != nil {
+			return err
+		}
+	} else {
+		if ln, err = transport.Listen(path); err != nil {
+			return err
+		}
+		if selfErr == nil {
+			srvCfg.Replace = replaceWith(ln, replacement)
+		}
+		if srv, err = server.New(srvCfg); err != nil {
+			_ = ln.Close()
+			return err
+		}
+	}
+	defer ln.Close()
 
 	fmt.Fprintf(os.Stderr, "%s session %q listening on %s\n", tag(), *name, path)
 
@@ -440,6 +470,40 @@ func runKill(args []string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// runHandoff replaces a session's server with the binary now installed,
+// keeping what runs in its panes.
+func runHandoff(args []string) error {
+	fs := flag.NewFlagSet("handoff", flag.ExitOnError)
+	name := sessionFlag(fs)
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(),
+			"usage: tend handoff [-s session]\n\n"+
+				"replaces the session's server with the tend now installed. the programs\n"+
+				"in its panes keep running: their terminals are handed to the new server.\n"+
+				"attached clients reconnect on their own. if the new server fails to\n"+
+				"start, the old one carries on as it was.\n\n")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	c, err := connect(*name, nil)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	if err := c.Handoff(); err != nil {
+		if errors.Is(err, proto.ErrUnknownMethod) {
+			return fmt.Errorf("the server running %q predates handoff; only a restart (tend kill -s %s -server) replaces it, and that ends its programs", *name, *name)
+		}
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "%s session %q is on a new server, with its panes\n", tag(), *name)
 	return nil
 }
 

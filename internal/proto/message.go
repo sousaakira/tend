@@ -36,6 +36,11 @@ const (
 	MethodTabLayout = "tab.layout"
 
 	MethodServerShutdown = "server.shutdown"
+	// MethodServerHandoff replaces the server with a new process running the
+	// binary now on disk, keeping every pane's program. The reply comes once
+	// the replacement holds the panes; the connection drops right after, and
+	// reconnecting reaches the new server on the same socket.
+	MethodServerHandoff = "server.handoff"
 )
 
 // Request is a call from a client.
@@ -92,6 +97,7 @@ var KnownMethods = []string{
 	MethodPaneText,
 	MethodPaneAdjust,
 	MethodServerShutdown,
+	MethodServerHandoff,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -114,6 +120,12 @@ type HelloResult struct {
 	// server that did not say which encoding the program wanted, and waiting
 	// for a clipboard event that server had never heard of.
 	Features []string `json:"features,omitempty"`
+	// Handoff reports that this server can be replaced without ending its
+	// programs. Knowing the method is not the same thing: a server run by
+	// something other than `tend serve` has the method and no way to start a
+	// replacement, and a client that offered "everything keeps running" on the
+	// strength of the method alone would be promising what it cannot deliver.
+	Handoff bool `json:"handoff,omitempty"`
 }
 
 // Features a server of this build provides.

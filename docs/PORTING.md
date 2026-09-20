@@ -87,6 +87,18 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   restored pane is a new process. `[server] persist = false` turns it off.
   herdr's equivalent is `persist/`. Not ported from it: agent session resume
   (queue item 12).
+- **Live handoff**: `tend handoff` (herdr: `server live-handoff`), and `r` on
+  the mismatch notice when the server offers it. The server stops every pane's
+  reader, writes a manifest (the session snapshot, plus per pane its pid, size
+  and a `vt.RenderResume` blob that rebuilds scrollback, both screens, modes and
+  cursor), starts the binary now on disk as `serve -inherit`, and waits for it
+  to say it holds everything; then it lets go of the terminals without hanging
+  them up and exits. The programs keep their pids. A replacement that fails to
+  start or to answer is killed and the old server reads on, having lost
+  nothing, since nobody read the terminals in between. Verified with the real
+  Claude Code in a pane: same pid, same screen, detection still reporting its
+  state afterwards. Not verified with a real agent: that mouse modes carry over
+  (covered only by `TestRenderResumeCarriesTheStateNotJustThePicture`).
 - **Settings file** with validation, `tend config`.
 
 ## Different from herdr on purpose
@@ -97,6 +109,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Agent state | screen detection **and** hooks installed into each agent | screen detection only | hooks not ported yet — see queue item 2 |
 | Forced selection | none inside a mouse-holding program | alt+drag selects a block anywhere | fallback for programs that hold the mouse and do nothing with a drag |
 | Clipboard | OSC 52 only | local tool (`wl-copy`/`xclip`/`xsel`/`pbcopy`) when not over ssh, plus OSC 52 always | the owner's terminal refuses OSC 52 |
+| Handoff transport | pty descriptors sent as `SCM_RIGHTS` over a socket; the new server binds the socket afresh | descriptors inherited by the child (`exec.Cmd.ExtraFiles`) at fixed numbers, the **listening socket included** | inheritance needs no protocol, and handing the listener over means the socket file is never removed and recreated — there is no instant with nobody listening |
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
 
 ---
@@ -106,17 +119,21 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 Ordered by how much each changes daily use. Sizes are herdr's, as a guide to
 effort, not a target.
 
-### 1. Live handoff — large
+### 1. Live handoff — what is left of it
 
-Replacing a running server without killing what runs in its panes. herdr passes
-the live panes to the new server; tend's restart brings back the *place* (see
-"Session persistence" under Ported) but every program dies with the old server,
-so an agent mid-task is lost.
+The handoff itself is ported (see "Ported, and checked"). What herdr builds on
+top of it is not:
 
-- herdr: `server/headless/lifecycle.rs`, `update.rs` (`server.live_handoff`),
-  `remote/attach.rs`; user docs `persistence-remote.mdx`.
-- tend today: none. The mechanism needed is passing pty file descriptors to the
-  new process (`SCM_RIGHTS` over the Unix socket, or exec with inherited fds).
+- **Handoff as part of updating.** herdr's updater installs and then hands off
+  (`update.rs`, `--handoff`). tend has no updater yet — queue item 14 — so the
+  owner runs `make install` and then `tend handoff`.
+- **Handoff on remote attach** (`remote/attach.rs`, `remote/restart_policy.rs`):
+  replacing an outdated server on the far side of `-ssh` before attaching.
+- A server from before this feature cannot hand off — it has no such method —
+  and is replaced only by a restart. `tend handoff` says so rather than doing it.
+- Known limit: a pane resized between the manifest being written and the
+  replacement taking over keeps the old size until the client next sends one,
+  which it does on reconnect.
 
 ### 2. Agent integrations (hooks) — large
 

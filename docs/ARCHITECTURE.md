@@ -441,6 +441,12 @@ plugins, remote sessions, kitty graphics, worktrees and session handoff set
 aside. That milestone is done, and the goal has since widened to a 1:1 port of
 herdr, those included.
 
+A server can be replaced while it runs: `internal/server/handoff.go` describes
+the session and gives the pane terminals to a child started by
+`cmd/tend/handoff.go`, which inherits them along with the listening socket.
+`internal/pty` makes that possible by keeping the master non-blocking under
+Go's poller, so a reader can be stopped without the process ending.
+
 What has crossed over, what has not, and where each missing piece lives in
 herdr's source is tracked in `PORTING.md`, which is the work queue.
 

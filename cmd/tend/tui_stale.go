@@ -64,6 +64,19 @@ func staleServerOverlay(m mismatch, self, session string) []string {
 		}
 		return lines
 	}
+	if m.handoff {
+		// A server that can hand its panes over costs nothing to replace, so
+		// the warning about losing programs would be a false one.
+		return append(lines,
+			"Anything this client can do that the old server",
+			"cannot will fail until it is replaced.",
+			"",
+			"r      replace it now: everything in it keeps running",
+			"enter  keep it and carry on",
+			"",
+			"Elsewhere: "+handoffCommand(session),
+		)
+	}
 	return append(lines,
 		"Anything this client can do that the old server",
 		"cannot will fail until it is replaced.",
@@ -102,6 +115,9 @@ type mismatch struct {
 	build       string
 	serverAhead bool
 	clientAhead bool
+	// handoff reports that the server can give its panes to a replacement,
+	// which changes what replacing it costs from everything to nothing.
+	handoff bool
 }
 
 // disagree compares this client with the server it is talking to.
@@ -120,7 +136,18 @@ func (t *tui) disagree() (mismatch, bool) {
 	if !serverAhead && !clientAhead {
 		return mismatch{}, false
 	}
-	return mismatch{build: hello.Build, serverAhead: serverAhead, clientAhead: clientAhead}, true
+	return mismatch{
+		build: hello.Build, serverAhead: serverAhead, clientAhead: clientAhead,
+		handoff: hello.Handoff,
+	}, true
+}
+
+// handoffCommand is the same replacement, from a shell.
+func handoffCommand(session string) string {
+	if session == "" || session == "default" {
+		return "tend handoff"
+	}
+	return "tend handoff -s " + session
 }
 
 // staleServerKeys answers the notice. It reports whether it took the input.
@@ -168,6 +195,18 @@ func (t *tui) dismissStaleServer() {
 // and the reconnect that follows starts a fresh one exactly as the first
 // attach did. One path, already the one that has to work.
 func (t *tui) restartServer() error {
+	if t.client.Server().Handoff {
+		// The server gives its panes to a new process and hangs up, and the
+		// reconnect finds that process on the same socket. A replacement that
+		// fails to start leaves the old server as it was, so the failure is
+		// something to say, not something to die of — and not a reason to fall
+		// back to a restart nobody agreed to the cost of.
+		t.setMessage("replacing the server", false)
+		if err := t.client.Handoff(); err != nil {
+			t.setMessage("the server could not be replaced: "+err.Error(), true)
+		}
+		return nil
+	}
 	t.setMessage("restarting the server", false)
 	if err := t.client.Shutdown(); err != nil && !errors.Is(err, proto.ErrUnknownMethod) {
 		return err

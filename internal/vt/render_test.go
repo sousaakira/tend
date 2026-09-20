@@ -358,3 +358,83 @@ func pastText(s *Screen) string {
 	}
 	return b.String()
 }
+
+// TestRenderResumeCarriesTheStateNotJustThePicture: a program that asked for
+// the mouse an hour ago will not ask again. A terminal that has forgotten it
+// stops delivering clicks to a program still waiting for them.
+func TestRenderResumeCarriesTheStateNotJustThePicture(t *testing.T) {
+	old := NewScreen(30, 5, 100)
+	for i := 1; i <= 8; i++ {
+		_, _ = old.Write([]byte("past " + strconv.Itoa(i) + "\r\n"))
+	}
+	_, _ = old.Write([]byte("$ prompt"))
+	// A full-screen program takes over, as an agent does.
+	_, _ = old.Write([]byte("\x1b[?1049h\x1b[?1003h\x1b[?1006h\x1b[?2004h\x1b[?1004h\x1b[?1h\x1b[?25l"))
+	_, _ = old.Write([]byte("\x1b[2;3HAGENT UI\x1b]2;working\x07"))
+
+	fresh := NewScreen(30, 5, 100)
+	_, _ = fresh.Write(RenderResume(old, 0))
+
+	if fresh.Grid() != fresh.alt {
+		t.Fatal("the alternate screen should be showing")
+	}
+	if got := fresh.Grid().Line(1).Text(); got != "  AGENT UI" {
+		t.Errorf("alternate screen row 1 = %q", got)
+	}
+	if fresh.Modes() != old.Modes() {
+		t.Errorf("modes = %+v\nwant    %+v", fresh.Modes(), old.Modes())
+	}
+	if fresh.Cursor().X != old.Cursor().X || fresh.Cursor().Y != old.Cursor().Y {
+		t.Errorf("cursor = %d,%d want %d,%d", fresh.Cursor().X, fresh.Cursor().Y, old.Cursor().X, old.Cursor().Y)
+	}
+	if fresh.Title() != "working" {
+		t.Errorf("title = %q", fresh.Title())
+	}
+
+	// Under the agent, the shell it was started from is still there, with its
+	// past above it: that is what the pane goes back to when the agent exits.
+	_, _ = fresh.Write([]byte("\x1b[?1049l"))
+	if got := pastText(fresh); !strings.Contains(got, "past 1\n") || !strings.Contains(got, "$ prompt") {
+		t.Errorf("the main screen and its history did not survive:\n%s", got)
+	}
+	if got, want := pastText(fresh), mainPast(old); got != want {
+		t.Errorf("main screen differs:\n got %q\nwant %q", got, want)
+	}
+}
+
+// mainPast is a screen's main grid and history as lines, whichever screen is
+// showing.
+func mainPast(s *Screen) string {
+	g := s.MainGrid()
+	var b strings.Builder
+	for i := 0; i < g.HistoryLen(); i++ {
+		b.WriteString(g.HistoryLine(i).Text() + "\n")
+	}
+	for y := 0; y < g.Rows(); y++ {
+		b.WriteString(g.Line(y).Text() + "\n")
+	}
+	return b.String()
+}
+
+// TestRenderResumeOfAPlainShell: no alternate screen, no modes, nothing
+// invented on the way.
+func TestRenderResumeOfAPlainShell(t *testing.T) {
+	old := NewScreen(30, 5, 100)
+	for i := 1; i <= 7; i++ {
+		_, _ = old.Write([]byte("out " + strconv.Itoa(i) + "\r\n"))
+	}
+	_, _ = old.Write([]byte("$ "))
+
+	fresh := NewScreen(30, 5, 100)
+	_, _ = fresh.Write(RenderResume(old, 0))
+
+	if got, want := pastText(fresh), pastText(old); got != want {
+		t.Errorf("past differs:\n got %q\nwant %q", got, want)
+	}
+	if fresh.Modes() != old.Modes() || fresh.Grid() == fresh.alt {
+		t.Errorf("a plain shell should come back plain: %+v", fresh.Modes())
+	}
+	if fresh.Cursor().X != 2 || fresh.Cursor().Y != old.Cursor().Y {
+		t.Errorf("cursor = %+v, want after the prompt at row %d", fresh.Cursor(), old.Cursor().Y)
+	}
+}

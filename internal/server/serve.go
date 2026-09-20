@@ -47,6 +47,7 @@ var Methods = []string{
 	proto.MethodPaneAdjust,
 	proto.MethodTabLayout,
 	proto.MethodServerShutdown,
+	proto.MethodServerHandoff,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -117,6 +118,9 @@ type clientConn struct {
 	// first closes this very connection, and the client would see its request
 	// fail rather than succeed.
 	shutdown bool
+	// handoff is set when this connection's request put a replacement in
+	// charge, which this server now owes a commit.
+	handoff *Handoff
 }
 
 func (s *Server) serveConn(nc net.Conn) {
@@ -285,6 +289,7 @@ func (c *clientConn) handleRequest(payload []byte) error {
 		if c.shutdown {
 			go func() { _ = c.srv.Close() }()
 		}
+		c.commitHandoff()
 		return nil // fire and forget
 	}
 
@@ -305,7 +310,17 @@ func (c *clientConn) handleRequest(payload []byte) error {
 		// crash even though its connection is about to be closed.
 		go func() { _ = c.srv.Close() }()
 	}
+	c.commitHandoff()
 	return writeErr
+}
+
+// commitHandoff lets go of the panes once a handoff this connection asked for
+// has been answered.
+func (c *clientConn) commitHandoff() {
+	if h := c.handoff; h != nil {
+		c.handoff = nil
+		go func() { _ = c.srv.CommitHandoff(h) }()
+	}
 }
 
 // dispatch runs one method. An unknown method is an error, never a
@@ -330,6 +345,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			Build:    c.srv.cfg.Build,
 			Methods:  methods,
 			Features: c.srv.features(),
+			Handoff:  c.srv.cfg.Replace != nil,
 		}, nil
 
 	case proto.MethodSessionSnapshot:
@@ -467,6 +483,18 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 
 	case proto.MethodServerShutdown:
 		c.shutdown = true
+		return nil, nil
+
+	case proto.MethodServerHandoff:
+		// Carried out before answering, so the answer can say whether it
+		// worked: by the time the client reads "ok" the replacement is already
+		// accepting on the socket. Letting go of the panes waits for the reply
+		// to be written, like a shutdown does.
+		h, err := c.srv.replace()
+		if err != nil {
+			return nil, err
+		}
+		c.handoff = h
 		return nil, nil
 	}
 

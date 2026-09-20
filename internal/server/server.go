@@ -207,6 +207,12 @@ type Config struct {
 	// Dir is where a workspace created without one is rooted. Empty uses the
 	// server's own working directory, which is where its panes start anyway.
 	Dir string
+	// Replace starts this server's replacement and returns once that one has
+	// said it holds every pane, or with the reason it did not. Nil means the
+	// server cannot be replaced while running, only restarted. Starting a
+	// process is the caller's business, which is why it is a function: the
+	// server knows what to hand over, not what to hand it to.
+	Replace func(*Handoff) error
 }
 
 // PaneSpec describes a pane to open.
@@ -265,6 +271,9 @@ type Server struct {
 	conns    map[*clientConn]struct{}
 	branches *branchCache
 	closed   bool
+	// handingOff is set from the moment the session is described for a
+	// replacement until that either takes over or fails to.
+	handingOff bool
 	// lastSaved is the session as it was last written to the state file, so
 	// a snapshot identical to it is not written again.
 	lastSaved []byte
@@ -275,6 +284,22 @@ type Server struct {
 
 // New starts a server with no panes.
 func New(cfg Config) (*Server, error) {
+	s, err := build(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Before anything can connect: a client must never see the empty session
+	// that exists for an instant ahead of the restored one, or it would fill
+	// it with a fresh shell and the two would be merged.
+	s.restore()
+
+	s.startLoops()
+	return s, nil
+}
+
+// build makes a server that is not running yet: no panes, no loops.
+func build(cfg Config) (*Server, error) {
 	catalog := cfg.Catalog
 	if catalog == nil {
 		var err error
@@ -315,19 +340,17 @@ func New(cfg Config) (*Server, error) {
 		branches: newBranchCache(),
 		done:     make(chan struct{}),
 	}
+	return s, nil
+}
 
-	// Before anything can connect: a client must never see the empty session
-	// that exists for an instant ahead of the restored one, or it would fill
-	// it with a fresh shell and the two would be merged.
-	s.restore()
-
+// startLoops starts what runs for the server's whole life.
+func (s *Server) startLoops() {
 	s.wg.Add(1)
 	go s.detectLoop()
 	if s.cfg.StateFile != "" {
 		s.wg.Add(1)
 		go s.persistLoop()
 	}
-	return s, nil
 }
 
 // Close stops every pane and ends every subscription.
@@ -588,6 +611,9 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	if len(spec.Command) == 0 {
 		return errors.New("server: pane has no command")
 	}
+	if s.handingOff {
+		return ErrHandingOff
+	}
 
 	manifest, err := agent.ResolveManifest(s.catalog, spec.Agent, spec.Command[0])
 	if err != nil {
@@ -790,6 +816,7 @@ func (s *Server) runtime(id session.PaneID) (*paneRuntime, error) {
 // readPane copies a pane's output into its terminal until the process ends.
 func (s *Server) readPane(rt *paneRuntime) {
 	defer s.wg.Done()
+	defer close(rt.gone)
 
 	buf := make([]byte, readBuffer)
 	for {
@@ -799,6 +826,17 @@ func (s *Server) readPane(rt *paneRuntime) {
 				s.events.publish(Event{Kind: EventPaneClipboard, Pane: rt.id, Data: text})
 			}
 			s.events.publish(Event{Kind: EventPaneOutput, Pane: rt.id})
+		}
+		if errors.Is(err, pty.ErrPaused) {
+			// A handoff stopped this reader. It waits to hear how that went:
+			// called off, and it reads on as though never interrupted; carried
+			// out, and the terminal is another server's, so it leaves without
+			// waiting for a process that has not ended and without reporting
+			// an exit that has not happened.
+			if rt.park() {
+				continue
+			}
+			return
 		}
 		if err != nil {
 			break

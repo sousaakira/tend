@@ -418,6 +418,12 @@ func (c *Client) TabLayout(tab uint64, cols, rows int) (proto.TabLayoutResult, e
 	}, &out)
 }
 
+// Handoff asks the server to replace itself with the binary now on disk,
+// keeping what runs in its panes. The connection drops once it has.
+func (c *Client) Handoff() error {
+	return c.Call(proto.MethodServerHandoff, nil, nil)
+}
+
 // Shutdown asks the server to stop.
 func (c *Client) Shutdown() error {
 	return c.Call(proto.MethodServerShutdown, nil, nil)

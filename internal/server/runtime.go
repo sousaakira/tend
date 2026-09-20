@@ -53,6 +53,14 @@ type paneRuntime struct {
 	clipboard [][]byte
 	closing   bool
 	exitErr   string
+
+	// parked is how the reader says it has stopped for a handoff, verdict is
+	// how it hears whether to carry on, and gone closes when the reader has
+	// returned for good. Each holds one, so neither side waits on the other
+	// being there at the same instant.
+	parked  chan struct{}
+	verdict chan bool
+	gone    chan struct{}
 }
 
 func newPaneRuntime(
@@ -70,6 +78,9 @@ func newPaneRuntime(
 		pty:      p,
 		screen:   vt.NewScreen(int(size.Cols), int(size.Rows), scrollback),
 		running:  true,
+		parked:   make(chan struct{}, 1),
+		verdict:  make(chan bool, 1),
+		gone:     make(chan struct{}),
 	}
 	if manifest != nil {
 		rt.agentID = manifest.ID
@@ -85,6 +96,37 @@ func newPaneRuntime(
 		rt.clipboard = append(rt.clipboard, append([]byte(nil), text...))
 	}
 	return rt
+}
+
+// park reports that the reader has stopped, and waits to be told whether to
+// carry on.
+func (rt *paneRuntime) park() (carryOn bool) {
+	select {
+	case rt.parked <- struct{}{}:
+	default: // already said so, and nobody has collected it
+	}
+	return <-rt.verdict
+}
+
+// decide answers a parked reader, or leaves the answer for one about to park.
+func (rt *paneRuntime) decide(carryOn bool) {
+	select {
+	case rt.verdict <- carryOn:
+	default:
+	}
+}
+
+// drainVerdict discards what an earlier handoff left behind. An answer nobody
+// collected would otherwise be taken for the answer to this one.
+func (rt *paneRuntime) drainVerdict() {
+	select {
+	case <-rt.verdict:
+	default:
+	}
+	select {
+	case <-rt.parked:
+	default:
+	}
 }
 
 // write feeds terminal output to the screen, and returns any clipboard writes

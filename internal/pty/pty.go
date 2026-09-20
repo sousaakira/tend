@@ -17,6 +17,11 @@ import (
 // ErrUnsupported is returned when this build has no PTY implementation.
 var ErrUnsupported = errors.New("pty: not supported on this platform")
 
+// ErrPaused is what Read returns once Pause has been called. It is not a
+// failure of the terminal: the reader was asked to stop, and will be told
+// whether to carry on.
+var ErrPaused = errors.New("pty: reading is paused")
+
 // Size is a terminal's dimensions in character cells.
 type Size struct {
 	Cols uint16

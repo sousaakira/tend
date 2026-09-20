@@ -4,8 +4,11 @@ package pty
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -161,6 +164,11 @@ func TestCloseUnblocksAPendingRead(t *testing.T) {
 }
 
 // TestKillEndsAProcessThatIgnoresHangup is the escalation path.
+//
+// Close ends the read on its own now — the master is managed by the poller, so
+// closing it wakes whoever is blocked on it — which is a separate matter from
+// whether the process is gone. A process that ignores the hangup is still
+// running with nothing attached to it, and Kill is what ends it.
 func TestKillEndsAProcessThatIgnoresHangup(t *testing.T) {
 	p, err := Start("/bin/sh", []string{"-c", "trap '' HUP; sleep 30"}, Options{})
 	if err != nil {
@@ -178,17 +186,126 @@ func TestKillEndsAProcessThatIgnoresHangup(t *testing.T) {
 	_ = p.Close() // SIGHUP, which this process ignores
 	select {
 	case <-readDone:
-		t.Log("the shell exited on hangup anyway; the escalation is still exercised below")
-	case <-time.After(300 * time.Millisecond):
-		// Still running, as expected. Escalate.
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close should wake a reader blocked on the terminal")
 	}
 
-	if err := p.Kill(); err != nil {
+	// The reader is free, and the process is not dead: that is what Kill is for.
+	exited := make(chan error, 1)
+	go func() { exited <- p.Wait() }()
+	select {
+	case <-exited:
+		t.Log("the shell exited on hangup anyway; the escalation is still exercised below")
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	if err := p.Kill(); err != nil && !errors.Is(err, syscall.ESRCH) {
 		t.Fatalf("Kill: %v", err)
 	}
 	select {
-	case <-readDone:
+	case <-exited:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the read did not unblock after Kill")
+		t.Fatal("the process survived Kill")
+	}
+}
+
+// TestPauseStopsAReaderWithoutLosingOutput is what a handoff stands on: the
+// reader has to be stopped on purpose, and what arrives while it is stopped
+// has to be there for whoever reads next.
+func TestPauseStopsAReaderWithoutLosingOutput(t *testing.T) {
+	p, err := Start("/bin/sh", []string{"-c", "echo FIRST; sleep 0.5; echo SECOND; sleep 30"}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = p.Close() }()
+
+	buf := make([]byte, 256)
+	n, err := p.Read(buf)
+	if err != nil || !strings.Contains(string(buf[:n]), "FIRST") {
+		t.Fatalf("first read = %q, %v", buf[:n], err)
+	}
+
+	// A reader parked in Read is woken by the pause, not left there.
+	woke := make(chan error, 1)
+	go func() {
+		_, err := p.Read(make([]byte, 256))
+		woke <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	p.Pause()
+	select {
+	case err := <-woke:
+		if !errors.Is(err, ErrPaused) {
+			t.Fatalf("a paused read = %v, want ErrPaused", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Pause did not wake the reader")
+	}
+	if _, err := p.Read(buf); !errors.Is(err, ErrPaused) {
+		t.Errorf("reading while paused = %v, want ErrPaused", err)
+	}
+
+	// SECOND is written while nobody is reading, and is still there after.
+	time.Sleep(700 * time.Millisecond)
+	p.Resume()
+	n, err = p.Read(buf)
+	if err != nil || !strings.Contains(string(buf[:n]), "SECOND") {
+		t.Errorf("after resuming = %q, %v; what arrived while paused was lost", buf[:n], err)
+	}
+}
+
+// TestAdoptTakesOverATerminal: the process is somebody else's child, so it can
+// be read, written and signalled, and only waited for in the sense of being
+// seen to go.
+func TestAdoptTakesOverATerminal(t *testing.T) {
+	first, err := Start("/bin/sh", nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := first.Pid()
+	defer func() { _ = syscall.Kill(-pid, syscall.SIGKILL) }()
+
+	// What a handoff does: stop reading, pass the descriptor on, let go of it
+	// without hanging the process up.
+	first.Pause()
+	handed, err := first.Dup()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Adopt(handed, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, 0); err != nil {
+		t.Fatalf("Release must not end the process: %v", err)
+	}
+
+	if _, err := second.Write([]byte("echo ADOPTED-$$\n")); err != nil {
+		t.Fatal(err)
+	}
+	var seen strings.Builder
+	buf := make([]byte, 256)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(seen.String(), "ADOPTED-"+strconv.Itoa(pid)) {
+		n, err := second.Read(buf)
+		seen.Write(buf[:n])
+		if err != nil {
+			break
+		}
+	}
+	if !strings.Contains(seen.String(), "ADOPTED-"+strconv.Itoa(pid)) {
+		t.Fatalf("the same shell should answer through the adopted terminal, got %q", seen.String())
+	}
+
+	_ = second.Close()
+	done := make(chan error, 1)
+	go func() { done <- second.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait on an adopted terminal should be bounded")
 	}
 }

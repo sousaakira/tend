@@ -28,6 +28,7 @@ commands:
   ls                list a session's panes, or every session
   new               open a pane in a session
   kill              close panes, or stop a session
+  handoff           replace a session's server, keeping its programs
   follow            print a session's events, for diagnosis
   serve             run a session server in the foreground
   config            show or create the settings file
@@ -77,6 +78,8 @@ func main() {
 		err = runNew(args[1:])
 	case "kill":
 		err = runKill(args[1:])
+	case "handoff":
+		err = runHandoff(args[1:])
 	case "attach":
 		err = runAttach(args[1:])
 	case "follow":

@@ -409,3 +409,149 @@ func trimmedLen(r *Row) int {
 	}
 	return end
 }
+
+// RenderResume encodes everything a fresh terminal needs to stand in for this
+// one: what scrolled past, what is on screen, which screen that is, and the
+// modes the program switched on.
+//
+// It is for handing a live pane to another server. RenderScreen is not enough
+// there, because a picture of the screen says nothing of the state behind it:
+// a program that asked for the mouse an hour ago will not ask again, and a
+// terminal that has forgotten it stops delivering clicks to a program that is
+// still waiting for them. The same goes for the alternate screen, bracketed
+// paste, focus reports and application cursor keys — each is a fact the
+// program was told once and the new terminal has to be told on its behalf.
+func RenderResume(s *Screen, maxHistory int) []byte {
+	var e encoder
+	e.reset()
+	cols, rows := s.Size()
+
+	// What scrolled past, then enough line feeds to push it off the screen and
+	// into the new terminal's scrollback. Painting straight over it would
+	// leave the tail of the history on screen, where the picture of the screen
+	// would overwrite it.
+	if n := renderScrollback(&e, s.main, maxHistory); n > 0 {
+		for i := 0; i < rows-1; i++ {
+			e.buf = append(e.buf, '\n')
+		}
+	}
+
+	// The main screen is painted even when the alternate one is showing: it is
+	// what the program goes back to when it leaves, and a shell prompt under
+	// an editor is part of the pane's state whether or not it can be seen.
+	mainCursor := s.cur
+	if s.grid == s.alt {
+		mainCursor = s.saved
+	}
+	paintGrid(&e, s.main, cols, rows)
+	e.moveTo(mainCursor.X, mainCursor.Y)
+
+	if s.grid == s.alt {
+		e.buf = append(e.buf, "\x1b[?1049h"...)
+		paintGrid(&e, s.alt, cols, rows)
+		e.moveTo(s.cur.X, s.cur.Y)
+	}
+
+	// The region before the modes, because setting it homes the cursor.
+	if s.top != 0 || s.bottom != rows-1 {
+		e.buf = append(e.buf, "\x1b["+itoaVT(s.top+1)+";"+itoaVT(s.bottom+1)+"r"...)
+		e.moveTo(s.cur.X, s.cur.Y)
+	}
+	e.buf = appendModes(e.buf, s.modes)
+	e.setStyle(s.cur.Style)
+
+	if s.title != "" {
+		e.buf = append(e.buf, "\x1b]2;"...)
+		e.buf = append(e.buf, s.title...)
+		e.buf = append(e.buf, 0x07)
+	}
+	return e.buf
+}
+
+// renderScrollback emits a grid's history, oldest first, and reports how many
+// lines it wrote.
+func renderScrollback(e *encoder, g *Grid, maxLines int) int {
+	history := g.HistoryLen()
+	first := 0
+	if maxLines > 0 && history > maxLines {
+		first = history - maxLines
+	}
+	for at := first; at < history; at++ {
+		if row := g.HistoryLine(at); row != nil {
+			e.row(row, trimmedLen(row))
+		}
+		e.setStyle(DefaultStyle)
+		e.buf = append(e.buf, '\r', '\n')
+	}
+	return history - first
+}
+
+// paintGrid draws a grid's rows at their own positions.
+func paintGrid(e *encoder, g *Grid, cols, rows int) {
+	e.buf = append(e.buf, "\x1b[H\x1b[2J"...)
+	for y := 0; y < rows; y++ {
+		line := g.Line(y)
+		if line == nil || trimmedLen(line) == 0 {
+			continue
+		}
+		e.moveTo(0, y)
+		e.row(line, min(cols, trimmedLen(line)))
+	}
+	e.setStyle(DefaultStyle)
+}
+
+// appendModes writes the sequences that put a terminal into the given modes,
+// starting from the defaults a fresh one has.
+func appendModes(dst []byte, m Modes) []byte {
+	set := func(on bool, seq string) {
+		if on {
+			dst = append(dst, seq...)
+		}
+	}
+	set(!m.AutoWrap, "\x1b[?7l")
+	set(m.Origin, "\x1b[?6h")
+	set(m.Insert, "\x1b[4h")
+	set(m.ReverseVideo, "\x1b[?5h")
+	set(m.ApplicationCur, "\x1b[?1h")
+	set(m.BracketedPaste, "\x1b[?2004h")
+	set(m.FocusEvents, "\x1b[?1004h")
+	set(!m.CursorVisible, "\x1b[?25l")
+
+	switch m.Mouse {
+	case MouseX10:
+		dst = append(dst, "\x1b[?9h"...)
+	case MouseNormal:
+		dst = append(dst, "\x1b[?1000h"...)
+	case MouseButtonEvent:
+		dst = append(dst, "\x1b[?1002h"...)
+	case MouseAnyEvent:
+		dst = append(dst, "\x1b[?1003h"...)
+	}
+	switch m.MouseEncoding {
+	case MouseEncodingUTF8:
+		dst = append(dst, "\x1b[?1005h"...)
+	case MouseEncodingSGR:
+		dst = append(dst, "\x1b[?1006h"...)
+	case MouseEncodingURXVT:
+		dst = append(dst, "\x1b[?1015h"...)
+	case MouseEncodingSGRPixels:
+		dst = append(dst, "\x1b[?1016h"...)
+	}
+	return dst
+}
+
+// itoaVT formats a small non-negative number without reaching for fmt on a
+// path that builds escape sequences.
+func itoaVT(v int) string {
+	if v <= 0 {
+		return "0"
+	}
+	var buf [12]byte
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	return string(buf[i:])
+}
