@@ -3,6 +3,12 @@
 # `make GO=/path/to/go`.
 GO ?= $(shell command -v go 2>/dev/null || echo $(HOME)/.local/go/bin/go)
 
+# gofmt ships beside go, so it is found the same way rather than trusted to be
+# on PATH. It was not, and `gofmt -l .` printing nothing because the binary is
+# missing looks exactly like a tree that is already formatted — so the format
+# check passed for weeks without running.
+GOFMT ?= $(shell command -v gofmt 2>/dev/null || echo $(dir $(GO))gofmt)
+
 
 # Packages the fast loop covers. It is everything with tests: narrowing it
 # further once cost the CLI its coverage, which is where the last real bug was.
@@ -12,7 +18,10 @@ DEV_PKGS ?= ./...
 # `make` with no arguments runs the fast loop, not the first target in the file.
 .DEFAULT_GOAL := dev
 
-.PHONY: toolchain run dev watch test test-race check fmt vet bench build install dist clean
+# SESSION is which session `make restart` acts on.
+SESSION ?= default
+
+.PHONY: toolchain run dev watch test test-race check fmt vet bench build install dist clean restart
 
 ## toolchain: fail with a usable message instead of "go: No such file or directory".
 toolchain:
@@ -54,6 +63,16 @@ watch:
 run: toolchain
 	@$(GO) run ./cmd/tend $(ARGS)
 
+## restart: stop a session's server and attach to a fresh one.
+# The server outlives the client, so building a new binary and running it
+# leaves yesterday's server answering. This is the loop during development.
+# It closes every pane in the session, which is the point.
+#   make restart
+#   make restart SESSION=work
+restart: build
+	@./bin/tend kill -s $(SESSION) -server 2>/dev/null || true
+	@./bin/tend attach -s $(SESSION)
+
 ## test: full test run.
 test: toolchain
 	$(GO) test ./...
@@ -69,7 +88,11 @@ test-race: toolchain
 check: toolchain fmt vet test test-race
 
 fmt:
-	@out="$$(gofmt -l .)"; \
+	@command -v $(GOFMT) >/dev/null 2>&1 || test -x $(GOFMT) || { \
+		echo "gofmt not found at $(GOFMT)"; \
+		echo "override with: make GOFMT=/path/to/gofmt"; \
+		exit 1; }
+	@out="$$($(GOFMT) -l .)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
 vet: toolchain
