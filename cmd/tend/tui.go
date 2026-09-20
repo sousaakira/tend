@@ -123,6 +123,9 @@ type tui struct {
 	// sel is text being marked in a pane, or nil. It belongs to this client:
 	// what one person has selected is not part of the session.
 	sel *ui.Selection
+	// press is a press in a mouse-reporting pane that has not yet turned out
+	// to be either a click or the start of a drag.
+	press *pendingPress
 	// spacesScroll and agentsScroll are how far each list is scrolled, in
 	// entries. Separate because the lists are: one filling up must not push
 	// the other out of sight, which is the whole reason they are divided.

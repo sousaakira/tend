@@ -2016,14 +2016,15 @@ func TestAttachSelectsTextWithTheMouse(t *testing.T) {
 }
 
 // TestAttachSelectsInsideAProgramThatWantsTheMouse: an agent asks for the
-// mouse, which is most of the panes worth copying out of. The plain drag still
-// belongs to the program, because that is what it asked for.
+// mouse, which is most of the panes worth copying out of. A press cannot be
+// told from the start of a drag, so nothing is decided until the pointer
+// moves: moving makes it a selection, releasing without moving leaves it the
+// click the program already had.
 func TestAttachSelectsInsideAProgramThatWantsTheMouse(t *testing.T) {
 	a := startSession(t, 100, 16)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 
-	// A program that asks for the mouse and prints what it is sent.
-	mouser := fakeAgentBin(t, "mouser", "printf '\\033[?1002h\\033[?1006h'; printf 'alpha bravo charlie\\n'; cat")
+	mouser := fakeAgentBin(t, "mouser", "printf '\033[?1002h\033[?1006h'; printf 'alpha bravo charlie\n'; cat")
 	a.sendUntil(t, mouser+"\n", "the program", func(s string) bool {
 		return strings.Contains(s, "alpha bravo charlie")
 	})
@@ -2031,22 +2032,25 @@ func TestAttachSelectsInsideAProgramThatWantsTheMouse(t *testing.T) {
 	row := a.lineContaining(t, "alpha bravo charlie")
 	col := columnOfString(a.lines()[row-1], "alpha") + 1
 
-	// A plain drag goes to the program, which echoes the report back.
+	// A drag selects, with no modifier held.
 	a.dragFromTo(t, 0, col, row, col+10, row)
-	a.waitForScreen(t, "the program to get the drag", func(s string) bool {
-		return strings.Contains(s, "[<0;")
-	})
-	if got := a.reversedOn(row - 1); strings.Contains(got, "alpha") {
-		t.Errorf("a plain drag should not select here, marked %q", got)
-	}
-
-	// With the modifier it is tend's selection instead.
-	const alt = 8
-	a.dragFromTo(t, alt, col, row, col+10, row)
 	a.waitForScreen(t, "the mark", func(string) bool {
 		return strings.Contains(a.reversedOn(row-1), "alpha bravo")
 	})
 	a.waitForScreen(t, "the copy", func(s string) bool {
-		return strings.Contains(s, "copied ")
+		return strings.Contains(s, "copied 11 characters")
+	})
+
+	// The program is not left holding a button: it saw the press and then a
+	// release, so its own state machine is back where it started.
+	a.waitForScreen(t, "the program to be let go", func(s string) bool {
+		return strings.Contains(s, "[<0;") && strings.Contains(s, "m")
+	})
+
+	// A click still reaches it whole.
+	before := strings.Count(a.text(), "[<0;")
+	a.clickAt(t, col+2, row)
+	a.waitForScreen(t, "the click to arrive", func(string) bool {
+		return strings.Count(a.text(), "[<0;") > before+1
 	})
 }

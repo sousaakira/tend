@@ -280,6 +280,11 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if t.endSelection() {
 			return nil
 		}
+		if pane, ok := t.takePendingPress(); ok {
+			// Pressed and released without moving: a click, which the pane's
+			// own program is in the middle of and needs the other half of.
+			return t.client.SendInput(pane, ev.Raw)
+		}
 
 		t.mu.Lock()
 		dragging := t.dragPane != 0 || t.draggingSidebar
