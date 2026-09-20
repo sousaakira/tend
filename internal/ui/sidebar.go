@@ -124,30 +124,117 @@ func TrailingStart(r SidebarRow) int {
 	return at
 }
 
-// SidebarHeight is how many lines the list has to work with.
+// The sidebar is two lists, not one scrolling column of both.
+//
+// They answer different questions — where else could I be, and which agent
+// needs me — and one of them is usually the reason the program is open. Sharing
+// a single scroll meant the spaces pushed the agents off the bottom, so the
+// list that matters most was the one you could not see. They get a region each
+// now, with a divider the user can move, and each scrolls on its own.
+
+// SidebarSection is one of the two lists.
+type SidebarSection struct {
+	Rows []SidebarRow
+	// Scroll is how many entries are scrolled off the top of this list. It is
+	// clamped where it is drawn, so a client need not track what fits.
+	Scroll int
+}
+
+// SidebarHeight is how many lines the sidebar has, divider included.
 func SidebarHeight(rows int) int { return max(rows-StatusRows, 0) }
 
-// SidebarMaxScroll is the furthest the list can be scrolled and still fill the
-// space: scrolling past that would leave a gap at the bottom and nothing new
-// at the top.
+// sidebarMinSection is the fewest lines a section keeps when the divider is
+// dragged at it. One line is not a list, it is a heading with nothing under it.
+const sidebarMinSection = 3
+
+// SidebarSplitAt is the line the divider sits on: the spaces list is above it
+// and the agents list below.
+//
+// A split of zero means "decide for me", which is what a client that has never
+// been dragged passes. The answer is as much as the spaces need and no more
+// than half, so a session with two spaces does not spend half the column on
+// them and a session with twenty does not bury the agents.
+func SidebarSplitAt(f Frame, rows int) int {
+	height := SidebarHeight(rows)
+	if height < 2*sidebarMinSection+1 {
+		// No room to divide. The spaces take what there is; the agents list
+		// is the one that can be reached by other means.
+		return height
+	}
+
+	at := f.SidebarSplit
+	if at <= 0 {
+		at = min(sectionHeight(f.Spaces), height/2)
+	}
+	return min(max(at, sidebarMinSection), height-sidebarMinSection-1)
+}
+
+// sectionHeight is how many lines a section's entries would take in full.
+func sectionHeight(s SidebarSection) int {
+	total := 0
+	for _, r := range s.Rows {
+		total += r.height()
+	}
+	return total
+}
+
+// pinnedRows is how many rows at the top of a section stay put while the rest
+// scrolls under them.
+//
+// It is the heading, when there is one. A list whose title scrolls away leaves
+// the reader looking at names with nothing saying what they are names of, and
+// the toggle that lives in the heading would be unreachable at the same time.
+func pinnedRows(s SidebarSection) int {
+	if len(s.Rows) > 0 && s.Rows[0].Kind == SidebarHeading {
+		return 1
+	}
+	return 0
+}
+
+// scrollable splits a section into the part that stays and the part that moves.
+func scrollable(s SidebarSection, height int) (pinned []SidebarRow, rest []SidebarRow, room int) {
+	at := pinnedRows(s)
+	pinned = s.Rows[:at]
+	for _, r := range pinned {
+		height -= r.height()
+	}
+	return pinned, s.Rows[at:], max(height, 0)
+}
+
+// sidebarRegions returns the lines each list is drawn in, and the divider row.
+// A divider of -1 means there is no room for one.
+func sidebarRegions(f Frame, rows int) (spaces, agents Rect, divider int) {
+	height := SidebarHeight(rows)
+	at := SidebarSplitAt(f, rows)
+	if at >= height {
+		return Rect{Y: 0, Rows: height}, Rect{}, -1
+	}
+	return Rect{Y: 0, Rows: at},
+		Rect{Y: at + 1, Rows: height - at - 1},
+		at
+}
+
+// SidebarMaxScroll is the furthest a section can be scrolled and still fill
+// its region: scrolling past that would leave a gap at the bottom and nothing
+// new at the top.
 //
 // It counts in entries rather than lines. A two-line entry is one thing, and
 // scrolling half of one off the top would put a branch under a heading it does
 // not belong to.
-func SidebarMaxScroll(f Frame, rows int) int {
-	height := SidebarHeight(rows)
+func SidebarMaxScroll(s SidebarSection, height int) int {
+	_, rest, room := scrollable(s, height)
 	total := 0
-	for _, r := range f.SidebarRows {
+	for _, r := range rest {
 		total += r.height()
 	}
-	if total <= height {
+	if total <= room {
 		return 0
 	}
-	at := len(f.SidebarRows)
+	at := len(rest)
 	fits := 0
 	for at > 0 {
-		next := fits + f.SidebarRows[at-1].height()
-		if next > height {
+		next := fits + rest[at-1].height()
+		if next > room {
 			break
 		}
 		fits = next
@@ -158,22 +245,21 @@ func SidebarMaxScroll(f Frame, rows int) int {
 
 // sidebarScroll is the offset actually used, which is the one asked for
 // clamped to what there is to scroll.
-func sidebarScroll(f Frame, rows int) int {
-	return min(max(f.SidebarScroll, 0), SidebarMaxScroll(f, rows))
+func sidebarScroll(s SidebarSection, height int) int {
+	return min(max(s.Scroll, 0), SidebarMaxScroll(s, height))
 }
 
-// drawSidebar draws the lists down the left edge.
+// drawSidebar draws the two lists down the left edge.
 func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 	if !f.Sidebar {
 		return
 	}
 	// The sidebar runs from the very top: it is not inside the tab bar's
 	// space, the tab bar is inside its own.
-	top := 0
 	bottom := SidebarHeight(dst.Rows())
 	width := SidebarColumns(f, dst.Cols())
 
-	for y := top; y < bottom; y++ {
+	for y := 0; y < bottom; y++ {
 		row := dst.Line(y)
 		if row == nil {
 			continue
@@ -186,12 +272,51 @@ func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 		row.SetCell(width-1, vt.Cell{R: '│', Style: theme.Border, Width: 1})
 	}
 
+	spaces, agents, divider := sidebarRegions(f, dst.Rows())
+	drawSection(dst, f.Spaces, spaces, width, theme)
+	if divider >= 0 {
+		drawSidebarDivider(dst, divider, width, theme)
+		drawSection(dst, f.Agents, agents, width, theme)
+	}
+}
+
+// drawSidebarDivider draws the line between the lists.
+//
+// It is drawn as something to grab rather than as a rule: the handle in the
+// middle is the only thing saying the line can be moved, and a plain rule
+// would read as decoration.
+func drawSidebarDivider(dst *vt.Grid, y, width int, theme Theme) {
+	row := dst.Line(y)
+	if row == nil {
+		return
+	}
+	for x := 0; x < width-1; x++ {
+		row.SetCell(x, vt.Cell{R: '─', Style: theme.Border, Width: 1})
+	}
+	if handle := (width - 1 - 4) / 2; handle > 0 {
+		writeString(dst, handle, y, "────", theme.SidebarGroupActive, width-1)
+	}
+}
+
+// drawSection draws one list inside its region.
+func drawSection(dst *vt.Grid, s SidebarSection, region Rect, width int, theme Theme) {
+	if region.Rows <= 0 {
+		return
+	}
 	limit := width - 1
-	from := sidebarScroll(f, dst.Rows())
-	y := top
+	pinned, rest, _ := scrollable(s, region.Rows)
+	from := sidebarScroll(s, region.Rows)
+
+	y := region.Y
+	for _, r := range pinned {
+		drawSidebarRow(dst, r, y, limit, theme)
+		y += r.height()
+	}
+
+	head := y
 	last := from
-	for _, r := range f.SidebarRows[min(from, len(f.SidebarRows)):] {
-		if y+r.height() > bottom {
+	for _, r := range rest[min(from, len(rest)):] {
+		if y+r.height() > region.Y+region.Rows {
 			break
 		}
 		drawSidebarRow(dst, r, y, limit, theme)
@@ -203,10 +328,10 @@ func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 	// believes they have seen all of, which is how a waiting agent goes
 	// unnoticed below the fold.
 	if from > 0 {
-		writeString(dst, limit-1, top, "↑", theme.SidebarGroup, width)
+		writeString(dst, limit-1, head, "↑", theme.SidebarGroup, width)
 	}
-	if last < len(f.SidebarRows) {
-		writeString(dst, limit-1, bottom-1, "↓", theme.SidebarGroup, width)
+	if last < len(rest) {
+		writeString(dst, limit-1, region.Y+region.Rows-1, "↓", theme.SidebarGroup, width)
 	}
 }
 
@@ -318,18 +443,62 @@ func stateCircle(r SidebarRow) string {
 	return " ○ "
 }
 
+// SidebarPlace names which of the two lists a point is in.
+type SidebarPlace uint8
+
+const (
+	// SidebarNowhere is outside the sidebar.
+	SidebarNowhere SidebarPlace = iota
+	// SidebarSpacesList and SidebarAgentsList are the two regions.
+	SidebarSpacesList
+	SidebarAgentsList
+	// SidebarDivider is the line between them, which can be dragged.
+	SidebarDivider
+)
+
+// SidebarPlaceAt says what is under a point.
+//
+// Drawing and hit-testing share sidebarRegions, so a click cannot land
+// somewhere other than what it looks like it is on.
+func SidebarPlaceAt(f Frame, x, y, rows int) SidebarPlace {
+	if !f.Sidebar || x >= SidebarColumns(f, SidebarWidth) || y >= SidebarHeight(rows) {
+		return SidebarNowhere
+	}
+	spaces, agents, divider := sidebarRegions(f, rows)
+	switch {
+	case y == divider:
+		return SidebarDivider
+	case y >= spaces.Y && y < spaces.Y+spaces.Rows:
+		return SidebarSpacesList
+	case agents.Rows > 0 && y >= agents.Y && y < agents.Y+agents.Rows:
+		return SidebarAgentsList
+	}
+	return SidebarNowhere
+}
+
 // SidebarRowAt returns the row under a point, and whether there is one.
 //
 // Rows are found by walking the same heights the drawing uses, so a two-line
 // entry is one target: clicking a branch selects the space it belongs to,
 // which is what it looks like it should do.
 func SidebarRowAt(f Frame, x, y, rows int) (SidebarRow, bool) {
-	if x >= SidebarColumns(f, SidebarWidth) {
-		return SidebarRow{}, false
+	spaces, agents, _ := sidebarRegions(f, rows)
+	switch SidebarPlaceAt(f, x, y, rows) {
+	case SidebarSpacesList:
+		return rowInSection(f.Spaces, spaces, x, y)
+	case SidebarAgentsList:
+		return rowInSection(f.Agents, agents, x, y)
 	}
-	at := 0
-	from := sidebarScroll(f, rows)
-	for _, r := range f.SidebarRows[min(from, len(f.SidebarRows)):] {
+	return SidebarRow{}, false
+}
+
+func rowInSection(s SidebarSection, region Rect, x, y int) (SidebarRow, bool) {
+	pinned, rest, _ := scrollable(s, region.Rows)
+	from := sidebarScroll(s, region.Rows)
+
+	at := region.Y
+	walk := append(append([]SidebarRow{}, pinned...), rest[min(from, len(rest)):]...)
+	for _, r := range walk {
 		height := r.height()
 		if y >= at && y < at+height {
 			// A trailing button is its own target. Without this the "menu"
@@ -346,44 +515,53 @@ func SidebarRowAt(f Frame, x, y, rows int) (SidebarRow, bool) {
 }
 
 // SidebarRevealScroll is the smallest offset that brings an entry into view,
-// given where the list is scrolled now.
+// given where a section is scrolled now.
 //
 // Smallest on purpose: jumping to another space should move the list only as
 // far as it must, so the entries around the one being left stay where the eye
 // last saw them.
-func SidebarRevealScroll(f Frame, rows, index int) int {
-	if index < 0 || index >= len(f.SidebarRows) {
-		return sidebarScroll(f, rows)
+func SidebarRevealScroll(s SidebarSection, height, index int) int {
+	_, rest, room := scrollable(s, height)
+	index -= pinnedRows(s)
+	if index < 0 || index >= len(rest) {
+		// A pinned row is always in view, so nothing needs to move for it.
+		return sidebarScroll(s, height)
 	}
-	at := sidebarScroll(f, rows)
+
+	at := sidebarScroll(s, height)
 	if index < at {
 		return index
 	}
-
-	height := SidebarHeight(rows)
 	for {
 		used := 0
 		for i := at; i <= index; i++ {
-			used += f.SidebarRows[i].height()
+			used += rest[i].height()
 		}
-		if used <= height || at >= index {
+		if used <= room || at >= index {
 			return at
 		}
 		at++
 	}
 }
 
-// SidebarActiveRow is the entry the list should keep in view: the navigation
-// cursor when it is up, and otherwise the space being looked at.
-func SidebarActiveRow(f Frame) int {
+// SidebarActiveRow is the entry a section should keep in view: the navigation
+// cursor when it is up, and otherwise whatever is current.
+func SidebarActiveRow(s SidebarSection) int {
 	fallback := -1
-	for i, r := range f.SidebarRows {
+	for i, r := range s.Rows {
 		if r.Selected {
 			return i
 		}
-		if fallback < 0 && r.Kind == SidebarSpace && r.Active {
+		if fallback < 0 && r.Active && (r.Kind == SidebarSpace || r.Kind == SidebarAgent) {
 			fallback = i
 		}
 	}
 	return fallback
+}
+
+// SidebarRegions is where each list is drawn, for a client that needs to know
+// how tall a section is before it can scroll or reveal inside it.
+func SidebarRegions(f Frame, rows int) (spaces, agents Rect) {
+	spaces, agents, _ = sidebarRegions(f, rows)
+	return spaces, agents
 }

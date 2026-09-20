@@ -183,13 +183,13 @@ func (t *tui) commitPrompt() error {
 func (t *tui) promptLabelLocked() string {
 	switch t.prompt {
 	case promptRenameTab:
-		return "rename tab: "
+		return "rename tab"
 	case promptRenameSpace:
-		return "rename space: "
+		return "rename space"
 	case promptGroupSpace:
-		return "group (empty to ungroup): "
+		return "group — empty to ungroup"
 	case promptRenameGroup:
-		return "rename group: "
+		return "rename group"
 	}
 	return ""
 }

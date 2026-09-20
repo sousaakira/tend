@@ -175,7 +175,7 @@ func (t *tui) scrollKey(key string) (bool, error) {
 func (t *tui) handleMouse(ev ui.MouseEvent) error {
 	switch ev.Kind {
 	case ui.MouseWheelUp:
-		if t.scrollSidebar(ev.X, -sidebarScrollStep) {
+		if t.scrollSidebar(ev.X, ev.Y, -sidebarScrollStep) {
 			return nil
 		}
 		if pane := t.paneAt(ev.X, ev.Y); pane != 0 {
@@ -196,7 +196,7 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MouseWheelDown:
-		if t.scrollSidebar(ev.X, sidebarScrollStep) {
+		if t.scrollSidebar(ev.X, ev.Y, sidebarScrollStep) {
 			return nil
 		}
 		if pane := t.paneAt(ev.X, ev.Y); pane != 0 && t.forwardsMouse(pane) {
@@ -217,6 +217,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 			if m, ok := t.menuFor(ev.X, ev.Y); ok {
 				t.openMenu(m)
 			}
+			return nil
+		}
+		if t.grabSidebarDivider(ev.X, ev.Y) {
 			return nil
 		}
 		if handled, err := t.clickTabBar(ev.X, ev.Y); handled {
@@ -248,6 +251,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MouseDrag:
+		if t.dragSidebarDivider(ev.Y) {
+			return nil
+		}
 		return t.dragDivider(ev)
 
 	case ui.MouseRelease:
@@ -255,8 +261,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		// lookup happens after. A mutex that is not reentrant turns a nested
 		// call into a frozen client, which is exactly how this was found.
 		t.mu.Lock()
-		dragging := t.dragPane != 0
+		dragging := t.dragPane != 0 || t.draggingSidebar
 		t.dragPane, t.dragSide = 0, ""
+		t.draggingSidebar = false
 		t.mu.Unlock()
 
 		if dragging {
@@ -312,21 +319,73 @@ const wheelLines = 3
 // The sidebar takes the wheel before the panes do: the pointer is over the
 // list, and scrolling the pane under a pointer that is not on it is the kind
 // of thing that makes people stop trusting the mouse.
-func (t *tui) scrollSidebar(x, delta int) bool {
+func (t *tui) scrollSidebar(x, y, delta int) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if !t.sidebar || x >= ui.SidebarWidth {
+	if !t.sidebar {
 		return false
 	}
 	frame := t.buildFrame()
-	limit := ui.SidebarMaxScroll(frame, t.rows)
-	next := min(max(t.sidebarScroll+delta, 0), limit)
-	if next != t.sidebarScroll {
-		t.sidebarScroll = next
+	spaces, agents := ui.SidebarRegions(frame, t.rows)
+
+	switch ui.SidebarPlaceAt(frame, x, y, t.rows) {
+	case ui.SidebarSpacesList:
+		t.spacesScroll = clampScroll(t.spacesScroll+delta, frame.Spaces, spaces.Rows)
+	case ui.SidebarAgentsList:
+		t.agentsScroll = clampScroll(t.agentsScroll+delta, frame.Agents, agents.Rows)
+	case ui.SidebarDivider:
+		// The divider is a handle, not a list. The wheel over it does nothing
+		// rather than scrolling whichever side happens to be nearer.
+		return true
+	default:
+		return false
+	}
+	t.dirty = true
+	// Taken either way: at the end of a list the wheel has nowhere to go, and
+	// falling through to the pane behind would be a surprise.
+	return true
+}
+
+func clampScroll(at int, s ui.SidebarSection, height int) int {
+	return min(max(at, 0), ui.SidebarMaxScroll(s, height))
+}
+
+// grabSidebarDivider takes hold of the line between the two lists, and reports
+// whether the press was on it.
+//
+// A press on a divider is a grab, not a click: the user is reaching for the
+// line, not for whatever is drawn under it.
+func (t *tui) grabSidebarDivider(x, y int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.sidebar {
+		return false
+	}
+	if ui.SidebarPlaceAt(t.buildFrame(), x, y, t.rows) != ui.SidebarDivider {
+		return false
+	}
+	t.draggingSidebar = true
+	return true
+}
+
+// dragSidebarDivider moves the line to where the pointer is, and reports
+// whether it was the one being dragged.
+//
+// The line follows the pointer rather than moving by steps, and the clamping
+// lives in the sidebar with the drawing, so a drag past either end stops where
+// the divider can actually go instead of storing a position it cannot.
+func (t *tui) dragSidebarDivider(y int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.draggingSidebar {
+		return false
+	}
+	frame := t.buildFrame()
+	frame.SidebarSplit = y
+	if next := ui.SidebarSplitAt(frame, t.rows); next != t.sidebarSplit {
+		t.sidebarSplit = next
 		t.dirty = true
 	}
-	// Taken either way: at the end of the list the wheel has nowhere to go,
-	// and falling through to the pane behind would be a surprise.
 	return true
 }
 

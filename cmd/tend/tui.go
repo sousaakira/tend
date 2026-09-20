@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -118,8 +117,19 @@ type tui struct {
 	nav        navTarget
 	// menu is the context menu, open on the thing it acts on. Nil when none.
 	menu *ui.Menu
-	// sidebarScroll is how far the list is scrolled, in entries.
-	sidebarScroll int
+	// staleServer marks that the notice about an older server is up and has
+	// the keyboard, because it is asking whether to restart it.
+	staleServer bool
+	// spacesScroll and agentsScroll are how far each list is scrolled, in
+	// entries. Separate because the lists are: one filling up must not push
+	// the other out of sight, which is the whole reason they are divided.
+	spacesScroll int
+	agentsScroll int
+	// sidebarSplit is the line the divider sits on, or zero for "decide for
+	// me". Where the user dragged it to is theirs, not the session's.
+	sidebarSplit int
+	// draggingSidebar marks that the divider is being moved.
+	draggingSidebar bool
 	// folded names the groups shut in this client's sidebar. Which groups a
 	// space belongs to is a session fact; which of them this person has
 	// folded away is not, so it is never sent upstream.
@@ -476,41 +486,8 @@ func (t *tui) subscribe(rects []proto.PaneRect) error {
 // goes in: a notice that names a command which does not do what it says is
 // worse than no notice, and "tend kill -s <name>" without -server closes panes
 // by number and leaves the server exactly where it was.
-//
-// The messages carrying it are kept short for the same reason. They go on the
-// status line, which truncates, and the command is at the end — so a sentence
-// explaining the situation costs exactly the part the user needs to type.
 func restartCommand(session string) string {
 	return "tend kill -s " + session + " -server"
-}
-
-// warnIfServerIsOlder says so when the session is being run by a binary older
-// than this one.
-//
-// The server outlives the client, so upgrading tend and reattaching leaves the
-// old one still running: everything works until the first thing this client
-// knows about and that one does not, and then it fails with a protocol error
-// nobody can act on.
-func (t *tui) warnIfServerIsOlder() {
-	build := t.client.Server().Build
-	if build == "" || build == version {
-		return
-	}
-	t.setMessage("old server ("+build+"): "+restartCommand(t.session), true)
-}
-
-// reportStaleServer turns "the server has never heard of that" into something
-// the user can act on, and reports whether it handled the error.
-//
-// It is not fatal. The action did not happen, but everything else about the
-// session still works, and closing the client over it would lose the user's
-// place for a reason that had nothing to do with them.
-func (t *tui) reportStaleServer(err error) bool {
-	if !errors.Is(err, proto.ErrUnknownMethod) {
-		return false
-	}
-	t.setMessage("server too old for that: "+restartCommand(t.session), true)
-	return true
 }
 
 // --- server push -----------------------------------------------------------
@@ -651,9 +628,17 @@ func (t *tui) paint() error {
 	buf := vt.NewGrid(t.cols, t.rows, 0)
 	ui.Draw(buf, frame, t.theme)
 
-	x, y, visible := ui.CursorPosition(frame)
+	x, y, visible := ui.CursorPosition(frame, t.cols, t.rows)
 	_, err := os.Stdout.Write(t.painter.Paint(buf, x, y, visible))
 	return err
+}
+
+// markSelected puts the navigation cursor on whichever row it points at.
+func markSelected(rows []ui.SidebarRow, nav navTarget) {
+	for i := range rows {
+		target, ok := targetOf(rows[i])
+		rows[i].Selected = ok && target == nav
+	}
 }
 
 // buildFrame assembles what to draw. The caller holds the lock.
@@ -707,14 +692,13 @@ func (t *tui) buildFrame() ui.Frame {
 
 	if t.sidebar {
 		frame.Sidebar = true
-		frame.SidebarScroll = t.sidebarScroll
 		frame.Navigating = t.navigating
-		frame.SidebarRows = t.sidebarRowsLocked()
+		frame.SidebarSplit = t.sidebarSplit
+		frame.Spaces = t.spacesSectionLocked()
+		frame.Agents = t.agentsSectionLocked()
 		if t.navigating {
-			for i := range frame.SidebarRows {
-				target, ok := targetOf(frame.SidebarRows[i])
-				frame.SidebarRows[i].Selected = ok && target == t.nav
-			}
+			markSelected(frame.Spaces.Rows, t.nav)
+			markSelected(frame.Agents.Rows, t.nav)
 		}
 	}
 
@@ -838,6 +822,19 @@ func (t *tui) handleInput(data []byte) error {
 	// the keys must not discard the commands that came with them.
 	// The prompt takes the keyboard ahead of everything else: while a name is
 	// being typed, every key is part of that name.
+	// The stale-server notice takes the keyboard before anything else: it is
+	// over the screen, and it is asking a question.
+	if t.staleServerUp() {
+		handled, err := t.staleServerKeys(forward)
+		if err != nil {
+			return err
+		}
+		if handled {
+			forward = nil
+			commands = nil
+		}
+	}
+
 	// An open menu takes the keyboard first: it is the thing on top of the
 	// screen, and a key going past it to a pane would be typed into something
 	// the user cannot see.

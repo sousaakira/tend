@@ -91,7 +91,10 @@ func (a *attached) waitForScreen(t *testing.T, what string, cond func(string) bo
 // it over a pty.
 func startSession(t *testing.T, cols, rows int) *attached {
 	t.Helper()
-	return startSessionBuilt(t, cols, rows, "")
+	// The same build as the client, so the notice about an older server stays
+	// out of the way of tests that are not about it. An empty build is what a
+	// genuinely old server reports, and it is a case worth keeping distinct.
+	return startSessionBuilt(t, cols, rows, version)
 }
 
 // startSessionBuilt runs the session's server as a given build, so a client
@@ -295,6 +298,7 @@ func TestAttachDetachLeavesTheSessionRunning(t *testing.T) {
 	defer ln.Close()
 
 	srv, err := server.New(server.Config{
+		Build:          version,
 		DetectInterval: 20 * time.Millisecond,
 		ShutdownGrace:  time.Second,
 	})
@@ -1008,8 +1012,7 @@ func TestAttachRenamesATab(t *testing.T) {
 	})
 	a.send(t, "builder")
 	a.waitForScreen(t, "the typed name", func(s string) bool {
-		return strings.Contains(s, "rename tab: builder") &&
-			!strings.Contains(s, "tab 1builder")
+		return strings.Contains(s, "builder") && !strings.Contains(s, "tab 1builder")
 	})
 
 	a.send(t, "\r")
@@ -1374,7 +1377,7 @@ func (a *attached) groupSpace(t *testing.T, space, group string) {
 	})
 	a.clickAt(t, 8, a.lineContaining(t, "group..."))
 	a.waitForScreen(t, "the group prompt", func(s string) bool {
-		return strings.Contains(s, "group (empty to ungroup)")
+		return strings.Contains(s, "empty to ungroup")
 	})
 	a.send(t, group+"\r")
 	time.Sleep(300 * time.Millisecond)
@@ -1563,37 +1566,158 @@ func TestAttachWheelReachesAProgramThatAskedForIt(t *testing.T) {
 	}
 }
 
-// TestAttachWarnsAboutAnOlderServer: the server outlives the client, so
-// upgrading tend and reattaching leaves the old one running. Everything works
-// until the first thing the new client knows about and the old server does
-// not, and then it fails with a protocol error nobody can act on.
-func TestAttachWarnsAboutAnOlderServer(t *testing.T) {
-	a := startSessionBuilt(t, 100, 16, "0.0.1-ancient")
-	a.waitForScreen(t, "the warning", func(s string) bool {
-		return strings.Contains(s, "0.0.1-ancient") && strings.Contains(s, "tend kill -s")
+// TestAttachOffersToRestartAnOlderServer: the server outlives the client, so
+// upgrading tend and reattaching leaves the old one running. A notice naming a
+// command to run in another terminal is one step further than most people go
+// while something is already in front of them, so the restart is offered where
+// the problem is.
+func TestAttachOffersToRestartAnOlderServer(t *testing.T) {
+	a := startSessionBuilt(t, 100, 20, "0.0.1-ancient")
+	a.waitForScreen(t, "the notice", func(s string) bool {
+		return strings.Contains(s, "older server") && strings.Contains(s, "0.0.1-ancient")
 	})
-	// The command it names has to be the one that stops the server, and it has
-	// to survive the status line. Without -server, "tend kill -s <name>"
-	// closes panes by number and leaves the server where it was; truncated
-	// away, it says the same thing. Either sends the user in a circle.
+	// The command for elsewhere has to be the one that works: without
+	// -server, "tend kill -s <name>" closes panes by number and leaves the
+	// server where it was.
 	if !strings.Contains(a.text(), "tend kill -s tui -server") {
-		t.Errorf("the warning must show the whole command:\n%s", a.text())
+		t.Errorf("the notice must show the whole command:\n%s", a.text())
 	}
+
+	a.send(t, "r")
+	a.waitForScreen(t, "the new server", func(s string) bool {
+		return strings.Contains(s, "reconnected")
+	})
+
+	// And the thing that could not be done before can be done now, which is
+	// the only proof that the replacement is this binary.
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.rightClickAt(t, 6, a.lineContaining(t, "main"))
+	a.waitForScreen(t, "the space menu", func(s string) bool {
+		return strings.Contains(s, "close space")
+	})
+	a.clickAt(t, 8, a.lineContaining(t, "close space"))
+	a.waitForScreen(t, "the space to close", func(s string) bool {
+		return !strings.Contains(a.sidebarText(), "main")
+	})
 }
 
-// TestAttachSurvivesAnOlderServer: the warning does not stop the session from
-// being used, and the client does not exit over it.
-func TestAttachSurvivesAnOlderServer(t *testing.T) {
-	a := startSessionBuilt(t, 100, 16, "0.0.1-ancient")
-	a.waitForScreen(t, "the warning", func(s string) bool {
-		return strings.Contains(s, "0.0.1-ancient")
+// TestAttachKeepsAnOlderServerWhenAsked: the notice is a question, and the
+// answer "carry on" has to leave a working session.
+func TestAttachKeepsAnOlderServerWhenAsked(t *testing.T) {
+	a := startSessionBuilt(t, 100, 20, "0.0.1-ancient")
+	a.waitForScreen(t, "the notice", func(s string) bool {
+		return strings.Contains(s, "older server")
+	})
+
+	a.send(t, "\r")
+	a.waitForScreen(t, "the notice to go", func(s string) bool {
+		return !strings.Contains(s, "older server")
 	})
 	a.sendUntil(t, "printf STILL-HERE\n", "the pane to work", func(s string) bool {
 		return strings.Contains(s, "STILL-HERE")
 	})
-	// And splitting, which this server can do, is not refused along with it.
+
+	// The keystroke that answered the notice is not also typed into the pane
+	// behind it: it was aimed at something the user could not see.
+	if strings.Count(a.text(), "STILL-HERE") > 2 {
+		t.Errorf("the pane got more than it was sent:\n%s", a.text())
+	}
 	a.send(t, "\x02|")
 	a.waitForScreen(t, "two panes", func(s string) bool {
 		return strings.Count(s, "┌") == 2
+	})
+}
+
+// dividerRow is the screen row the sidebar's divider is drawn on, counted
+// from zero, or -1.
+func (a *attached) sidebarDividerRow() int {
+	for i, line := range a.lines() {
+		if strings.HasPrefix(line, "──") {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestAttachDividesTheSidebar: the two lists answer different questions, and
+// one sharing the other's space meant a long list of spaces hid every agent.
+func TestAttachDividesTheSidebar(t *testing.T) {
+	a := startSession(t, 100, 22)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	for i := 0; i < 6; i++ {
+		a.send(t, "\x02s")
+		time.Sleep(150 * time.Millisecond)
+	}
+	a.waitForScreen(t, "a long list of spaces", func(string) bool {
+		return strings.Contains(a.sidebarText(), "space 7")
+	})
+
+	// However many spaces there are, the agents section keeps its own room.
+	side := a.sidebarText()
+	if !strings.Contains(side, "spaces") || !strings.Contains(side, "agents") {
+		t.Errorf("both sections should be on screen:\n%s", side)
+	}
+	if a.sidebarDividerRow() < 0 {
+		t.Errorf("the lists should be divided by a rule:\n%s", side)
+	}
+}
+
+// TestAttachDragsTheSidebarDivider: a press on the line is a grab, and the
+// line follows the pointer.
+func TestAttachDragsTheSidebarDivider(t *testing.T) {
+	a := startSession(t, 100, 22)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	for i := 0; i < 5; i++ {
+		a.send(t, "\x02s")
+		time.Sleep(150 * time.Millisecond)
+	}
+	a.waitForScreen(t, "a divider", func(string) bool { return a.sidebarDividerRow() > 0 })
+
+	from := a.sidebarDividerRow()
+	to := from - 3
+	if to < 3 {
+		t.Skipf("no room to drag: divider at %d", from)
+	}
+	// Press on the line, move, release — the same gesture as resizing a split.
+	a.send(t, "\x1b[<0;5;"+itoa(from+1)+"M")
+	time.Sleep(120 * time.Millisecond)
+	a.send(t, "\x1b[<32;5;"+itoa(to+1)+"M")
+	time.Sleep(200 * time.Millisecond)
+	a.send(t, "\x1b[<0;5;"+itoa(to+1)+"m")
+
+	a.waitForScreen(t, "the divider to move", func(string) bool {
+		return a.sidebarDividerRow() == to
+	})
+	// Both lists survive the move: the clamp leaves room either side.
+	side := a.sidebarText()
+	if !strings.Contains(side, "spaces") || !strings.Contains(side, "agents") {
+		t.Errorf("dragging must not squeeze a list out:\n%s", side)
+	}
+}
+
+// TestAttachRenamesInAModal: the status bar is where tend says things, not
+// where the user says them. A field down there competes with the session name
+// for one row and puts what is being typed furthest from the eye.
+func TestAttachRenamesInAModal(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02,")
+	a.waitForScreen(t, "the field", func(s string) bool {
+		return strings.Contains(s, "rename tab") && strings.Contains(s, "enter · esc")
+	})
+
+	// It is a box over the middle, not a line at the bottom.
+	row := a.lineContaining(t, "rename tab") - 1
+	if row < 2 || row > 14 {
+		t.Errorf("the field should be over the middle, found at row %d:\n%s", row, a.text())
+	}
+	if last := a.lines()[len(a.lines())-1]; strings.Contains(last, "rename tab") {
+		t.Errorf("the field should not be on the status line:\n%q", last)
+	}
+
+	a.send(t, "backend\r")
+	a.waitForScreen(t, "the new name", func(s string) bool {
+		return strings.Contains(s, "backend") && !strings.Contains(s, "enter · esc")
 	})
 }

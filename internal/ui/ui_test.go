@@ -265,7 +265,7 @@ func TestCursorFollowsTheFocusedPane(t *testing.T) {
 		{ID: 2, Rect: Rect{X: 20, Y: 0, Cols: 20, Rows: 10}, Screen: screen, Running: true, Focused: true},
 	}}
 
-	x, y, visible := CursorPosition(f)
+	x, y, visible := CursorPosition(f, 80, 24)
 	if !visible {
 		t.Fatal("the cursor should be visible")
 	}
@@ -281,13 +281,13 @@ func TestCursorHiddenForAnExitedPane(t *testing.T) {
 		ID: 1, Rect: Rect{Cols: 20, Rows: 10},
 		Screen: screenWith(t, 18, 8, "x"), Focused: true, Running: false,
 	}}}
-	if _, _, visible := CursorPosition(f); visible {
+	if _, _, visible := CursorPosition(f, 80, 24); visible {
 		t.Error("an exited pane should not show a cursor")
 	}
 }
 
 func TestCursorHiddenWithNoFocus(t *testing.T) {
-	if _, _, visible := CursorPosition(Frame{}); visible {
+	if _, _, visible := CursorPosition(Frame{}, 80, 24); visible {
 		t.Error("an empty frame has no cursor")
 	}
 }
@@ -714,32 +714,55 @@ func TestInputReleasesAHeldSequenceThatIsNotAMouseReport(t *testing.T) {
 
 // sidebarFrame is a frame showing the sidebar and nothing else, which is what
 // the sidebar tests are about.
-func sidebarFrame(rows []SidebarRow) Frame {
-	return Frame{Sidebar: true, SidebarRows: rows}
+func sidebarFrame(spaces, agents []SidebarRow) Frame {
+	return Frame{
+		Sidebar: true,
+		Spaces:  SidebarSection{Rows: spaces},
+		Agents:  SidebarSection{Rows: agents},
+	}
+}
+
+func spaceRows(n int) []SidebarRow {
+	rows := []SidebarRow{{Kind: SidebarHeading, Label: "spaces"}}
+	for i := 0; i < n; i++ {
+		rows = append(rows, SidebarRow{
+			Kind: SidebarSpace, Label: "space " + itoa(uint64(i+1)),
+			Detail: "master", Workspace: uint64(i + 1),
+		})
+	}
+	return append(rows, SidebarRow{Kind: SidebarAction, Label: "new", Action: ActionNewSpace})
 }
 
 // TestSidebarDrawsBothSections: the sidebar answers two questions — where
 // else could I be, and which agent needs me — and they are separate lists.
 func TestSidebarDrawsBothSections(t *testing.T) {
-	g := vt.NewGrid(60, 14, 0)
-	Draw(g, sidebarFrame([]SidebarRow{
-		{Kind: SidebarHeading, Label: "spaces"},
-		{Kind: SidebarSpace, Label: "herdr", Detail: "master", Workspace: 1, Active: true},
-		{Kind: SidebarAction, Label: "new", Action: ActionNewSpace},
-		{Kind: SidebarBlank},
-		{Kind: SidebarHeading, Label: "agents", Trailing: "flat", Action: ActionToggleGrouped},
-		{Kind: SidebarAgent, Label: "herdr · tab 1", Detail: "claude", Pane: 7, Running: true},
-	}), DefaultTheme())
+	g := vt.NewGrid(60, 16, 0)
+	Draw(g, sidebarFrame(
+		[]SidebarRow{
+			{Kind: SidebarHeading, Label: "spaces"},
+			{Kind: SidebarSpace, Label: "herdr", Detail: "master", Workspace: 1, Active: true},
+			{Kind: SidebarAction, Label: "new", Action: ActionNewSpace},
+		},
+		[]SidebarRow{
+			{Kind: SidebarHeading, Label: "agents", Trailing: "flat", TrailingAction: ActionToggleGrouped},
+			{Kind: SidebarAgent, Label: "herdr · tab 1", Detail: "claude", Pane: 7, Running: true},
+		},
+	), DefaultTheme())
 
-	text := strings.Join(gridText(g), "\n")
+	lines := gridText(g)
+	text := strings.Join(lines, "\n")
 	for _, want := range []string{"spaces", "herdr", "master", "new", "agents", "flat", "claude"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the sidebar should show %q:\n%s", want, text)
 		}
 	}
 	// The branch belongs under its space, not beside it.
-	if lines := gridText(g); !strings.Contains(lines[1], "herdr") || !strings.Contains(lines[2], "master") {
+	if !strings.Contains(lines[1], "herdr") || !strings.Contains(lines[2], "master") {
 		t.Errorf("the detail should be drawn beneath the name:\n%s", text)
+	}
+	// And a rule divides the two, so they do not read as one list.
+	if !strings.Contains(text, "─") {
+		t.Errorf("the lists should be divided:\n%s", text)
 	}
 }
 
@@ -750,11 +773,12 @@ func TestSidebarTwoLineEntryIsOneTarget(t *testing.T) {
 		{Kind: SidebarHeading, Label: "spaces"},
 		{Kind: SidebarSpace, Label: "one", Detail: "master", Workspace: 1},
 		{Kind: SidebarSpace, Label: "two", Detail: "topic", Workspace: 2},
-	})
+	}, nil)
+	const rows = 20
 
 	cases := map[int]uint64{0: 0, 1: 1, 2: 1, 3: 2, 4: 2}
 	for y, want := range cases {
-		row, ok := SidebarRowAt(f, 2, y, 40)
+		row, ok := SidebarRowAt(f, 2, y, rows)
 		if !ok {
 			t.Errorf("row %d: nothing there", y)
 			continue
@@ -763,11 +787,7 @@ func TestSidebarTwoLineEntryIsOneTarget(t *testing.T) {
 			t.Errorf("row %d selects workspace %d, want %d", y, row.Workspace, want)
 		}
 	}
-
-	if _, ok := SidebarRowAt(f, 2, 9, 40); ok {
-		t.Error("below the last entry should select nothing")
-	}
-	if _, ok := SidebarRowAt(f, SidebarWidth, 1, 40); ok {
+	if _, ok := SidebarRowAt(f, SidebarWidth, 1, rows); ok {
 		t.Error("past the sidebar belongs to the pane")
 	}
 }
@@ -775,17 +795,24 @@ func TestSidebarTwoLineEntryIsOneTarget(t *testing.T) {
 // TestSidebarHeadingCarriesItsToggle: the toggle sits at the edge of what it
 // toggles, and clicking it has to reach it.
 func TestSidebarHeadingCarriesItsToggle(t *testing.T) {
-	f := sidebarFrame([]SidebarRow{
-		{Kind: SidebarHeading, Label: "agents", Trailing: "grouped", Action: ActionToggleGrouped},
-	})
-	row, ok := SidebarRowAt(f, SidebarWidth-4, 0, 40)
+	f := sidebarFrame(
+		[]SidebarRow{{Kind: SidebarHeading, Label: "spaces"}},
+		[]SidebarRow{{
+			Kind: SidebarHeading, Label: "agents", Trailing: "grouped",
+			Action: ActionToggleGrouped, TrailingAction: ActionToggleGrouped,
+		}},
+	)
+	const rows = 20
+	_, agents := SidebarRegions(f, rows)
+
+	row, ok := SidebarRowAt(f, SidebarWidth-4, agents.Y, rows)
 	if !ok || row.Action != ActionToggleGrouped {
 		t.Errorf("the toggle should be clickable, got %+v ok=%v", row, ok)
 	}
 
-	g := vt.NewGrid(40, 6, 0)
+	g := vt.NewGrid(40, rows, 0)
 	Draw(g, f, DefaultTheme())
-	line := gridText(g)[0]
+	line := gridText(g)[agents.Y]
 	if at := strings.Index(line, "grouped"); at < strings.Index(line, "agents")+len("agents") {
 		t.Errorf("the toggle should sit at the right edge:\n%q", line)
 	}
@@ -795,7 +822,7 @@ func TestSidebarHeadingCarriesItsToggle(t *testing.T) {
 // rather than leaving a blank margin.
 func TestSidebarHiddenTakesNoColumns(t *testing.T) {
 	g := vt.NewGrid(40, 6, 0)
-	Draw(g, Frame{SidebarRows: []SidebarRow{{Kind: SidebarHeading, Label: "spaces"}}}, DefaultTheme())
+	Draw(g, Frame{Spaces: SidebarSection{Rows: []SidebarRow{{Kind: SidebarHeading, Label: "spaces"}}}}, DefaultTheme())
 	if text := strings.Join(gridText(g), "\n"); strings.Contains(text, "spaces") {
 		t.Errorf("a hidden sidebar should draw nothing:\n%s", text)
 	}
@@ -804,36 +831,266 @@ func TestSidebarHiddenTakesNoColumns(t *testing.T) {
 	}
 }
 
-// TestTabBarStartsWhereThePanesDo: the tabs belong to one space, so a bar
-// running over the sidebar would read as though they belonged to the session.
-func TestTabBarStartsWhereThePanesDo(t *testing.T) {
-	f := sidebarFrame([]SidebarRow{{Kind: SidebarHeading, Label: "spaces"}})
-	f.Tabs = []Tab{{ID: 1, Name: "tab 1", Active: true}}
+// TestSidebarTrailingIsItsOwnTarget: the "menu" button sits on the "new" row,
+// and clicking it must not create a space.
+func TestSidebarTrailingIsItsOwnTarget(t *testing.T) {
+	f := sidebarFrame([]SidebarRow{{
+		Kind: SidebarAction, Label: "new", Action: ActionNewSpace,
+		Trailing: "menu", TrailingAction: ActionOpenMenu,
+	}}, nil)
+	const rows = 20
 
-	g := vt.NewGrid(60, 8, 0)
+	if row, _ := SidebarRowAt(f, 2, 0, rows); row.Action != ActionNewSpace {
+		t.Errorf("the left of the row should create a space, got %q", row.Action)
+	}
+	at := TrailingStart(f.Spaces.Rows[0])
+	if at < 0 {
+		t.Fatal("the trailing button should have a column")
+	}
+	if row, _ := SidebarRowAt(f, at, 0, rows); row.Action != ActionOpenMenu {
+		t.Errorf("the button should open the menu, got %q", row.Action)
+	}
+
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	if line := gridText(g)[0]; !strings.Contains(line, "new") || !strings.Contains(line, "menu") {
+		t.Errorf("both should be drawn on one row:\n%q", line)
+	}
+}
+
+// TestSidebarDrawsAFoldedGroup: the triangle points at what it will do, and a
+// folded group shows nothing of what is inside it except that it is waiting.
+func TestSidebarDrawsAFoldedGroup(t *testing.T) {
+	open := sidebarFrame([]SidebarRow{
+		{Kind: SidebarSpaceGroup, Label: "clients", Group: "clients", Action: ActionToggleGroup},
+		{Kind: SidebarSpace, Label: "backend", Detail: "develop", Depth: 1, Workspace: 1},
+	}, nil)
+	g := vt.NewGrid(40, 20, 0)
+	Draw(g, open, DefaultTheme())
+	lines := gridText(g)
+	if !strings.Contains(lines[0], "▼ clients") {
+		t.Errorf("an open group points down:\n%q", lines[0])
+	}
+	if strings.Index(lines[1], "backend") <= strings.Index(lines[0], "clients") {
+		t.Errorf("the member should be indented:\n%q\n%q", lines[0], lines[1])
+	}
+
+	folded := sidebarFrame([]SidebarRow{{
+		Kind: SidebarSpaceGroup, Label: "clients", Group: "clients",
+		Folded: true, Trailing: "2 waiting", Action: ActionToggleGroup,
+	}}, nil)
+	g = vt.NewGrid(40, 20, 0)
+	Draw(g, folded, DefaultTheme())
+	line := gridText(g)[0]
+	if !strings.Contains(line, "▶ clients") {
+		t.Errorf("a folded group points right:\n%q", line)
+	}
+	// Folding is not a way to stop being told an agent is waiting.
+	if !strings.Contains(line, "2 waiting") {
+		t.Errorf("a folded group should still report its members:\n%q", line)
+	}
+
+	row, ok := SidebarRowAt(folded, 3, 0, 20)
+	if !ok || row.Action != ActionToggleGroup || row.Group != "clients" {
+		t.Errorf("heading target = %+v ok=%v", row, ok)
+	}
+}
+
+// TestGroupMenuActsOnTheGroup: a group has no record of its own, so its menu
+// carries the name rather than an identifier.
+func TestGroupMenuActsOnTheGroup(t *testing.T) {
+	m := GroupMenu("clients", false, 0, 0)
+	if m.Group != "clients" || m.Workspace != 0 {
+		t.Errorf("group menu targets %+v", m)
+	}
+	if m.Items[0].Label != "fold" {
+		t.Errorf("an open group offers to fold, got %q", m.Items[0].Label)
+	}
+	if shut := GroupMenu("clients", true, 0, 0); shut.Items[0].Label != "unfold" {
+		t.Errorf("a folded group offers to unfold, got %q", shut.Items[0].Label)
+	}
+}
+
+// --- the divided sidebar ---------------------------------------------------
+
+// TestSidebarSectionsAreSeparate is the bug this was found by: the spaces
+// pushed the agents off the bottom, so the list that matters most was the one
+// you could not see.
+func TestSidebarSectionsAreSeparate(t *testing.T) {
+	f := sidebarFrame(spaceRows(9), []SidebarRow{
+		{Kind: SidebarHeading, Label: "agents"},
+		{Kind: SidebarAgent, Label: "one", Detail: "claude", Pane: 1},
+	})
+	const rows = 20
+
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	text := strings.Join(gridText(g), "\n")
+	if !strings.Contains(text, "agents") || !strings.Contains(text, "claude") {
+		t.Errorf("a long list of spaces must not hide the agents:\n%s", text)
+	}
+	if !strings.Contains(text, "spaces") {
+		t.Errorf("both headings stay on screen:\n%s", text)
+	}
+}
+
+// TestSidebarHeadingsStayPut: a list whose title scrolls away leaves names
+// with nothing saying what they are names of, and takes the toggle with it.
+func TestSidebarHeadingsStayPut(t *testing.T) {
+	f := sidebarFrame(spaceRows(9), nil)
+	const rows = 20
+	spaces, _ := SidebarRegions(f, rows)
+
+	f.Spaces.Scroll = SidebarMaxScroll(f.Spaces, spaces.Rows)
+	if f.Spaces.Scroll == 0 {
+		t.Fatal("this list should be scrollable")
+	}
+	g := vt.NewGrid(40, rows, 0)
 	Draw(g, f, DefaultTheme())
 	lines := gridText(g)
+	if !strings.Contains(lines[spaces.Y], "spaces") {
+		t.Errorf("the heading should stay at the top of its section:\n%q", lines[spaces.Y])
+	}
+	// And it is still the click target it was.
+	if row, ok := SidebarRowAt(f, 2, spaces.Y, rows); !ok || row.Kind != SidebarHeading {
+		t.Errorf("the pinned heading should still be hit-testable, got %+v ok=%v", row, ok)
+	}
+}
 
-	if at := strings.Index(lines[0], "tab 1"); at < SidebarWidth {
-		t.Errorf("the bar should start past the sidebar, found at %d:\n%q", at, lines[0])
+// TestSidebarDividerIsGrabbable: the line between the lists is a handle, and
+// hit-testing has to find it where it is drawn.
+func TestSidebarDividerIsGrabbable(t *testing.T) {
+	f := sidebarFrame(spaceRows(3), []SidebarRow{{Kind: SidebarHeading, Label: "agents"}})
+	const rows = 20
+
+	at := SidebarSplitAt(f, rows)
+	if got := SidebarPlaceAt(f, 2, at, rows); got != SidebarDivider {
+		t.Errorf("the divider is at %d, hit-test says %v", at, got)
 	}
-	// The sidebar owns its own top row rather than starting below the bar.
-	if !strings.Contains(lines[0], "spaces") {
-		t.Errorf("the sidebar should run from the top:\n%q", lines[0])
+	if got := SidebarPlaceAt(f, 2, at-1, rows); got != SidebarSpacesList {
+		t.Errorf("above the divider is the spaces list, got %v", got)
+	}
+	if got := SidebarPlaceAt(f, 2, at+1, rows); got != SidebarAgentsList {
+		t.Errorf("below the divider is the agents list, got %v", got)
+	}
+	if got := SidebarPlaceAt(f, SidebarWidth, at, rows); got != SidebarNowhere {
+		t.Errorf("past the sidebar is nowhere, got %v", got)
 	}
 
-	// A click on the sidebar's top row is not a click on a tab.
-	if _, _, ok := TabAt(f, 2, 0, 60); ok {
-		t.Error("the sidebar's columns should not answer for the tab bar")
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	if line := gridText(g)[at]; !strings.Contains(line, "─") {
+		t.Errorf("the divider should be drawn where it is grabbed:\n%q", line)
 	}
-	if _, _, ok := TabAt(f, SidebarWidth+2, 0, 60); !ok {
-		t.Error("the first tab should be clickable where it is drawn")
+}
+
+// TestSidebarSplitIsClamped: a drag past either end stops where the divider
+// can go, rather than storing a position it cannot.
+func TestSidebarSplitIsClamped(t *testing.T) {
+	f := sidebarFrame(spaceRows(3), []SidebarRow{{Kind: SidebarHeading, Label: "agents"}})
+	const rows = 20
+	height := SidebarHeight(rows)
+
+	f.SidebarSplit = -50
+	if at := SidebarSplitAt(f, rows); at < 1 || at >= height {
+		t.Errorf("dragged off the top = %d, out of 0..%d", at, height)
+	}
+	f.SidebarSplit = 500
+	high := SidebarSplitAt(f, rows)
+	if high >= height {
+		// There must be room left for the list below it.
+		_, agents := SidebarRegions(f, rows)
+		if agents.Rows <= 0 {
+			t.Errorf("dragged off the bottom leaves no agents list: split=%d", high)
+		}
 	}
 
-	// With no sidebar the bar starts at the edge, as it always did.
-	plain := Frame{Tabs: f.Tabs}
-	if segs := TabSegments(plain, 60); len(segs) == 0 || segs[0].Start != 0 {
-		t.Errorf("without a sidebar the bar should start at column zero: %+v", segs)
+	// A terminal too short to divide gives the space to one list rather than
+	// drawing a divider with nothing either side of it.
+	tiny := sidebarFrame(spaceRows(1), nil)
+	if _, agents := SidebarRegions(tiny, 4); agents.Rows != 0 {
+		t.Errorf("no room to divide should leave one list, got %+v", agents)
+	}
+}
+
+// TestSidebarScrollsEachSectionOnItsOwn: one list filling up must not push the
+// other out of sight, which is the whole reason they are divided.
+func TestSidebarScrollsEachSectionOnItsOwn(t *testing.T) {
+	f := sidebarFrame(spaceRows(9), []SidebarRow{
+		{Kind: SidebarHeading, Label: "agents"},
+		{Kind: SidebarAgent, Label: "one", Detail: "claude", Pane: 1},
+	})
+	const rows = 20
+	spaces, agents := SidebarRegions(f, rows)
+
+	if SidebarMaxScroll(f.Spaces, spaces.Rows) == 0 {
+		t.Fatal("nine spaces should not fit their section")
+	}
+	if got := SidebarMaxScroll(f.Agents, agents.Rows); got != 0 {
+		t.Errorf("one agent fits, so its list should not scroll: %d", got)
+	}
+
+	// Scrolling the spaces does not move the agents.
+	f.Spaces.Scroll = 3
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	if !strings.Contains(strings.Join(gridText(g), "\n"), "claude") {
+		t.Error("scrolling one list should leave the other where it was")
+	}
+
+	// Hit-testing follows the scroll: the first entry under the heading is
+	// the one the offset put there.
+	row, ok := SidebarRowAt(f, 2, spaces.Y+1, rows)
+	if !ok || row.Workspace != 4 {
+		t.Errorf("scrolled by three, the first space shown is 4, got %+v", row)
+	}
+}
+
+// TestSidebarRevealMovesAsLittleAsPossible: jumping to another space should
+// move the list only as far as it must, so what surrounds the entry being left
+// stays where the eye last saw it.
+func TestSidebarRevealMovesAsLittleAsPossible(t *testing.T) {
+	f := sidebarFrame(spaceRows(9), nil)
+	const rows = 20
+	spaces, _ := SidebarRegions(f, rows)
+
+	if got := SidebarRevealScroll(f.Spaces, spaces.Rows, 2); got != 0 {
+		t.Errorf("reveal of a visible entry = %d, want 0", got)
+	}
+	last := len(f.Spaces.Rows) - 1
+	at := SidebarRevealScroll(f.Spaces, spaces.Rows, last)
+	if at == 0 || at > SidebarMaxScroll(f.Spaces, spaces.Rows) {
+		t.Errorf("reveal of the last entry = %d, max %d", at, SidebarMaxScroll(f.Spaces, spaces.Rows))
+	}
+	f.Spaces.Scroll = at
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	if !strings.Contains(strings.Join(gridText(g), "\n"), "new") {
+		t.Error("the revealed entry should be on screen")
+	}
+
+	// The heading is pinned, so revealing it moves nothing.
+	if got := SidebarRevealScroll(f.Spaces, spaces.Rows, 0); got != at {
+		t.Errorf("revealing a pinned row moved the list from %d to %d", at, got)
+	}
+}
+
+// TestSidebarActiveRowPrefersTheCursor: while the list has the keyboard, what
+// must stay in view is where the cursor is, not where the user came from.
+func TestSidebarActiveRowPrefersTheCursor(t *testing.T) {
+	s := SidebarSection{Rows: spaceRows(3)}
+	s.Rows[1].Active = true
+	s.Rows[3].Selected = true
+	if got := SidebarActiveRow(s); got != 3 {
+		t.Errorf("active row = %d, want the selected one", got)
+	}
+
+	s.Rows[3].Selected = false
+	if got := SidebarActiveRow(s); got != 1 {
+		t.Errorf("active row = %d, want the current space", got)
+	}
+	if got := SidebarActiveRow(SidebarSection{Rows: spaceRows(3)}); got != -1 {
+		t.Errorf("with nothing current the answer is none, got %d", got)
 	}
 }
 
@@ -899,206 +1156,35 @@ func TestMenuTargetsWhatItWasOpenedOn(t *testing.T) {
 	}
 }
 
-// TestSidebarTrailingIsItsOwnTarget: the "menu" button sits on the "new" row,
-// and clicking it must not create a space.
-func TestSidebarTrailingIsItsOwnTarget(t *testing.T) {
-	f := sidebarFrame([]SidebarRow{{
-		Kind: SidebarAction, Label: "new", Action: ActionNewSpace,
-		Trailing: "menu", TrailingAction: ActionOpenMenu,
-	}})
+// TestTabBarStartsWhereThePanesDo: the tabs belong to one space, so a bar
+// running over the sidebar would read as though they belonged to the session.
+func TestTabBarStartsWhereThePanesDo(t *testing.T) {
+	f := sidebarFrame([]SidebarRow{{Kind: SidebarHeading, Label: "spaces"}}, nil)
+	f.Tabs = []Tab{{ID: 1, Name: "tab 1", Active: true}}
 
-	if row, _ := SidebarRowAt(f, 2, 0, 40); row.Action != ActionNewSpace {
-		t.Errorf("the left of the row should create a space, got %q", row.Action)
-	}
-	at := TrailingStart(f.SidebarRows[0])
-	if at < 0 {
-		t.Fatal("the trailing button should have a column")
-	}
-	if row, _ := SidebarRowAt(f, at, 0, 40); row.Action != ActionOpenMenu {
-		t.Errorf("the button should open the menu, got %q", row.Action)
-	}
-
-	g := vt.NewGrid(40, 6, 0)
+	g := vt.NewGrid(60, 8, 0)
 	Draw(g, f, DefaultTheme())
-	if line := gridText(g)[0]; !strings.Contains(line, "new") || !strings.Contains(line, "menu") {
-		t.Errorf("both should be drawn on one row:\n%q", line)
-	}
-}
-
-// TestSidebarDrawsAFoldedGroup: the triangle points at what it will do, and a
-// folded group shows nothing of what is inside it except that it is waiting.
-func TestSidebarDrawsAFoldedGroup(t *testing.T) {
-	open := sidebarFrame([]SidebarRow{
-		{Kind: SidebarSpaceGroup, Label: "clients", Group: "clients", Action: ActionToggleGroup},
-		{Kind: SidebarSpace, Label: "backend", Detail: "develop", Depth: 1, Workspace: 1},
-	})
-	g := vt.NewGrid(40, 8, 0)
-	Draw(g, open, DefaultTheme())
 	lines := gridText(g)
-	if !strings.Contains(lines[0], "▼ clients") {
-		t.Errorf("an open group points down:\n%q", lines[0])
+
+	if at := strings.Index(lines[0], "tab 1"); at < SidebarWidth {
+		t.Errorf("the bar should start past the sidebar, found at %d:\n%q", at, lines[0])
 	}
-	// The member is indented under its heading, and its branch under its name.
-	nameAt := strings.Index(lines[1], "backend")
-	if nameAt <= strings.Index(lines[0], "clients") {
-		t.Errorf("the member should be indented:\n%q\n%q", lines[0], lines[1])
+	// The sidebar owns its own top row rather than starting below the bar.
+	if !strings.Contains(lines[0], "spaces") {
+		t.Errorf("the sidebar should run from the top:\n%q", lines[0])
 	}
 
-	folded := sidebarFrame([]SidebarRow{{
-		Kind: SidebarSpaceGroup, Label: "clients", Group: "clients",
-		Folded: true, Trailing: "2 waiting", Action: ActionToggleGroup,
-	}})
-	g = vt.NewGrid(40, 8, 0)
-	Draw(g, folded, DefaultTheme())
-	line := gridText(g)[0]
-	if !strings.Contains(line, "▶ clients") {
-		t.Errorf("a folded group points right:\n%q", line)
+	// A click on the sidebar's top row is not a click on a tab.
+	if _, _, ok := TabAt(f, 2, 0, 60); ok {
+		t.Error("the sidebar's columns should not answer for the tab bar")
 	}
-	// Folding is not a way to stop being told an agent is waiting.
-	if !strings.Contains(line, "2 waiting") {
-		t.Errorf("a folded group should still report its members:\n%q", line)
+	if _, _, ok := TabAt(f, SidebarWidth+2, 0, 60); !ok {
+		t.Error("the first tab should be clickable where it is drawn")
 	}
 
-	// The heading is one click target, and it says which group it is.
-	row, ok := SidebarRowAt(folded, 3, 0, 40)
-	if !ok || row.Action != ActionToggleGroup || row.Group != "clients" {
-		t.Errorf("heading target = %+v ok=%v", row, ok)
-	}
-}
-
-// TestGroupMenuActsOnTheGroup: a group has no record of its own, so its menu
-// carries the name rather than an identifier.
-func TestGroupMenuActsOnTheGroup(t *testing.T) {
-	m := GroupMenu("clients", false, 0, 0)
-	if m.Group != "clients" || m.Workspace != 0 {
-		t.Errorf("group menu targets %+v", m)
-	}
-	if m.Items[0].Label != "fold" {
-		t.Errorf("an open group offers to fold, got %q", m.Items[0].Label)
-	}
-	if shut := GroupMenu("clients", true, 0, 0); shut.Items[0].Label != "unfold" {
-		t.Errorf("a folded group offers to unfold, got %q", shut.Items[0].Label)
-	}
-}
-
-// scrollFrame is a sidebar with n two-line spaces followed by the sections
-// that live under them, which is the shape that overflows.
-func scrollFrame(n int) Frame {
-	rows := []SidebarRow{{Kind: SidebarHeading, Label: "spaces"}}
-	for i := 0; i < n; i++ {
-		rows = append(rows, SidebarRow{
-			Kind: SidebarSpace, Label: "space " + itoa(uint64(i+1)),
-			Detail: "master", Workspace: uint64(i + 1),
-		})
-	}
-	rows = append(rows,
-		SidebarRow{Kind: SidebarAction, Label: "new", Action: ActionNewSpace},
-		SidebarRow{Kind: SidebarHeading, Label: "agents"},
-	)
-	return sidebarFrame(rows)
-}
-
-// TestSidebarScrollsToReachWhatIsBelow is the bug this was found by: a list
-// longer than the window simply ended, so the agents section and the button
-// that makes a space were unreachable.
-func TestSidebarScrollsToReachWhatIsBelow(t *testing.T) {
-	f := scrollFrame(9)
-	const rows = 12 // 11 lines for the list, 19 lines of content
-
-	if SidebarMaxScroll(f, rows) == 0 {
-		t.Fatal("a list this long should be scrollable")
-	}
-	g := vt.NewGrid(40, rows, 0)
-	Draw(g, f, DefaultTheme())
-	if text := strings.Join(gridText(g), "\n"); strings.Contains(text, "agents") {
-		t.Errorf("the last section should be below the fold to begin with:\n%s", text)
-	}
-
-	// Scrolled to the end, the sections under the spaces are on screen and
-	// the last entry is the last entry.
-	f.SidebarScroll = SidebarMaxScroll(f, rows)
-	g = vt.NewGrid(40, rows, 0)
-	Draw(g, f, DefaultTheme())
-	text := strings.Join(gridText(g), "\n")
-	if !strings.Contains(text, "agents") || !strings.Contains(text, "new") {
-		t.Errorf("scrolled to the end, everything below should be visible:\n%s", text)
-	}
-	if !strings.Contains(text, "↑") {
-		t.Errorf("a list with more above should say so:\n%s", text)
-	}
-
-	// Past the end changes nothing: the offset is clamped where it is drawn.
-	f.SidebarScroll = 500
-	g2 := vt.NewGrid(40, rows, 0)
-	Draw(g2, f, DefaultTheme())
-	if strings.Join(gridText(g2), "\n") != text {
-		t.Error("scrolling past the end should be clamped, not empty the list")
-	}
-}
-
-// TestSidebarHitTestFollowsTheScroll: a click has to land on what is drawn,
-// not on what would have been there unscrolled.
-func TestSidebarHitTestFollowsTheScroll(t *testing.T) {
-	f := scrollFrame(9)
-	const rows = 12
-
-	first, ok := SidebarRowAt(f, 2, 1, rows)
-	if !ok || first.Workspace != 1 {
-		t.Fatalf("unscrolled, the top entry is space 1, got %+v", first)
-	}
-
-	f.SidebarScroll = 2 // past the heading and the first space
-	top, ok := SidebarRowAt(f, 2, 0, rows)
-	if !ok || top.Workspace != 2 {
-		t.Errorf("scrolled by two entries, the top is space 2, got %+v", top)
-	}
-}
-
-// TestSidebarRevealMovesAsLittleAsPossible: jumping to another space should
-// move the list only as far as it must, so what surrounds the entry being
-// left stays where the eye last saw it.
-func TestSidebarRevealMovesAsLittleAsPossible(t *testing.T) {
-	f := scrollFrame(9)
-	const rows = 12
-
-	// An entry already on screen does not move the list.
-	if got := SidebarRevealScroll(f, rows, 2); got != 0 {
-		t.Errorf("reveal of a visible entry = %d, want 0", got)
-	}
-	// One below the fold scrolls just enough to show it.
-	last := len(f.SidebarRows) - 1
-	at := SidebarRevealScroll(f, rows, last)
-	if at == 0 || at > SidebarMaxScroll(f, rows) {
-		t.Errorf("reveal of the last entry = %d, max %d", at, SidebarMaxScroll(f, rows))
-	}
-	f.SidebarScroll = at
-	g := vt.NewGrid(40, rows, 0)
-	Draw(g, f, DefaultTheme())
-	if !strings.Contains(strings.Join(gridText(g), "\n"), "agents") {
-		t.Error("the revealed entry should be on screen")
-	}
-
-	// One above the fold scrolls back to it exactly.
-	if got := SidebarRevealScroll(f, rows, 1); got != 1 {
-		t.Errorf("reveal upwards = %d, want 1", got)
-	}
-}
-
-// TestSidebarActiveRowPrefersTheCursor: while the list has the keyboard, what
-// must stay in view is where the cursor is, not where the user came from.
-func TestSidebarActiveRowPrefersTheCursor(t *testing.T) {
-	f := scrollFrame(3)
-	f.SidebarRows[1].Active = true
-	f.SidebarRows[3].Selected = true
-	if got := SidebarActiveRow(f); got != 3 {
-		t.Errorf("active row = %d, want the selected one", got)
-	}
-
-	f.SidebarRows[3].Selected = false
-	if got := SidebarActiveRow(f); got != 1 {
-		t.Errorf("active row = %d, want the current space", got)
-	}
-	if got := SidebarActiveRow(scrollFrame(3)); got != -1 {
-		t.Errorf("with nothing current the answer is none, got %d", got)
+	// With no sidebar the bar starts at the edge, as it always did.
+	plain := Frame{Tabs: f.Tabs}
+	if segs := TabSegments(plain, 60); len(segs) == 0 || segs[0].Start != 0 {
+		t.Errorf("without a sidebar the bar should start at column zero: %+v", segs)
 	}
 }

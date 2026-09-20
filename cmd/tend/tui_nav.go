@@ -45,13 +45,19 @@ func (t *tui) revealSidebarLocked() {
 		return
 	}
 	frame := t.buildFrame()
-	at := ui.SidebarActiveRow(frame)
-	if at < 0 {
-		return
+	spaces, agents := ui.SidebarRegions(frame, t.rows)
+
+	if at := ui.SidebarActiveRow(frame.Spaces); at >= 0 {
+		if next := ui.SidebarRevealScroll(frame.Spaces, spaces.Rows, at); next != t.spacesScroll {
+			t.spacesScroll = next
+			t.dirty = true
+		}
 	}
-	if next := ui.SidebarRevealScroll(frame, t.rows, at); next != t.sidebarScroll {
-		t.sidebarScroll = next
-		t.dirty = true
+	if at := ui.SidebarActiveRow(frame.Agents); at >= 0 && agents.Rows > 0 {
+		if next := ui.SidebarRevealScroll(frame.Agents, agents.Rows, at); next != t.agentsScroll {
+			t.agentsScroll = next
+			t.dirty = true
+		}
 	}
 }
 
@@ -288,33 +294,37 @@ func (t *tui) newTabHere() error {
 // whether or not anything runs in them, and the agent that stopped is rarely
 // in the space being looked at — so listing agents under their spaces alone
 // would bury the one thing the sidebar is for.
-func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
+// spacesSectionLocked is the top list: the heading, the tree, and the button
+// that makes another one.
+func (t *tui) spacesSectionLocked() ui.SidebarSection {
 	rows := []ui.SidebarRow{{Kind: ui.SidebarHeading, Label: "spaces"}}
 	rows = append(rows, t.spaceRowsLocked()...)
-	rows = append(rows,
-		ui.SidebarRow{
-			Kind:           ui.SidebarAction,
-			Label:          "new",
-			Action:         ui.ActionNewSpace,
-			Trailing:       "menu",
-			TrailingAction: ui.ActionOpenMenu,
-		},
-		ui.SidebarRow{Kind: ui.SidebarBlank},
-	)
+	rows = append(rows, ui.SidebarRow{
+		Kind:           ui.SidebarAction,
+		Label:          "new",
+		Action:         ui.ActionNewSpace,
+		Trailing:       "menu",
+		TrailingAction: ui.ActionOpenMenu,
+	})
+	return ui.SidebarSection{Rows: rows, Scroll: t.spacesScroll}
+}
 
+// agentsSectionLocked is the bottom list: the heading with its toggle, and
+// what is running.
+func (t *tui) agentsSectionLocked() ui.SidebarSection {
 	grouped := "flat"
 	if t.grouped {
 		grouped = "grouped"
 	}
-	rows = append(rows, ui.SidebarRow{
+	rows := []ui.SidebarRow{{
 		Kind:           ui.SidebarHeading,
 		Label:          "agents",
 		Trailing:       grouped,
 		Action:         ui.ActionToggleGrouped,
 		TrailingAction: ui.ActionToggleGrouped,
 		Active:         t.grouped,
-	})
-	return append(rows, t.agentRowsLocked()...)
+	}}
+	return ui.SidebarSection{Rows: append(rows, t.agentRowsLocked()...), Scroll: t.agentsScroll}
 }
 
 // spaceRowsLocked lays the spaces out as a tree.
@@ -527,6 +537,17 @@ func targetOf(r ui.SidebarRow) (navTarget, bool) {
 	return navTarget{}, false
 }
 
+// sidebarWalkLocked is both lists end to end, which is the order the keyboard
+// moves through them.
+//
+// The divider is a thing to look at, not a thing to stop on: pressing down at
+// the last space should reach the first agent, the same as dragging the eye
+// down the column does.
+func (t *tui) sidebarWalkLocked() []ui.SidebarRow {
+	spaces := t.spacesSectionLocked()
+	return append(spaces.Rows, t.agentsSectionLocked().Rows...)
+}
+
 // startTargetLocked is where the cursor opens: the focused pane if it is in
 // the list, and otherwise the space being looked at.
 //
@@ -534,7 +555,7 @@ func targetOf(r ui.SidebarRow) (navTarget, bool) {
 // are not listed, so opening on "nothing selected" would make the first
 // keypress move from an arbitrary end of the list rather than from here.
 func (t *tui) startTargetLocked() navTarget {
-	rows := t.sidebarRowsLocked()
+	rows := t.sidebarWalkLocked()
 	focused := navTarget{pane: t.focus, workspace: t.workspace}
 	space := navTarget{workspace: t.workspace}
 
@@ -571,7 +592,7 @@ func (t *tui) navigate(delta int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	rows := t.sidebarRowsLocked()
+	rows := t.sidebarWalkLocked()
 	targets := make([]navTarget, 0, len(rows))
 	for _, r := range rows {
 		if target, ok := targetOf(r); ok {

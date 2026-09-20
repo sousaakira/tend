@@ -193,17 +193,21 @@ type Frame struct {
 
 	// Sidebar shows the spaces and agents down the left edge, and SidebarRows
 	// is what it holds.
-	Sidebar     bool
-	SidebarRows []SidebarRow
-	// SidebarScroll is how many entries are scrolled off the top of the list.
-	// It is clamped when drawn, so a client need not track what fits.
-	SidebarScroll int
+	Sidebar bool
+	// Spaces and Agents are the sidebar's two lists. They are separate
+	// because they answer different questions and because one sharing the
+	// other's scroll meant the spaces pushed the agents off the bottom.
+	Spaces SidebarSection
+	Agents SidebarSection
+	// SidebarSplit is the line the divider sits on. Zero means the sidebar
+	// decides; anything else is where the user dragged it to.
+	SidebarSplit int
 	// Navigating marks that the list has the keyboard.
 	Navigating bool
 
 	// Prompt and PromptText are a line being typed, such as a new name. When
-	// Prompt is set it replaces the rest of the status bar: what is being
-	// typed matters more than what was there.
+	// Prompt is set it is drawn as a box over the middle of the screen: the
+	// status bar is where tend says things, not where the user says them.
 	Prompt     string
 	PromptText string
 	// PromptSelected marks the text as the seed, about to be replaced by the
@@ -321,6 +325,8 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	if f.Menu != nil {
 		drawMenu(dst, *f.Menu, theme)
 	}
+	// The field is last: it has the keyboard, so nothing may sit over it.
+	drawPrompt(dst, f, theme)
 }
 
 // drawTabs draws the bar across the top.
@@ -434,7 +440,13 @@ func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
 // CursorPosition returns where the terminal's cursor belongs: inside the
 // focused pane, at that pane's own cursor. Typing has to appear where the user
 // is looking, which means the real cursor follows the focused pane's.
-func CursorPosition(f Frame) (x, y int, visible bool) {
+//
+// While a field is up it belongs in the field instead, for the same reason:
+// that is where the keystrokes are going.
+func CursorPosition(f Frame, cols, rows int) (x, y int, visible bool) {
+	if x, y, ok := PromptCursor(f, cols, rows); ok {
+		return x, y, true
+	}
 	for _, p := range f.Panes {
 		if !p.Focused || p.Screen == nil {
 			continue
@@ -599,18 +611,6 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	limit := dst.Cols()
 	x := 0
 
-	if f.Prompt != "" {
-		x = writeString(dst, x, y, " "+f.Prompt, theme.StatusKey, limit)
-		textStyle := theme.Status
-		if f.PromptSelected {
-			textStyle = theme.StatusKey
-		}
-		x = writeString(dst, x, y, f.PromptText, textStyle, limit)
-		// A block where the next character goes, since the real cursor is
-		// inside a pane and cannot be here.
-		writeString(dst, x, y, "▏", theme.StatusKey, limit)
-		return
-	}
 	if f.Offline {
 		x = writeString(dst, x, y, " OFFLINE ", theme.StatusAlert, limit)
 	}
