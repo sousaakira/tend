@@ -191,6 +191,17 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MousePress:
+		// An open menu is on top, so it answers first, and a press anywhere
+		// else closes it rather than acting through it.
+		if handled, err := t.clickMenu(ev.X, ev.Y); handled {
+			return err
+		}
+		if ev.Button == mouseRight {
+			if m, ok := t.menuFor(ev.X, ev.Y); ok {
+				t.openMenu(m)
+			}
+			return nil
+		}
 		if handled, err := t.clickTabBar(ev.X, ev.Y); handled {
 			return err
 		}
@@ -270,6 +281,10 @@ func (t *tui) dragDivider(ev ui.MouseEvent) error {
 	return t.refresh()
 }
 
+// mouseRight is the button number a right-click reports, which is what opens
+// a menu here as it does everywhere else.
+const mouseRight = 2
+
 // clickTabBar switches tabs, or makes one.
 func (t *tui) clickTabBar(x, y int) (bool, error) {
 	t.mu.Lock()
@@ -304,6 +319,12 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 	switch {
 	case row.Action == ui.ActionNewSpace:
 		return true, t.newWorkspace()
+	case row.Action == ui.ActionOpenMenu:
+		t.mu.Lock()
+		ws := t.workspace
+		t.mu.Unlock()
+		t.openMenu(ui.SpaceMenu(ws, x, y))
+		return true, nil
 	case row.Action == ui.ActionToggleGrouped:
 		t.mu.Lock()
 		t.grouped = !t.grouped

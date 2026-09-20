@@ -36,6 +36,7 @@ const (
 // Action names carried on an action row.
 const (
 	ActionNewSpace      = "new-space"
+	ActionOpenMenu      = "open-menu"
 	ActionToggleGrouped = "toggle-grouped"
 )
 
@@ -46,8 +47,11 @@ type SidebarRow struct {
 	Kind   SidebarKind
 	Label  string
 	Detail string
-	// Trailing is drawn against the right edge, such as the "grouped" toggle.
-	Trailing string
+	// Trailing is drawn against the right edge, such as the "grouped" toggle
+	// or the "menu" button. TrailingAction is what clicking it does, which is
+	// not what clicking the rest of the row does.
+	Trailing       string
+	TrailingAction string
 
 	// Pane, Tab and Workspace say where selecting this row goes. Action names
 	// what it does instead.
@@ -88,6 +92,22 @@ func SidebarColumns(f Frame, cols int) int {
 		return 0
 	}
 	return min(SidebarWidth, cols)
+}
+
+// TrailingStart is the column where a row's trailing label begins, or -1 when
+// it has none or there is no room for it.
+//
+// Drawing and hit-testing both ask this, so a button cannot be drawn in one
+// place and clicked in another.
+func TrailingStart(r SidebarRow) int {
+	if r.Trailing == "" {
+		return -1
+	}
+	at := SidebarWidth - 2 - len([]rune(r.Trailing))
+	if at <= 1 {
+		return -1
+	}
+	return at
 }
 
 // drawSidebar draws the lists down the left edge.
@@ -132,17 +152,7 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 
 	case SidebarHeading:
 		writeString(dst, 1, y, truncate(r.Label, limit-1), theme.SidebarGroup, limit)
-		if r.Trailing != "" {
-			// Right-aligned: a toggle belongs at the edge of what it toggles,
-			// not trailing the words that name it.
-			style := theme.SidebarGroup
-			if r.Active {
-				style = theme.SidebarGroupActive
-			}
-			if at := limit - 1 - len([]rune(r.Trailing)); at > 1 {
-				writeString(dst, at, y, r.Trailing, style, limit)
-			}
-		}
+		drawTrailing(dst, r, y, limit, theme)
 
 	case SidebarGroup:
 		writeString(dst, 3, y, truncate(r.Label, limit-3), theme.SidebarGroup, limit)
@@ -153,10 +163,25 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 			style = theme.SidebarActive
 		}
 		writeString(dst, 1, y, truncate(r.Label, limit-1), style, limit)
+		drawTrailing(dst, r, y, limit, theme)
 
 	case SidebarSpace, SidebarAgent:
 		drawSidebarEntry(dst, r, y, limit, theme)
 	}
+}
+
+// drawTrailing puts a row's button against the right edge. A toggle belongs
+// at the edge of what it toggles, not trailing the words that name it.
+func drawTrailing(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
+	at := TrailingStart(r)
+	if at < 0 {
+		return
+	}
+	style := theme.SidebarGroup
+	if r.Active {
+		style = theme.SidebarGroupActive
+	}
+	writeString(dst, at, y, r.Trailing, style, limit)
 }
 
 // drawSidebarEntry draws a name with its marker, and its detail beneath.
@@ -168,16 +193,26 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 		cursor = "›"
 	}
 	style := theme.Sidebar
+	mark := theme.StateStyle(r.State, r.Running)
 	if r.Active {
-		style = theme.SidebarActive
+		// The current entry is a band rather than a word that changed weight:
+		// scanning twenty rows, weight is not enough to find one.
+		style = theme.SidebarSelected
+		mark = style
+		fill(dst, y, 0, limit, style)
 	}
 
 	x := writeString(dst, 0, y, cursor, style, limit)
-	x = writeString(dst, x, y, stateCircle(r), theme.StateStyle(r.State, r.Running), limit)
+	x = writeString(dst, x, y, stateCircle(r), mark, limit)
 	writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
 
 	if r.Detail != "" {
-		writeString(dst, 3, y+1, truncate(r.Detail, limit-3), theme.SidebarDetail, limit)
+		detail := theme.SidebarDetail
+		if r.Active {
+			detail = style
+			fill(dst, y+1, 0, limit, style)
+		}
+		writeString(dst, 3, y+1, truncate(r.Detail, limit-3), detail, limit)
 	}
 }
 
@@ -203,6 +238,12 @@ func SidebarRowAt(f Frame, x, y int) (SidebarRow, bool) {
 	for _, r := range f.SidebarRows {
 		height := r.height()
 		if y >= at && y < at+height {
+			// A trailing button is its own target. Without this the "menu"
+			// beside "new" would create a space, which is the one thing
+			// somebody reaching for a menu did not ask for.
+			if start := TrailingStart(r); r.TrailingAction != "" && start >= 0 && x >= start && y == at {
+				r.Action = r.TrailingAction
+			}
 			return r, true
 		}
 		at += height

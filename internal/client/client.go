@@ -302,6 +302,11 @@ func (c *Client) CloseTab(tab uint64) error {
 }
 
 // RenameTab changes a tab's label.
+// CloseWorkspace closes a workspace and every pane in it.
+func (c *Client) CloseWorkspace(ws uint64) error {
+	return c.Call(proto.MethodWorkspaceClose, proto.WorkspaceCloseParams{Workspace: ws}, nil)
+}
+
 func (c *Client) RenameTab(tab uint64, name string) error {
 	return c.Call(proto.MethodTabRename, proto.TabRenameParams{Tab: tab, Name: name}, nil)
 }

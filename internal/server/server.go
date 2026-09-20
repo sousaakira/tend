@@ -418,6 +418,36 @@ func (s *Server) CloseTab(id session.TabID) error {
 	return nil
 }
 
+// CloseWorkspace closes a workspace and stops every pane in it.
+func (s *Server) CloseWorkspace(id session.WorkspaceID) error {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return ErrClosed
+	}
+	closed, err := s.session.CloseWorkspace(id)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	stopped := make([]*paneRuntime, 0, len(closed))
+	for _, pid := range closed {
+		if rt, ok := s.runtimes[pid]; ok {
+			stopped = append(stopped, rt)
+		}
+		delete(s.runtimes, pid)
+		delete(s.titles, pid)
+	}
+	s.mu.Unlock()
+
+	for _, rt := range stopped {
+		rt.setClosing()
+		_ = rt.pty.Close()
+		s.events.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
+	}
+	return nil
+}
+
 // startLocked opens a pty for an existing pane record. The caller holds the
 // session lock.
 func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {

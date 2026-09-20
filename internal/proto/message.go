@@ -17,6 +17,7 @@ const (
 	MethodTabClose  = "tab.close"
 	MethodTabRename = "tab.rename"
 
+	MethodWorkspaceClose  = "workspace.close"
 	MethodWorkspaceRename = "workspace.rename"
 
 	MethodPaneSplit     = "pane.split"
@@ -133,6 +134,11 @@ type PaneSpec struct {
 type WorkspaceNewParams struct {
 	Name string `json:"name,omitempty"`
 	Dir  string `json:"dir,omitempty"`
+}
+
+// WorkspaceCloseParams closes a workspace and every pane in it.
+type WorkspaceCloseParams struct {
+	Workspace uint64 `json:"workspace"`
 }
 
 // WorkspaceNewResult reports the new workspace.

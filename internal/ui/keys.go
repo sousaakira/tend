@@ -39,6 +39,7 @@ const (
 	CommandNewSpace
 	CommandToggleAgents
 	CommandNavigate
+	CommandMenu
 	CommandRenameTab
 	CommandRenameSpace
 	CommandDetach
@@ -97,6 +98,8 @@ func (c Command) String() string {
 		return "toggle-agents"
 	case CommandNavigate:
 		return "navigate"
+	case CommandMenu:
+		return "menu"
 	case CommandRenameTab:
 		return "rename-tab"
 	case CommandRenameSpace:
@@ -140,6 +143,7 @@ var Keys = []struct {
 	{"( )", CommandNextSpace, "switch space"},
 	{"a", CommandToggleAgents, "show agents"},
 	{"g", CommandNavigate, "pick an agent"},
+	{"m", CommandMenu, "menu"},
 	{",", CommandRenameTab, "rename tab"},
 	{".", CommandRenameSpace, "rename space"},
 	{"d", CommandDetach, "detach"},
@@ -334,6 +338,8 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandToggleAgents}
 	case 'g':
 		return Result{Command: CommandNavigate}
+	case 'm':
+		return Result{Command: CommandMenu}
 	case ',':
 		return Result{Command: CommandRenameTab}
 	case '.':

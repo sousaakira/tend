@@ -35,6 +35,7 @@ type Theme struct {
 
 	Sidebar            vt.Style
 	SidebarActive      vt.Style
+	SidebarSelected    vt.Style
 	SidebarDetail      vt.Style
 	SidebarGroup       vt.Style
 	SidebarGroupActive vt.Style
@@ -65,6 +66,7 @@ func DefaultTheme() Theme {
 
 		Sidebar:            vt.Style{},
 		SidebarActive:      vt.Style{Attrs: vt.AttrBold},
+		SidebarSelected:    vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
 		SidebarDetail:      dim,
 		SidebarGroup:       dim,
 		SidebarGroupActive: vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
@@ -211,6 +213,10 @@ type Frame struct {
 	// are fourteen of them, and cramming those into a status bar means
 	// truncating exactly the ones somebody was looking for.
 	Overlay []string
+
+	// Menu is a context menu, opened on the thing it acts on. Nil when none
+	// is open.
+	Menu *Menu
 }
 
 // StatusRows is how many rows at the bottom the status bar occupies. Panes are
@@ -304,9 +310,13 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	drawStatus(dst, f, theme)
 
-	// Last, so it sits over the panes rather than under them.
+	// Last, so they sit over the panes rather than under them. The menu is
+	// last of all: it is opened on top of whatever is already showing.
 	if len(f.Overlay) > 0 {
 		drawOverlay(dst, f.Overlay, theme)
+	}
+	if f.Menu != nil {
+		drawMenu(dst, *f.Menu, theme)
 	}
 }
 
@@ -720,4 +730,16 @@ func itoa(v uint64) string {
 		v /= 10
 	}
 	return string(buf[i:])
+}
+
+// fill paints a run of blank cells on one row, which is how a selection band
+// is drawn under text that is written over it afterwards.
+func fill(dst *vt.Grid, y, from, to int, style vt.Style) {
+	row := dst.Line(y)
+	if row == nil {
+		return
+	}
+	for x := max(from, 0); x < min(to, dst.Cols()); x++ {
+		row.SetCell(x, vt.Cell{R: ' ', Style: style, Width: 1})
+	}
 }

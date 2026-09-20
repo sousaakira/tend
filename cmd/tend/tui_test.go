@@ -1239,3 +1239,111 @@ func TestAttachClickNewSpace(t *testing.T) {
 		return strings.Contains(s, "space 2")
 	})
 }
+
+// sidebarText is only the sidebar's columns, so an assertion about the list
+// cannot be satisfied by whatever a pane happens to be showing.
+func (a *attached) sidebarText() string {
+	var b strings.Builder
+	for _, line := range a.lines() {
+		r := []rune(line)
+		if len(r) > ui.SidebarWidth {
+			r = r[:ui.SidebarWidth]
+		}
+		b.WriteString(strings.TrimRight(string(r), " "))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// rightClickAt opens a context menu where a right-click would.
+func (a *attached) rightClickAt(t *testing.T, col, row int) {
+	t.Helper()
+	seq := "\x1b[<2;" + itoa(col) + ";" + itoa(row) + "M" +
+		"\x1b[<2;" + itoa(col) + ";" + itoa(row) + "m"
+	a.send(t, seq)
+	time.Sleep(150 * time.Millisecond)
+}
+
+// TestAttachListsAnAgentStartedInAShell is the bug this was found by: almost
+// nobody opens a pane by naming an agent, they open a shell and type its name.
+// The agent list stayed empty because a pane's agent lives in the session and
+// the client only re-read the session when the shape of it changed.
+func TestAttachListsAnAgentStartedInAShell(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, fakeAgentBin(t, "claude", "sleep 30")+"\n")
+	a.waitForScreen(t, "the agent to be listed", func(string) bool {
+		return strings.Contains(a.sidebarText(), "claude")
+	})
+}
+
+// TestAttachMenuClosesAPane covers the menu end to end: it is opened on the
+// thing it acts on, and what it says it will do is what happens.
+func TestAttachMenuClosesAPane(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
+
+	a.rightClickAt(t, 50, 6)
+	a.waitForScreen(t, "the menu", func(s string) bool {
+		return strings.Contains(s, "close pane") && strings.Contains(s, "split right")
+	})
+
+	a.clickAt(t, 52, a.lineContaining(t, "close pane"))
+	a.waitForScreen(t, "the pane to close", func(s string) bool {
+		return strings.Count(s, "┌") == 1 && !strings.Contains(s, "close pane")
+	})
+}
+
+// TestAttachMenuClosesASpace: closing a space has to take its panes with it
+// and leave the client somewhere real.
+func TestAttachMenuClosesASpace(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "a second space", func(s string) bool {
+		return strings.Contains(s, "space 2")
+	})
+
+	a.rightClickAt(t, 6, a.lineContaining(t, "space 2"))
+	a.waitForScreen(t, "the space menu", func(s string) bool {
+		return strings.Contains(s, "close space")
+	})
+	a.clickAt(t, 8, a.lineContaining(t, "close space"))
+
+	a.waitForScreen(t, "the space to go", func(string) bool {
+		return !strings.Contains(a.sidebarText(), "space 2")
+	})
+	// What is left is still a usable session rather than a blank screen.
+	a.waitForScreen(t, "a pane to remain", func(s string) bool {
+		return strings.Contains(s, "┌")
+	})
+}
+
+// TestAttachMenuButtonAndEscape: the menu is reachable without a right-click,
+// and leaves without doing anything.
+func TestAttachMenuButtonAndEscape(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "the new row", func(s string) bool {
+		return strings.Contains(s, "menu")
+	})
+
+	row := a.lineContaining(t, "new")
+	a.clickAt(t, ui.SidebarWidth-3, row)
+	a.waitForScreen(t, "the space menu", func(s string) bool {
+		return strings.Contains(s, "close space")
+	})
+
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "the menu to close", func(s string) bool {
+		return !strings.Contains(s, "close space")
+	})
+	// Escaping is not a decision: the space is still there.
+	if !strings.Contains(a.sidebarText(), "main") {
+		t.Errorf("escaping should change nothing:\n%s", a.sidebarText())
+	}
+}

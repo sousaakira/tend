@@ -275,7 +275,13 @@ func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 		})
 	}
 	rows = append(rows,
-		ui.SidebarRow{Kind: ui.SidebarAction, Label: "new", Action: ui.ActionNewSpace},
+		ui.SidebarRow{
+			Kind:           ui.SidebarAction,
+			Label:          "new",
+			Action:         ui.ActionNewSpace,
+			Trailing:       "menu",
+			TrailingAction: ui.ActionOpenMenu,
+		},
 		ui.SidebarRow{Kind: ui.SidebarBlank},
 	)
 
@@ -284,11 +290,12 @@ func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 		grouped = "grouped"
 	}
 	rows = append(rows, ui.SidebarRow{
-		Kind:     ui.SidebarHeading,
-		Label:    "agents",
-		Trailing: grouped,
-		Action:   ui.ActionToggleGrouped,
-		Active:   t.grouped,
+		Kind:           ui.SidebarHeading,
+		Label:          "agents",
+		Trailing:       grouped,
+		Action:         ui.ActionToggleGrouped,
+		TrailingAction: ui.ActionToggleGrouped,
+		Active:         t.grouped,
 	})
 	return append(rows, t.agentRowsLocked()...)
 }

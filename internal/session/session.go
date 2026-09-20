@@ -288,6 +288,32 @@ func (s *Session) CloseTab(id TabID) ([]PaneID, error) {
 	return nil, fmt.Errorf("%w: %d", ErrNoSuchTab, id)
 }
 
+// CloseWorkspace removes a workspace and reports every pane that went with it.
+//
+// The last workspace can be closed like any other. A session with none is a
+// real state — the client makes one when it finds nothing — and refusing here
+// would mean the rule lived in two places and disagreed in one of them.
+func (s *Session) CloseWorkspace(id WorkspaceID) ([]PaneID, error) {
+	for wi, w := range s.workspaces {
+		if w.ID != id {
+			continue
+		}
+		var closed []PaneID
+		for _, t := range w.tabs {
+			for _, p := range t.Panes() {
+				delete(s.index, p)
+				closed = append(closed, p)
+			}
+		}
+		s.workspaces = append(s.workspaces[:wi], s.workspaces[wi+1:]...)
+		if s.active >= len(s.workspaces) {
+			s.active = len(s.workspaces) - 1
+		}
+		return closed, nil
+	}
+	return nil, fmt.Errorf("%w: %d", ErrNoSuchWorkspace, id)
+}
+
 func (s *Session) newPane(spec PaneSpec) *Pane {
 	s.nextPane++
 	return &Pane{

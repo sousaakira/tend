@@ -629,3 +629,59 @@ func TestAdjustSplitRejectsAnUnknownPane(t *testing.T) {
 		t.Errorf("err = %v, want ErrNoSuchPane", err)
 	}
 }
+
+// TestCloseWorkspace removes a space and everything in it.
+func TestCloseWorkspace(t *testing.T) {
+	s := New()
+	keep := s.AddWorkspace("keep")
+	drop := s.AddWorkspace("drop")
+	_, first, err := s.AddTab(drop.ID, "a", PaneSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, second, err := s.AddTab(drop.ID, "b", PaneSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.AddTab(keep.ID, "c", PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+
+	closed, err := s.CloseWorkspace(drop.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(closed) != 2 {
+		t.Errorf("closed %v, want both panes", closed)
+	}
+	for _, id := range []PaneID{first.ID, second.ID} {
+		if _, ok := s.Pane(id); ok {
+			t.Errorf("pane %d should be gone from the index", id)
+		}
+	}
+	if len(s.Workspaces()) != 1 || s.Workspaces()[0].ID != keep.ID {
+		t.Errorf("workspaces = %v, want only the kept one", s.Workspaces())
+	}
+	if s.ActiveWorkspace() == nil {
+		t.Error("something should be active while a workspace remains")
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := s.CloseWorkspace(drop.ID); err == nil {
+		t.Error("closing it twice should fail")
+	}
+
+	// The last one can go too: a session with none is a real state, and the
+	// client makes one when it finds nothing.
+	if _, err := s.CloseWorkspace(keep.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Workspaces()) != 0 || s.ActiveWorkspace() != nil {
+		t.Error("the session should be empty")
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Error(err)
+	}
+}

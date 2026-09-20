@@ -836,3 +836,91 @@ func TestTabBarStartsWhereThePanesDo(t *testing.T) {
 		t.Errorf("without a sidebar the bar should start at column zero: %+v", segs)
 	}
 }
+
+// TestMenuStaysOnTheScreen: a menu opened near the bottom edge would lose the
+// items added last, which are the destructive ones.
+func TestMenuStaysOnTheScreen(t *testing.T) {
+	m := PaneMenu(1, 78, 19, true)
+	r := m.Rect(80, 20)
+	if r.X+r.Cols > 80 || r.Y+r.Rows > 20 {
+		t.Errorf("menu at %+v runs off an 80x20 screen", r)
+	}
+	if r.Rows != len(m.Items)+2 {
+		t.Errorf("menu should show every item: rows=%d items=%d", r.Rows, len(m.Items))
+	}
+
+	// On a screen too small for it, it is clipped rather than placed outside.
+	small := m.Rect(10, 3)
+	if small.X != 0 || small.Y != 0 || small.Cols > 10 || small.Rows > 3 {
+		t.Errorf("menu on a tiny screen: %+v", small)
+	}
+}
+
+// TestMenuHitTestSeparatesInsideFromOnAnItem: a click inside the border but
+// not on an item must not fall through, or one gesture would close the menu
+// and act on whatever it was covering.
+func TestMenuHitTestSeparatesInsideFromOnAnItem(t *testing.T) {
+	m := TabMenu(4, 10, 5)
+	r := m.Rect(80, 24)
+
+	if _, onItem, inside := MenuItemAt(m, 80, 24, r.X, r.Y); onItem || !inside {
+		t.Errorf("the border is inside but not an item: onItem=%v inside=%v", onItem, inside)
+	}
+	item, onItem, inside := MenuItemAt(m, 80, 24, r.X+2, r.Y+1)
+	if !onItem || !inside || item.Action != MenuNewTab {
+		t.Errorf("first item = %+v onItem=%v inside=%v", item, onItem, inside)
+	}
+	last, onItem, _ := MenuItemAt(m, 80, 24, r.X+2, r.Y+len(m.Items))
+	if !onItem || last.Action != MenuClose {
+		t.Errorf("last item = %+v onItem=%v", last, onItem)
+	}
+	if _, _, inside := MenuItemAt(m, 80, 24, r.X-1, r.Y); inside {
+		t.Error("a point outside the border is outside the menu")
+	}
+}
+
+// TestMenuTargetsWhatItWasOpenedOn is the whole reason a menu is better than
+// a key here: there is no current selection to be wrong about.
+func TestMenuTargetsWhatItWasOpenedOn(t *testing.T) {
+	if m := PaneMenu(7, 0, 0, true); m.Pane != 7 || m.Tab != 0 || m.Workspace != 0 {
+		t.Errorf("pane menu targets %+v", m)
+	}
+	if m := SpaceMenu(3, 0, 0); m.Workspace != 3 || m.Pane != 0 {
+		t.Errorf("space menu targets %+v", m)
+	}
+
+	// The last pane in a tab offers no "close pane": closing it would leave an
+	// empty tab, and "close tab" is the honest name for that.
+	alone := PaneMenu(1, 0, 0, false)
+	for _, item := range alone.Items {
+		if item.Action == MenuClose {
+			t.Error("a lone pane should not offer to close itself")
+		}
+	}
+}
+
+// TestSidebarTrailingIsItsOwnTarget: the "menu" button sits on the "new" row,
+// and clicking it must not create a space.
+func TestSidebarTrailingIsItsOwnTarget(t *testing.T) {
+	f := sidebarFrame([]SidebarRow{{
+		Kind: SidebarAction, Label: "new", Action: ActionNewSpace,
+		Trailing: "menu", TrailingAction: ActionOpenMenu,
+	}})
+
+	if row, _ := SidebarRowAt(f, 2, 0); row.Action != ActionNewSpace {
+		t.Errorf("the left of the row should create a space, got %q", row.Action)
+	}
+	at := TrailingStart(f.SidebarRows[0])
+	if at < 0 {
+		t.Fatal("the trailing button should have a column")
+	}
+	if row, _ := SidebarRowAt(f, at, 0); row.Action != ActionOpenMenu {
+		t.Errorf("the button should open the menu, got %q", row.Action)
+	}
+
+	g := vt.NewGrid(40, 6, 0)
+	Draw(g, f, DefaultTheme())
+	if line := gridText(g)[0]; !strings.Contains(line, "new") || !strings.Contains(line, "menu") {
+		t.Errorf("both should be drawn on one row:\n%q", line)
+	}
+}

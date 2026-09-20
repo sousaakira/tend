@@ -80,6 +80,7 @@ func runAttach(args []string) error {
 		wake:     make(chan struct{}, 1),
 		input:    make(chan []byte, 64),
 		lostConn: make(chan struct{}, 1),
+		resync:   make(chan struct{}, 1),
 	}
 	t.keys.PrefixKey = prefix
 	t.sidebar = cfg.UI.Sidebar
@@ -113,6 +114,8 @@ type tui struct {
 	grouped    bool
 	navigating bool
 	nav        navTarget
+	// menu is the context menu, open on the thing it acts on. Nil when none.
+	menu *ui.Menu
 
 	prompt         promptKind
 	promptText     string
@@ -142,6 +145,9 @@ type tui struct {
 	wake     chan struct{}
 	input    chan []byte
 	lostConn chan struct{}
+	// resync asks the main loop to re-read the session. It holds one slot, so
+	// a burst of state changes costs one round trip rather than one each.
+	resync chan struct{}
 
 	cols, rows int
 	detach     bool
@@ -197,6 +203,13 @@ func (t *tui) run() error {
 			}
 			if err := t.reconnect(); err != nil {
 				return err
+			}
+
+		case <-t.resync:
+			// Something the session describes changed — which agent a pane is
+			// running, what it is doing — and that is not in the pane's output.
+			if err := t.refreshSnapshot(); err != nil {
+				t.setMessage(err.Error(), true)
 			}
 
 		case <-t.wake:
@@ -463,8 +476,54 @@ func (t *tui) Event(ev proto.Event) {
 				t.setMessage(err.Error(), true)
 			}
 		}()
+	case proto.EventPaneState:
+		// A pane's agent and its state live in the session, not in the bytes
+		// the pane produced, so redrawing from what the client already has
+		// would show the old answer forever. This is what the agent list is
+		// for, and it was silent until the shape of the session happened to
+		// change for some other reason.
+		t.askResync()
 	}
 	t.markDirty()
+}
+
+// askResync asks the main loop to re-read the session, at most once at a time.
+//
+// It never blocks: this runs on the client's reader goroutine, and the reply
+// to the request it is asking for comes back through that same goroutine.
+func (t *tui) askResync() {
+	select {
+	case t.resync <- struct{}{}:
+	default:
+	}
+}
+
+// refreshSnapshot re-reads the session without recomputing the layout.
+//
+// A state change cannot move a pane, so paying for a layout round trip on
+// every one of them would be work for nothing — and there is one per agent
+// per change of what it is doing.
+func (t *tui) refreshSnapshot() error {
+	snap, err := t.client.Snapshot()
+	if err != nil {
+		return err
+	}
+
+	t.mu.Lock()
+	before := t.tab
+	t.snap = snap
+	t.resolveViewLocked()
+	changed := t.tab != before
+	t.dirty = true
+	t.mu.Unlock()
+
+	if changed {
+		// The view landed on another tab, so the layout this client is drawing
+		// describes panes that are no longer on screen.
+		return t.refresh()
+	}
+	t.wakeUp()
+	return nil
 }
 
 // Disconnected marks the session as gone and asks the main loop to reconnect.
@@ -546,6 +605,7 @@ func (t *tui) buildFrame() ui.Frame {
 		Alert:   t.alert,
 		Prefix:  t.keys.Armed(),
 		Overlay: t.overlay,
+		Menu:    t.menu,
 		Zoomed:  t.zoom,
 		Offline: t.offline,
 	}
@@ -718,6 +778,19 @@ func (t *tui) handleInput(data []byte) error {
 	// the keys must not discard the commands that came with them.
 	// The prompt takes the keyboard ahead of everything else: while a name is
 	// being typed, every key is part of that name.
+	// An open menu takes the keyboard first: it is the thing on top of the
+	// screen, and a key going past it to a pane would be typed into something
+	// the user cannot see.
+	if t.menuOpen() {
+		handled, err := t.menuKeys(forward)
+		if err != nil {
+			return err
+		}
+		if handled {
+			forward = nil
+		}
+	}
+
 	if t.prompting() {
 		handled, err := t.promptKeys(forward)
 		if err != nil {
@@ -792,6 +865,25 @@ func (t *tui) command(action ui.Action) error {
 		t.mu.Unlock()
 		t.painter.Invalidate()
 		return t.refresh()
+
+	case ui.CommandMenu:
+		if t.menuOpen() {
+			t.closeMenu()
+			return nil
+		}
+		// From the keyboard the menu opens on the focused pane, at its top
+		// corner: there is no pointer to open it under.
+		if focus == 0 {
+			return nil
+		}
+		at := ui.Rect{}
+		for _, r := range rects {
+			if r.Pane == focus {
+				at = ui.Rect{X: r.X, Y: r.Y}
+			}
+		}
+		t.openMenu(ui.PaneMenu(focus, at.X+2, at.Y+1, len(rects) > 1))
+		return nil
 
 	case ui.CommandRenameTab:
 		t.startPrompt(promptRenameTab)

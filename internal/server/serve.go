@@ -34,6 +34,7 @@ var Methods = []string{
 	proto.MethodWorkspaceNew,
 	proto.MethodTabNew,
 	proto.MethodTabClose,
+	proto.MethodWorkspaceClose,
 	proto.MethodTabRename,
 	proto.MethodWorkspaceRename,
 	proto.MethodPaneSplit,
@@ -347,6 +348,13 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		return nil, c.srv.CloseTab(session.TabID(p.Tab))
+
+	case proto.MethodWorkspaceClose:
+		var p proto.WorkspaceCloseParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.CloseWorkspace(session.WorkspaceID(p.Workspace))
 
 	case proto.MethodTabRename:
 		var p proto.TabRenameParams
