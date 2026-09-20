@@ -132,6 +132,9 @@ type tui struct {
 	// autoScroll is which way the view moves while a drag is held against an
 	// edge: -1 back through the history, 1 towards the present.
 	autoScroll int
+	// lastWheel paces the notches handed to a pane that keeps its own
+	// scrollback, which would otherwise get one per frame.
+	lastWheel time.Time
 	// spacesScroll and agentsScroll are how far each list is scrolled, in
 	// entries. Separate because the lists are: one filling up must not push
 	// the other out of sight, which is the whole reason they are divided.

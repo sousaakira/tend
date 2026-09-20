@@ -34,6 +34,10 @@ type Selection struct {
 	// set. A selection follows the text, not the screen: when the view moves
 	// under it the ends move with it, so what it covers does not change.
 	Scroll int
+	// Native marks that the pane's own program asked for the mouse, which is
+	// also the kind of program that keeps its own scrollback and leaves none
+	// here.
+	Native bool
 	// Block takes a rectangle instead of a run of text.
 	//
 	// A run is right for prose and wrong for anything laid out in columns,

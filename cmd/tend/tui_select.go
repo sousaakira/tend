@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"time"
 
 	"github.com/sousaakira/tend/internal/clipboard"
 	"github.com/sousaakira/tend/internal/proto"
@@ -87,9 +88,21 @@ func (t *tui) startSelectionLocked(pane uint64, x, y int) {
 		CursorX:  x,
 		CursorY:  y,
 		Scroll:   t.selectionScrollLocked(pane),
+		Native:   t.forwardsMouseLocked(pane),
 		Dragging: true,
 	}
 	t.dirty = true
+}
+
+// forwardsMouseLocked is forwardsMouse for a caller that already holds the
+// lock.
+func (t *tui) forwardsMouseLocked(pane uint64) bool {
+	for _, p := range t.snap.Panes {
+		if p.ID == pane {
+			return p.Mouse
+		}
+	}
+	return false
 }
 
 // dragSelection moves the far end of the selection, and reports whether one is
@@ -152,6 +165,46 @@ func (t *tui) takePendingPress() (uint64, bool) {
 	return press.pane, press.sent
 }
 
+// wheelTo sends one notch of the wheel to a pane's own program.
+//
+// Coordinates are the middle of the pane rather than the pointer: the pointer
+// is at the edge, and a program that treats the top row as a header would take
+// a wheel event there as meaning something other than "scroll the transcript".
+func (t *tui) wheelTo(pane uint64, dir int) error {
+	t.mu.Lock()
+	// Paced, unlike tend's own scrolling. One line per frame is a steady
+	// creep through a scrollback; one wheel notch per frame is what a mouse
+	// sends when it is spun as hard as it will go, and a program on the other
+	// end would fling its view across the transcript.
+	if time.Since(t.lastWheel) < wheelInterval {
+		t.mu.Unlock()
+		return nil
+	}
+	t.lastWheel = time.Now()
+
+	var mid ui.Rect
+	for _, r := range t.paneRects() {
+		if r.Pane == pane {
+			mid = ui.Rect{X: r.X + r.Cols/2, Y: r.Y + r.Rows/2}
+		}
+	}
+	t.mu.Unlock()
+	if mid.X == 0 && mid.Y == 0 {
+		return nil
+	}
+
+	button := 64 // wheel up
+	if dir > 0 {
+		button = 65
+	}
+	seq := "\x1b[<" + itoaInt(button) + ";" + itoaInt(mid.X+1) + ";" + itoaInt(mid.Y+1) + "M"
+	return t.client.SendInput(pane, []byte(seq))
+}
+
+// wheelInterval is how often a held drag hands a notch to the pane's program.
+// About what a hand turning a wheel deliberately produces.
+const wheelInterval = 120 * time.Millisecond
+
 // releaseNative tells a pane's program the button came back up, so a drag that
 // became a selection does not leave it holding one.
 func (t *tui) releaseNative(pane uint64, ev ui.MouseEvent) {
@@ -208,15 +261,22 @@ func (t *tui) endSelection() bool {
 // edgeDirectionLocked reports which way the view should move for a pointer at
 // a pane's edge: -1 back through the history, 1 towards the present, 0 for a
 // pointer that is comfortably inside.
+//
+// The edge is the first and last line of text, not the border around them.
+// Dragging up through the text stops at the topmost line, because that is
+// where the text stops; a trigger one row further out is a single cell of
+// border that nobody aims at, and the first version of this had exactly that
+// and so never fired in ordinary use.
 func (t *tui) edgeDirectionLocked(pane uint64, y int) int {
 	for _, r := range t.paneRects() {
 		if r.Pane != pane {
 			continue
 		}
+		top, bottom := r.Y+1, r.Y+r.Rows-2
 		switch {
-		case y <= r.Y:
+		case y <= top:
 			return -1
-		case y >= r.Y+r.Rows-1:
+		case y >= bottom:
 			return 1
 		}
 		return 0
@@ -248,6 +308,19 @@ func (t *tui) autoScrollSelection() error {
 	}
 
 	t.mu.Lock()
+	moved := t.selectionScrollLocked(pane) - before
+	native := t.sel != nil && t.sel.Native
+	t.mu.Unlock()
+
+	if moved == 0 && native {
+		// Nothing to scroll to, because a full-screen program keeps no
+		// scrollback here: its earlier output never reached this terminal,
+		// and it redraws its window from its own memory. The wheel goes to it
+		// instead, so its view moves even though tend's cannot.
+		return t.wheelTo(pane, dir)
+	}
+
+	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.sel == nil {
 		return nil
@@ -257,7 +330,6 @@ func (t *tui) autoScrollSelection() error {
 	// marks where the pointer is, and the pointer has not moved. That is the
 	// whole of the behaviour: holding against the edge sweeps the far end
 	// backwards through text the view is only now showing.
-	moved := t.selectionScrollLocked(pane) - before
 	if moved == 0 {
 		// Nothing left to scroll, so there is nothing more to take.
 		return nil

@@ -2232,3 +2232,89 @@ func TestAttachSaysNothingWhenTheBuildsAgree(t *testing.T) {
 		t.Errorf("differing build strings alone are not a mismatch:\n%s", text)
 	}
 }
+
+// TestAttachScrollsFromTheEdgeOfTheText: the edge is the first and last line
+// of text, not the border around them. A trigger one row further out is a
+// single cell of border that nobody aims at, and the first version of this
+// had exactly that and so never fired in ordinary use.
+func TestAttachScrollsFromTheEdgeOfTheText(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "for i in $(seq 1 40); do echo LINE-$i; done\n", "the output", func(s string) bool {
+		return strings.Contains(s, "LINE-40")
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	border := -1
+	for i, line := range a.lines() {
+		if strings.Contains(line, "┌") {
+			border = i
+			break
+		}
+	}
+	if border < 0 {
+		t.Fatalf("no pane border:\n%s", a.text())
+	}
+	row := a.lineContaining(t, "LINE-40")
+	col := columnOfString(a.lines()[row-1], "LINE-40") + 1
+
+	// The first row of text, one below the border, counted from one.
+	top := border + 2
+	a.send(t, "\x1b[<0;"+itoa(col+6)+";"+itoa(row)+"M")
+	time.Sleep(120 * time.Millisecond)
+	a.send(t, "\x1b[<32;"+itoa(col)+";"+itoa(top)+"M")
+
+	a.waitForScreen(t, "the view to follow", func(s string) bool {
+		return strings.Contains(s, "scroll ")
+	})
+	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(top)+"m")
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied ")
+	})
+}
+
+// TestAttachHandsTheWheelToAProgramWithItsOwnHistory: a full-screen program
+// keeps no scrollback here — its earlier output never reached this terminal,
+// and it redraws its window from its own memory. There is nowhere for tend to
+// scroll to, so the wheel goes to the program instead.
+func TestAttachHandsTheWheelToAProgramWithItsOwnHistory(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	prog := fakeAgentBin(t, "fullscreen",
+		"printf '\\033[?1049h\\033[?1002h\\033[?1006h'; printf 'ALT-TOP\\n'; cat")
+	a.sendUntil(t, prog+"\n", "the program", func(s string) bool {
+		return strings.Contains(s, "ALT-TOP")
+	})
+	time.Sleep(400 * time.Millisecond)
+
+	border := -1
+	for i, line := range a.lines() {
+		if strings.Contains(line, "┌") {
+			border = i
+			break
+		}
+	}
+	row := a.lineContaining(t, "ALT-TOP")
+	col := columnOfString(a.lines()[row-1], "ALT-TOP") + 1
+
+	a.send(t, "\x1b[<0;"+itoa(col+4)+";"+itoa(row+2)+"M")
+	time.Sleep(120 * time.Millisecond)
+	a.send(t, "\x1b[<32;"+itoa(col)+";"+itoa(border+2)+"M")
+
+	a.waitForScreen(t, "the program to be handed the wheel", func(s string) bool {
+		return strings.Contains(s, "[<64;")
+	})
+	time.Sleep(700 * time.Millisecond)
+	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(border+2)+"m")
+
+	// Paced, not one per frame: a program on the other end would otherwise
+	// fling its view across the whole transcript.
+	if n := strings.Count(a.text(), "[<64;"); n > 20 {
+		t.Errorf("%d wheel notches in under a second; they should be paced", n)
+	}
+	// And tend does not pretend to have scrolled something it cannot.
+	if strings.Contains(a.text(), "scroll ") {
+		t.Errorf("a pane with no scrollback should not show a scroll offset:\n%s", a.text())
+	}
+}
