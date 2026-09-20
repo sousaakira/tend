@@ -46,6 +46,12 @@ type Selection struct {
 	Dragging bool
 }
 
+// CopyCursor is copy mode's cursor, in the pane's own cells.
+type CopyCursor struct {
+	Pane uint64
+	X, Y int
+}
+
 // bounds returns the rectangle the two ends span.
 func (s Selection) bounds() (left, top, right, bottom int) {
 	return min(s.AnchorX, s.CursorX), min(s.AnchorY, s.CursorY),

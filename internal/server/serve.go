@@ -48,6 +48,8 @@ var Methods = []string{
 	proto.MethodTabLayout,
 	proto.MethodServerShutdown,
 	proto.MethodServerHandoff,
+	proto.MethodPaneCopyMotion,
+	proto.MethodPaneCopySearch,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -484,6 +486,20 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 	case proto.MethodServerShutdown:
 		c.shutdown = true
 		return nil, nil
+
+	case proto.MethodPaneCopyMotion:
+		var p proto.PaneCopyMotionParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.CopyMotion(session.PaneID(p.Pane), p.From, p.Motion)
+
+	case proto.MethodPaneCopySearch:
+		var p proto.PaneCopySearchParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.CopySearch(session.PaneID(p.Pane), p.From, p.Query, p.Direction)
 
 	case proto.MethodServerHandoff:
 		// Carried out before answering, so the answer can say whether it

@@ -190,6 +190,11 @@ type Frame struct {
 	// user unable to tell a glance back from being lost in a long history.
 	Scroll      int
 	ScrollDepth int
+	// Copy marks copy mode, and CopyCursor is where its cursor is. The
+	// terminal's own cursor is put there: it is the one mark every terminal
+	// already draws, blinks and makes visible on any colour.
+	Copy       bool
+	CopyCursor *CopyCursor
 	// Zoomed marks that one pane is filling the area, so the status bar can
 	// say so — a zoomed pane and a session with one pane look identical
 	// otherwise.
@@ -475,6 +480,19 @@ func CursorPosition(f Frame, cols, rows int) (x, y int, visible bool) {
 	if x, y, ok := PromptCursor(f, cols, rows); ok {
 		return x, y, true
 	}
+	if c := f.CopyCursor; c != nil {
+		for _, p := range f.Panes {
+			if p.ID != c.Pane {
+				continue
+			}
+			inner := innerRect(p.Rect)
+			if c.X < 0 || c.Y < 0 || c.X >= inner.Cols || c.Y >= inner.Rows {
+				return 0, 0, false
+			}
+			return inner.X + c.X, inner.Y + c.Y, true
+		}
+		return 0, 0, false
+	}
 	for _, p := range f.Panes {
 		if !p.Focused || p.Screen == nil {
 			continue
@@ -662,7 +680,9 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	if f.Zoomed {
 		left += " · zoom"
 	}
-	if f.Scroll > 0 {
+	if f.Copy {
+		left += " · copy " + itoa(uint64(f.Scroll)) + "/" + itoa(uint64(f.ScrollDepth))
+	} else if f.Scroll > 0 {
 		left += " · scroll " + itoa(uint64(f.Scroll)) + "/" + itoa(uint64(f.ScrollDepth))
 	}
 	x = writeString(dst, x, y, left+"  ", theme.StatusKey, limit)

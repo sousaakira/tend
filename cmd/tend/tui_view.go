@@ -84,6 +84,41 @@ func (t *tui) leaveScroll() {
 	t.wakeUp()
 }
 
+// paneSizeLocked is the size a pane is drawn at, inside its border. The
+// caller holds the lock.
+func (t *tui) paneSizeLocked(pane uint64) (cols, rows int) {
+	rect, ok := t.sizes[pane]
+	if !ok {
+		return 0, 0
+	}
+	return ui.InnerSize(rect)
+}
+
+// scrollTo shows a pane at an exact distance back. Unlike scrollBy it stays at
+// zero: copy mode shows the present as a still picture, with a cursor on it,
+// and leaving the view there would take the cursor away.
+func (t *tui) scrollTo(pane uint64, offset int) error {
+	view, err := t.client.PaneScreenAt(pane, max(offset, 0))
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.scrollPane != pane {
+		return nil // left the view while the request was in flight
+	}
+	if t.scrollScreen == nil || t.scrollScreen.Grid().Cols() != view.Cols {
+		t.scrollScreen = vt.NewScreen(view.Cols, view.Rows, 0)
+	} else {
+		t.scrollScreen.Resize(view.Cols, view.Rows)
+	}
+	_, _ = t.scrollScreen.Write([]byte(view.ANSI))
+	t.scrollOffset = max(view.Offset, 0)
+	t.scrollDepth = view.History
+	t.dirty = true
+	return nil
+}
+
 // scrollBy moves the view, positive being further back.
 func (t *tui) scrollBy(lines int) error {
 	t.mu.Lock()

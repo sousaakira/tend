@@ -172,6 +172,10 @@ type tui struct {
 	scrollOffset int
 	scrollDepth  int
 	scrollScreen *vt.Screen
+	// copy is copy mode while it is up, nil otherwise. It sits on the scroll
+	// view above: the pane is a still picture and the copy cursor moves
+	// through it.
+	copy *copyState
 
 	// dragPane and dragSide remember a divider grabbed with the mouse.
 	dragPane uint64
@@ -727,6 +731,13 @@ func (t *tui) buildFrame() ui.Frame {
 		frame.Scroll = t.scrollOffset
 		frame.ScrollDepth = t.scrollDepth
 	}
+	if t.copy != nil {
+		frame.Copy = true
+		frame.CopyCursor = t.copyCursorLocked()
+		if prompt := t.copyPromptLocked(); prompt != "" {
+			frame.Message, frame.Alert = prompt, false
+		}
+	}
 
 	info := make(map[uint64]proto.PaneInfo, len(t.snap.Panes))
 	for _, p := range t.snap.Panes {
@@ -933,6 +944,15 @@ func (t *tui) handleInput(data []byte) error {
 		}
 	}
 
+	if t.copying() {
+		// Before the scroll view's keys: copy mode is on top of it, and every
+		// key is copy mode's while it is up.
+		if _, err := t.copyKeys(forward); err != nil {
+			return err
+		}
+		forward = nil
+	}
+
 	if t.scrolling() {
 		handled, err := t.scrollKeys(forward)
 		if err != nil {
@@ -1044,11 +1064,17 @@ func (t *tui) command(action ui.Action) error {
 		return nil
 
 	case ui.CommandScroll:
+		// prefix+[ is copy mode, as in tmux and herdr. It used to be a plain
+		// scroll view, which copy mode now is with a cursor added.
+		if t.copying() {
+			t.leaveCopy()
+			return nil
+		}
 		if t.scrolling() {
 			t.leaveScroll()
 			return nil
 		}
-		return t.enterScroll()
+		return t.enterCopy()
 
 	case ui.CommandZoom:
 		t.mu.Lock()

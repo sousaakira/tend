@@ -41,6 +41,11 @@ const (
 	// the replacement holds the panes; the connection drops right after, and
 	// reconnecting reaches the new server on the same socket.
 	MethodServerHandoff = "server.handoff"
+	// MethodPaneCopyMotion and MethodPaneCopySearch are copy mode's questions
+	// to the server: where a motion lands, and where the next match is. The
+	// cursor lives in the client; the text it moves through lives here.
+	MethodPaneCopyMotion = "pane.copy_motion"
+	MethodPaneCopySearch = "pane.copy_search"
 )
 
 // Request is a call from a client.
@@ -98,6 +103,8 @@ var KnownMethods = []string{
 	MethodPaneAdjust,
 	MethodServerShutdown,
 	MethodServerHandoff,
+	MethodPaneCopyMotion,
+	MethodPaneCopySearch,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -215,6 +222,40 @@ type PaneTextParams struct {
 	ToCol   int `json:"to_col"`
 	// Block takes a rectangle instead of a run of text.
 	Block bool `json:"block,omitempty"`
+}
+
+// CopyPoint is a cell by absolute row: row 0 is the oldest line the pane
+// keeps. Copy mode addresses the whole history this way, because a viewport
+// row means a different line every time the view moves.
+type CopyPoint struct {
+	Row int `json:"row"`
+	Col int `json:"col"`
+}
+
+// PaneCopyMotionParams asks where a motion from a point lands.
+type PaneCopyMotionParams struct {
+	Pane   uint64    `json:"pane"`
+	From   CopyPoint `json:"from"`
+	Motion string    `json:"motion"`
+}
+
+// PaneCopySearchParams asks for the nearest match of a query.
+type PaneCopySearchParams struct {
+	Pane      uint64    `json:"pane"`
+	From      CopyPoint `json:"from"`
+	Query     string    `json:"query"`
+	Direction string    `json:"direction"`
+}
+
+// PaneCopyResult is where the cursor goes, and how much history there is now,
+// so the client can turn the absolute row into a view.
+type PaneCopyResult struct {
+	To      CopyPoint `json:"to"`
+	End     CopyPoint `json:"end,omitempty"`
+	Found   bool      `json:"found,omitempty"`
+	Total   int       `json:"total,omitempty"`
+	History int       `json:"history"`
+	Rows    int       `json:"rows"`
 }
 
 // PaneTextResult carries what the region holds.

@@ -123,6 +123,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   environment, in a process group of their own, killed after 30s. Verified end
   to end with a plugin written for the test (hook, action, pane); **not**
   verified with the owner's `herdr-sidebar`, which needs more than the host.
+- **Copy mode** (herdr's `client/shell/copy_mode.rs`): `ctrl+b [` enters it,
+  as in tmux and herdr — it replaces the plain scroll view, which it is with a
+  cursor added. vi motions (`h j k l w b e W B E 0 ^ $ { } g G`, pages with
+  ctrl+b/f/u/d), `v`/space and `V` to select, `y`/enter to copy (the cursor's
+  line when nothing is selected), `/` `?` `n` `N` to search, escape clears a
+  selection and then leaves. Motions and search run on the server
+  (`pane.copy_motion`, `pane.copy_search`) with herdr's word classes and
+  separator set; search is literal, smart-case, and matches across wrapped rows.
+  Verified inside the real Claude Code: searched, selected and copied its text.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -243,13 +252,19 @@ The host is ported (see "Ported, and checked"). Left:
   `persist/plugin_registry.rs`, `app/api/plugins/`, `api/schema/plugins.rs`;
   user docs `plugins.mdx`, `marketplace.mdx`.
 
-### 5. Copy mode and scrollback tools — medium
+### 5. Copy mode and scrollback tools — copy mode done, the rest is open
 
-- herdr: `client/shell/copy_mode.rs` (873) — keyboard selection and search in
-  scrollback; `pane.copy_motion`, `pane.copy_search`; `EditScrollback` opens the
-  history in `$EDITOR` (`server/client_commands.rs`); double-click word
-  selection in `client/shell/word_selection.rs` (217).
-- tend today: `ctrl+b [` scrolls; selection is mouse-only.
+Copy mode is ported (see "Ported, and checked"). Left:
+
+- `EditScrollback`: the pane's history opened in `$EDITOR`
+  (`server/client_commands.rs`).
+- Double-click word selection with the mouse
+  (`client/shell/word_selection.rs`, 217 lines) — the word rule it needs is
+  now in `internal/copymode`.
+- herdr refuses a motion when the pane's content changed since the client last
+  looked (`stale_content`). tend does not: a pane printing while copy mode is
+  up can shift the rows under the cursor.
+- Highlighting every match while searching; herdr keeps a window of them.
 
 ### 6. Worktrees — medium
 

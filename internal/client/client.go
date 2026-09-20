@@ -418,6 +418,22 @@ func (c *Client) TabLayout(tab uint64, cols, rows int) (proto.TabLayoutResult, e
 	}, &out)
 }
 
+// CopyMotion asks where a copy-mode motion lands.
+func (c *Client) CopyMotion(pane uint64, from proto.CopyPoint, motion string) (proto.PaneCopyResult, error) {
+	var out proto.PaneCopyResult
+	return out, c.Call(proto.MethodPaneCopyMotion, proto.PaneCopyMotionParams{
+		Pane: pane, From: from, Motion: motion,
+	}, &out)
+}
+
+// CopySearch asks where the nearest match of a query is.
+func (c *Client) CopySearch(pane uint64, from proto.CopyPoint, query, direction string) (proto.PaneCopyResult, error) {
+	var out proto.PaneCopyResult
+	return out, c.Call(proto.MethodPaneCopySearch, proto.PaneCopySearchParams{
+		Pane: pane, From: from, Query: query, Direction: direction,
+	}, &out)
+}
+
 // Handoff asks the server to replace itself with the binary now on disk,
 // keeping what runs in its panes. The connection drops once it has.
 func (c *Client) Handoff() error {

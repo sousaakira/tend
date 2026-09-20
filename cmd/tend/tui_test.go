@@ -634,9 +634,11 @@ func TestAttachScrollsBack(t *testing.T) {
 		t.Fatal("line-1 should have scrolled off already")
 	}
 
+	// prefix+[ is copy mode now, which is the scroll view with a cursor, as
+	// in tmux and herdr. Paging up moves the cursor and the view goes with it.
 	a.send(t, "\x02[")
-	a.waitForScreen(t, "the scroll indicator", func(s string) bool {
-		return strings.Contains(s, "scroll")
+	a.waitForScreen(t, "the copy-mode indicator", func(s string) bool {
+		return strings.Contains(s, "copy ")
 	})
 
 	// Page back until the earliest line appears.
@@ -651,7 +653,7 @@ func TestAttachScrollsBack(t *testing.T) {
 	// Leaving the view returns to the live screen.
 	a.send(t, "q")
 	a.waitForScreen(t, "the live screen", func(s string) bool {
-		return !strings.Contains(s, "scroll") && strings.Contains(s, "line-40")
+		return !strings.Contains(s, "copy ") && strings.Contains(s, "line-40")
 	})
 }
 
