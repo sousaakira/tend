@@ -212,6 +212,25 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		t.toggleGroup(m.Group)
 		return nil
 
+	case ui.MenuMoveBack, ui.MenuMoveOn:
+		delta := 1
+		if item.Action == ui.MenuMoveBack {
+			delta = -1
+		}
+		var err error
+		if m.Tab != 0 {
+			err = t.client.MoveTab(m.Tab, delta)
+		} else if m.Workspace != 0 {
+			err = t.client.MoveWorkspace(m.Workspace, delta)
+		}
+		if err != nil {
+			if t.reportStaleServer(err) || isNothingToMove(err) {
+				return nil // already at that end of the row
+			}
+			return err
+		}
+		return t.refresh()
+
 	case ui.MenuNewTab:
 		if m.Workspace != 0 {
 			if err := t.showWorkspace(m.Workspace); err != nil {

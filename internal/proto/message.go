@@ -46,6 +46,11 @@ const (
 	// cursor lives in the client; the text it moves through lives here.
 	MethodPaneCopyMotion = "pane.copy_motion"
 	MethodPaneCopySearch = "pane.copy_search"
+	// MethodPaneSwap, MethodTabMove and MethodWorkspaceMove rearrange without
+	// making anything again: the programs keep running wherever they end up.
+	MethodPaneSwap      = "pane.swap"
+	MethodTabMove       = "tab.move"
+	MethodWorkspaceMove = "workspace.move"
 )
 
 // Request is a call from a client.
@@ -105,6 +110,9 @@ var KnownMethods = []string{
 	MethodServerHandoff,
 	MethodPaneCopyMotion,
 	MethodPaneCopySearch,
+	MethodPaneSwap,
+	MethodTabMove,
+	MethodWorkspaceMove,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -142,11 +150,14 @@ const (
 	// FeatureMouseDetail: the snapshot says how much mouse a pane asked for
 	// and in which encoding.
 	FeatureMouseDetail = "mouse-detail"
+	// FeatureSessionChanged: the server says when panes are swapped, and tabs
+	// or spaces moved, renamed or regrouped.
+	FeatureSessionChanged = "session-changed"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
 // KnownMethods exists.
-var KnownFeatures = []string{FeaturePaneClipboard, FeatureMouseDetail}
+var KnownFeatures = []string{FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged}
 
 // --- session ---------------------------------------------------------------
 
@@ -364,6 +375,29 @@ type PaneResizeParams struct {
 	Rows int    `json:"rows"`
 }
 
+// PaneSwapParams exchanges a pane with another, named or found on a side of it
+// as laid out at Cols by Rows.
+type PaneSwapParams struct {
+	Pane   uint64 `json:"pane"`
+	Target uint64 `json:"target,omitempty"`
+	Side   string `json:"side,omitempty"`
+	Cols   int    `json:"cols,omitempty"`
+	Rows   int    `json:"rows,omitempty"`
+}
+
+// PaneSwapResult names the pane it traded places with.
+type PaneSwapResult struct {
+	Other uint64 `json:"other"`
+}
+
+// MoveParams puts a tab or a space at an index in its row. Delta, when set,
+// moves it that many places instead, which is what a key binding asks for.
+type MoveParams struct {
+	ID    uint64 `json:"id"`
+	Index int    `json:"index"`
+	Delta int    `json:"delta,omitempty"`
+}
+
 // PaneAdjustParams moves one edge of a pane, taking the space from the
 // neighbour across it.
 //
@@ -455,6 +489,9 @@ const (
 	EventPaneClosed = "pane-closed"
 	// EventPaneClipboard carries text a pane's program asked to have copied.
 	EventPaneClipboard = "pane-clipboard"
+	// EventSessionChanged says the session's shape changed with no pane
+	// opened or closed. It carries nothing: the client reads the session.
+	EventSessionChanged = "session-changed"
 )
 
 // Event is something that happened, sent unsolicited.

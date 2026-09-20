@@ -214,6 +214,55 @@ func (t *tui) scrollKey(key string) (bool, error) {
 	return false, nil
 }
 
+// --- resize mode -------------------------------------------------------------
+
+func (t *tui) resizingNow() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.resizing
+}
+
+// resizeKeys drives resize mode: herdr's, where the movement keys push the
+// focused pane's edges and escape ends it. The prefix is not needed before
+// each press, which is the whole point of a mode — resizing by a few cells at
+// a time is otherwise two keys per cell.
+//
+// Any key that is not a resize key ends the mode and goes where it was going,
+// so typing at a prompt after resizing does what it looks like.
+func (t *tui) resizeKeys(data []byte) (bool, error) {
+	for _, key := range splitKeys(data) {
+		var cmd ui.Command
+		switch key {
+		case "h", "H", "\x1b[D":
+			cmd = ui.CommandGrowLeft
+		case "l", "L", "\x1b[C":
+			cmd = ui.CommandGrowRight
+		case "k", "K", "\x1b[A":
+			cmd = ui.CommandGrowUp
+		case "j", "J", "\x1b[B":
+			cmd = ui.CommandGrowDown
+		case "\x1b", "\r", "q", "r":
+			t.leaveResize()
+			continue
+		default:
+			t.leaveResize()
+			return false, nil
+		}
+		if err := t.command(ui.Action{Command: cmd}); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
+}
+
+func (t *tui) leaveResize() {
+	t.mu.Lock()
+	t.resizing = false
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+}
+
 // --- mouse -----------------------------------------------------------------
 
 // handleMouse turns a mouse report into focus, a resize, a scroll, or input

@@ -338,7 +338,14 @@ func TestInputPrefixCommands(t *testing.T) {
 		"n": CommandNextTab,
 		"p": CommandPrevTab,
 		"d": CommandDetach,
-		"r": CommandRefresh,
+		// herdr's bindings: r is resize mode, and the shifted movement keys
+		// swap. Redraw moved to R to make room.
+		"r": CommandResizeMode,
+		"R": CommandRefresh,
+		"H": CommandSwapLeft,
+		"J": CommandSwapDown,
+		"K": CommandSwapUp,
+		"L": CommandSwapRight,
 		"?": CommandHelp,
 	}
 	for key, want := range cases {

@@ -593,12 +593,23 @@ func TestAttachResizesASplit(t *testing.T) {
 	}
 
 	// Focus is on the new right-hand pane, so growing it leftwards moves the
-	// divider left.
-	a.send(t, "\x02H")
+	// divider left. Resizing is herdr's resize mode: prefix+r, then h/j/k/l
+	// as many times as wanted without the prefix, and escape.
+	a.send(t, "\x02r")
+	a.waitForScreen(t, "resize mode", func(s string) bool { return strings.Contains(s, "resize") })
+	a.send(t, "h")
 	a.waitForScreen(t, "the divider to move left", func(string) bool {
 		d := a.dividerColumn()
 		return d >= 0 && d < start
 	})
+	moved := a.dividerColumn()
+	a.send(t, "h")
+	a.waitForScreen(t, "a second press to move it again, with no prefix", func(string) bool {
+		d := a.dividerColumn()
+		return d >= 0 && d < moved
+	})
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "resize mode to end", func(s string) bool { return !strings.Contains(s, "resize") })
 }
 
 // TestAttachShowsTabs: the bar is there from the first tab, because it holds

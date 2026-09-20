@@ -1,0 +1,122 @@
+package session
+
+import (
+	"errors"
+	"testing"
+)
+
+func threePanes(t *testing.T) (*Session, *Tab, PaneID, PaneID, PaneID) {
+	t.Helper()
+	s := New()
+	w := s.AddWorkspace("main")
+	tab, a, err := s.AddTab(w.ID, "t", PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.SplitPane(a.ID, Columns, PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.SplitPane(b.ID, Rows, PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s, tab, a.ID, b.ID, c.ID
+}
+
+// TestASwapTradesPlacesAndKeepsTheShape: swapping two panes must not resize
+// anything. A swap that redistributed the space would be a second operation
+// the user did not ask for.
+func TestASwapTradesPlacesAndKeepsTheShape(t *testing.T) {
+	s, tab, a, b, _ := threePanes(t)
+	area := Rect{W: 120, H: 40}
+	before := map[PaneID]Rect{}
+	for _, pr := range tab.Layout(area) {
+		before[pr.Pane] = pr.Rect
+	}
+
+	if err := s.SwapPanes(a, b); err != nil {
+		t.Fatal(err)
+	}
+	after := map[PaneID]Rect{}
+	for _, pr := range tab.Layout(area) {
+		after[pr.Pane] = pr.Rect
+	}
+	if after[a] != before[b] || after[b] != before[a] {
+		t.Errorf("a is at %v (b was at %v), b at %v (a was at %v)", after[a], before[b], after[b], before[a])
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SwapPanes(a, a); !errors.Is(err, ErrNoMove) {
+		t.Errorf("swapping a pane with itself: %v", err)
+	}
+}
+
+// TestASwapTowardFindsTheNeighbour covers prefix+shift+h/j/k/l.
+func TestASwapTowardFindsTheNeighbour(t *testing.T) {
+	s, _, a, b, _ := threePanes(t)
+	area := Rect{W: 120, H: 40}
+	other, err := s.SwapPaneToward(a, Right, area)
+	if err != nil || other != b {
+		t.Fatalf("SwapPaneToward right = %v, %v; want %v", other, err, b)
+	}
+	// a is now on the right, so there is nothing further right of it.
+	if _, err := s.SwapPaneToward(a, Right, area); !errors.Is(err, ErrNoMove) {
+		t.Errorf("a swap with no neighbour: %v", err)
+	}
+}
+
+// TestMovingATabKeepsTheFocusedOneFocused: moving a tab is rearranging, not
+// switching, and the tab being looked at must stay the one being looked at.
+func TestMovingATabKeepsTheFocusedOneFocused(t *testing.T) {
+	s := New()
+	w := s.AddWorkspace("main")
+	var ids []TabID
+	for _, name := range []string{"one", "two", "three"} {
+		tab, _, err := s.AddTab(w.ID, name, PaneSpec{Command: []string{"sh"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, tab.ID)
+	}
+	if err := s.FocusTab(ids[1]); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MoveTab(ids[0], 2); err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, tab := range w.Tabs() {
+		order = append(order, tab.Name)
+	}
+	if got := order[0] + "," + order[1] + "," + order[2]; got != "two,three,one" {
+		t.Errorf("order = %s", got)
+	}
+	if w.ActiveTab().Name != "two" {
+		t.Errorf("focused tab is %q, want the one that was focused", w.ActiveTab().Name)
+	}
+	if err := s.MoveTab(ids[0], 9); !errors.Is(err, ErrNoMove) {
+		t.Errorf("moving past the end: %v", err)
+	}
+}
+
+func TestMovingASpaceKeepsTheActiveOneActive(t *testing.T) {
+	s := New()
+	a := s.AddWorkspace("a")
+	b := s.AddWorkspace("b")
+	c := s.AddWorkspace("c")
+	if err := s.FocusWorkspace(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MoveWorkspace(a.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	got := s.Workspaces()
+	if got[0] != b || got[1] != c || got[2] != a {
+		t.Errorf("order = %s %s %s", got[0].Name, got[1].Name, got[2].Name)
+	}
+	if s.ActiveWorkspace() != c {
+		t.Errorf("active = %s, want c", s.ActiveWorkspace().Name)
+	}
+}

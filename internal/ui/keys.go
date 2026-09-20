@@ -45,6 +45,15 @@ const (
 	CommandDetach
 	CommandRefresh
 	CommandHelp
+	// CommandSwapLeft and its siblings trade the focused pane with its
+	// neighbour on that side, herdr's prefix+shift+h/j/k/l.
+	CommandSwapLeft
+	CommandSwapRight
+	CommandSwapUp
+	CommandSwapDown
+	// CommandResizeMode enters resize mode, where h/j/k/l move the focused
+	// pane's edges until escape — herdr's prefix+r.
+	CommandResizeMode
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
@@ -110,6 +119,16 @@ func (c Command) String() string {
 		return "refresh"
 	case CommandHelp:
 		return "help"
+	case CommandSwapLeft:
+		return "swap-left"
+	case CommandSwapRight:
+		return "swap-right"
+	case CommandSwapUp:
+		return "swap-up"
+	case CommandSwapDown:
+		return "swap-down"
+	case CommandResizeMode:
+		return "resize-mode"
 	case CommandLiteralPrefix:
 		return "literal-prefix"
 	default:
@@ -133,8 +152,9 @@ var Keys = []struct {
 	{"o", CommandFocusNext, "focus next"},
 	{"x", CommandClosePane, "close pane"},
 	{"z", CommandZoom, "zoom pane"},
-	{"[", CommandScroll, "scroll back"},
-	{"HJKL", CommandGrowRight, "resize pane"},
+	{"[", CommandScroll, "copy mode"},
+	{"HJKL", CommandSwapRight, "swap pane"},
+	{"r", CommandResizeMode, "resize (hjkl, esc)"},
 	{"c", CommandNewTab, "new tab"},
 	{"n", CommandNextTab, "next tab"},
 	{"p", CommandPrevTab, "previous tab"},
@@ -147,7 +167,7 @@ var Keys = []struct {
 	{",", CommandRenameTab, "rename tab"},
 	{".", CommandRenameSpace, "rename space"},
 	{"d", CommandDetach, "detach"},
-	{"r", CommandRefresh, "redraw"},
+	{"R", CommandRefresh, "redraw"},
 	{"?", CommandHelp, "this help"},
 }
 
@@ -316,16 +336,17 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandZoom}
 	case '[':
 		return Result{Command: CommandScroll}
-	// Shifted movement keys resize instead of moving, which is the one
-	// convention every multiplexer shares.
+	// Shifted movement keys swap the pane that way, herdr's binding. Resizing
+	// has a mode of its own on r, where the unshifted keys do it repeatedly
+	// without the prefix before each press.
 	case 'H':
-		return Result{Command: CommandGrowLeft}
+		return Result{Command: CommandSwapLeft}
 	case 'L':
-		return Result{Command: CommandGrowRight}
+		return Result{Command: CommandSwapRight}
 	case 'K':
-		return Result{Command: CommandGrowUp}
+		return Result{Command: CommandSwapUp}
 	case 'J':
-		return Result{Command: CommandGrowDown}
+		return Result{Command: CommandSwapDown}
 	case 'c':
 		return Result{Command: CommandNewTab}
 	case 's':
@@ -353,6 +374,8 @@ func (in *Input) command(b byte) Result {
 	case 'd':
 		return Result{Command: CommandDetach}
 	case 'r':
+		return Result{Command: CommandResizeMode}
+	case 'R':
 		return Result{Command: CommandRefresh}
 	case '?':
 		return Result{Command: CommandHelp}

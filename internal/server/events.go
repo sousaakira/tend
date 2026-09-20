@@ -31,6 +31,12 @@ const (
 	// put on the clipboard. The clipboard belongs to whoever is looking at
 	// the pane, so the request is passed on rather than acted on here.
 	EventPaneClipboard
+	// EventSessionChanged reports that the session's shape changed without a
+	// pane coming or going: panes swapped, a tab or a space moved or renamed.
+	// Clients that did not make the change learn of it only this way, and
+	// before it existed a rename by one client stayed invisible to another
+	// until something unrelated made it look again.
+	EventSessionChanged
 )
 
 func (k EventKind) String() string {
@@ -47,6 +53,8 @@ func (k EventKind) String() string {
 		return "pane-closed"
 	case EventPaneClipboard:
 		return "pane-clipboard"
+	case EventSessionChanged:
+		return "session-changed"
 	default:
 		return "unknown"
 	}

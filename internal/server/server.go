@@ -577,12 +577,7 @@ func (s *Server) features() []string {
 
 // GroupWorkspace moves a workspace into a group, or out of one.
 func (s *Server) GroupWorkspace(id session.WorkspaceID, group string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return ErrClosed
-	}
-	return s.session.GroupWorkspace(id, group)
+	return s.rearrange(func(sess *session.Session) error { return sess.GroupWorkspace(id, group) })
 }
 
 // CloseWorkspace closes a workspace and stops every pane in it.
@@ -697,26 +692,76 @@ func (s *Server) Write(id session.PaneID, data []byte) error {
 
 // RenameTab changes a tab's label.
 func (s *Server) RenameTab(id session.TabID, name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return ErrClosed
-	}
-	return s.session.RenameTab(id, name)
+	return s.rearrange(func(sess *session.Session) error { return sess.RenameTab(id, name) })
 }
 
 // RenameWorkspace changes a workspace's label.
 func (s *Server) RenameWorkspace(id session.WorkspaceID, name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
-		return ErrClosed
-	}
-	return s.session.RenameWorkspace(id, name)
+	return s.rearrange(func(sess *session.Session) error { return sess.RenameWorkspace(id, name) })
 }
 
 // AdjustSplit moves one edge of a pane within its tab's layout, taking the
 // space from the neighbour across it.
+// SwapPanes exchanges two panes' places in their tab.
+func (s *Server) SwapPanes(a, b session.PaneID) error {
+	return s.rearrange(func(sess *session.Session) error { return sess.SwapPanes(a, b) })
+}
+
+// SwapPaneToward exchanges a pane with its neighbour on one side.
+func (s *Server) SwapPaneToward(id session.PaneID, side session.Side, area session.Rect) (session.PaneID, error) {
+	var other session.PaneID
+	err := s.rearrange(func(sess *session.Session) error {
+		var err error
+		other, err = sess.SwapPaneToward(id, side, area)
+		return err
+	})
+	return other, err
+}
+
+// MoveTab puts a tab at index, or delta places along when delta is set.
+func (s *Server) MoveTab(id session.TabID, index, delta int) error {
+	return s.rearrange(func(sess *session.Session) error {
+		if delta != 0 {
+			from, ok := sess.TabIndex(id)
+			if !ok {
+				return session.ErrNoSuchTab
+			}
+			index = from + delta
+		}
+		return sess.MoveTab(id, index)
+	})
+}
+
+// MoveWorkspace puts a space at index, or delta places along.
+func (s *Server) MoveWorkspace(id session.WorkspaceID, index, delta int) error {
+	return s.rearrange(func(sess *session.Session) error {
+		if delta != 0 {
+			from, ok := sess.WorkspaceIndex(id)
+			if !ok {
+				return session.ErrNoSuchWorkspace
+			}
+			index = from + delta
+		}
+		return sess.MoveWorkspace(id, index)
+	})
+}
+
+// rearrange changes the session's shape and tells every client, including the
+// ones that did not ask for it.
+func (s *Server) rearrange(fn func(*session.Session) error) error {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return ErrClosed
+	}
+	err := fn(s.session)
+	s.mu.Unlock()
+	if err == nil {
+		s.publish(Event{Kind: EventSessionChanged})
+	}
+	return err
+}
+
 func (s *Server) AdjustSplit(id session.PaneID, side session.Side, cells int, area session.Rect) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

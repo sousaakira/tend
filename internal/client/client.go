@@ -434,6 +434,31 @@ func (c *Client) CopySearch(pane uint64, from proto.CopyPoint, query, direction 
 	}, &out)
 }
 
+// SwapPaneToward exchanges a pane with its neighbour on a side, as laid out at
+// cols by rows, and names the neighbour.
+func (c *Client) SwapPaneToward(pane uint64, side string, cols, rows int) (uint64, error) {
+	var out proto.PaneSwapResult
+	err := c.Call(proto.MethodPaneSwap, proto.PaneSwapParams{
+		Pane: pane, Side: side, Cols: cols, Rows: rows,
+	}, &out)
+	return out.Other, err
+}
+
+// SwapPanes exchanges two panes.
+func (c *Client) SwapPanes(pane, target uint64) error {
+	return c.Call(proto.MethodPaneSwap, proto.PaneSwapParams{Pane: pane, Target: target}, nil)
+}
+
+// MoveTab moves a tab delta places along its row.
+func (c *Client) MoveTab(tab uint64, delta int) error {
+	return c.Call(proto.MethodTabMove, proto.MoveParams{ID: tab, Delta: delta}, nil)
+}
+
+// MoveWorkspace moves a space delta places along the list.
+func (c *Client) MoveWorkspace(ws uint64, delta int) error {
+	return c.Call(proto.MethodWorkspaceMove, proto.MoveParams{ID: ws, Delta: delta}, nil)
+}
+
 // Handoff asks the server to replace itself with the binary now on disk,
 // keeping what runs in its panes. The connection drops once it has.
 func (c *Client) Handoff() error {

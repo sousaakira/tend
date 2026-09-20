@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -172,6 +173,9 @@ type tui struct {
 	scrollOffset int
 	scrollDepth  int
 	scrollScreen *vt.Screen
+	// resizing is resize mode: h/j/k/l move the focused pane's edges until
+	// escape, without the prefix before every press.
+	resizing bool
 	// copy is copy mode while it is up, nil otherwise. It sits on the scroll
 	// view above: the pane is a still picture and the copy cursor moves
 	// through it.
@@ -536,6 +540,14 @@ func (t *tui) Event(ev proto.Event) {
 		}()
 	case proto.EventPaneClipboard:
 		t.paneCopied(ev.Data)
+	case proto.EventSessionChanged:
+		// Another client rearranged or renamed something. Re-read, off this
+		// goroutine for the same reason as above.
+		go func() {
+			if err := t.refresh(); err != nil {
+				t.setMessage(err.Error(), true)
+			}
+		}()
 	case proto.EventPaneState:
 		// A pane's agent and its state live in the session, not in the bytes
 		// the pane produced, so redrawing from what the client already has
@@ -731,6 +743,7 @@ func (t *tui) buildFrame() ui.Frame {
 		frame.Scroll = t.scrollOffset
 		frame.ScrollDepth = t.scrollDepth
 	}
+	frame.Resize = t.resizing
 	if t.copy != nil {
 		frame.Copy = true
 		frame.CopyCursor = t.copyCursorLocked()
@@ -944,6 +957,16 @@ func (t *tui) handleInput(data []byte) error {
 		}
 	}
 
+	if t.resizingNow() {
+		handled, err := t.resizeKeys(forward)
+		if err != nil {
+			return err
+		}
+		if handled {
+			forward = nil
+		}
+	}
+
 	if t.copying() {
 		// Before the scroll view's keys: copy mode is on top of it, and every
 		// key is copy mode's while it is up.
@@ -1116,11 +1139,58 @@ func (t *tui) command(action ui.Action) error {
 		t.painter.Invalidate()
 		return t.refresh()
 
+	case ui.CommandSwapLeft, ui.CommandSwapRight, ui.CommandSwapUp, ui.CommandSwapDown:
+		if focus == 0 {
+			return nil
+		}
+		area := t.layoutArea()
+		if _, err := t.client.SwapPaneToward(focus, swapSide(cmd), area.Cols, area.Rows); err != nil {
+			if t.reportStaleServer(err) {
+				return nil
+			}
+			// Nothing on that side is not a failure worth a message: it is
+			// the edge of the tab, and the key did what it could.
+			if isNothingToMove(err) {
+				return nil
+			}
+			return err
+		}
+		// Focus is on the pane, not the place, so it went with the pane.
+		return t.refresh()
+
+	case ui.CommandResizeMode:
+		t.mu.Lock()
+		t.resizing = !t.resizing
+		t.dirty = true
+		t.mu.Unlock()
+		return nil
+
 	case ui.CommandHelp:
 		t.toggleOverlay(ui.HelpLines())
 		return nil
 	}
 	return nil
+}
+
+// isNothingToMove recognises the server's session.ErrNoMove, which arrives as
+// text over the wire behind the method's name: "pane.swap: session: nothing
+// to move". The message is the only thing that crosses.
+func isNothingToMove(err error) bool {
+	return err != nil && strings.HasSuffix(err.Error(), session.ErrNoMove.Error())
+}
+
+// swapSide names the side a swap key trades toward.
+func swapSide(cmd ui.Command) string {
+	switch cmd {
+	case ui.CommandSwapLeft:
+		return "left"
+	case ui.CommandSwapRight:
+		return "right"
+	case ui.CommandSwapUp:
+		return "up"
+	default:
+		return "down"
+	}
 }
 
 // growSide names the edge a resize key moves.

@@ -27,6 +27,11 @@ const (
 	MenuGoTo       = "menu-go-to"
 	MenuGroup      = "menu-group"
 	MenuFold       = "menu-fold"
+	// MenuMoveBack and MenuMoveOn move a tab or a space one place along its
+	// row. herdr has the actions and binds no key to them; a menu is where
+	// somebody looking to reorder a tab will look.
+	MenuMoveBack = "menu-move-back"
+	MenuMoveOn   = "menu-move-on"
 )
 
 // MenuItem is one line of a menu.
@@ -149,6 +154,8 @@ func TabMenu(tab uint64, x, y int) Menu {
 		Items: []MenuItem{
 			{Label: "new tab", Action: MenuNewTab},
 			{Label: "rename", Action: MenuRename},
+			{Label: "move left", Action: MenuMoveBack},
+			{Label: "move right", Action: MenuMoveOn},
 			{Label: "close tab", Action: MenuClose},
 		},
 		X: x, Y: y, Tab: tab,
@@ -164,6 +171,8 @@ func SpaceMenu(workspace uint64, x, y int) Menu {
 			{Label: "new tab", Action: MenuNewTab},
 			{Label: "rename", Action: MenuRename},
 			{Label: "group...", Action: MenuGroup},
+			{Label: "move up", Action: MenuMoveBack},
+			{Label: "move down", Action: MenuMoveOn},
 			{Label: "close space", Action: MenuClose},
 		},
 		X: x, Y: y, Workspace: workspace,

@@ -50,6 +50,9 @@ var Methods = []string{
 	proto.MethodServerHandoff,
 	proto.MethodPaneCopyMotion,
 	proto.MethodPaneCopySearch,
+	proto.MethodPaneSwap,
+	proto.MethodTabMove,
+	proto.MethodWorkspaceMove,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -237,6 +240,8 @@ func (c *clientConn) forward(ev Event) error {
 	case EventPaneClipboard:
 		out.Kind = proto.EventPaneClipboard
 		out.Data = ev.Data
+	case EventSessionChanged:
+		out.Kind = proto.EventSessionChanged
 	default:
 		// An event kind this build does not map is dropped rather than sent
 		// half-formed, so a client never sees a message it cannot interpret.
@@ -475,6 +480,36 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return nil, c.srv.AdjustSplit(session.PaneID(p.Target), side, p.Cells,
 			session.Rect{W: p.Cols, H: p.Rows})
+
+	case proto.MethodPaneSwap:
+		var p proto.PaneSwapParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Target != 0 {
+			return proto.PaneSwapResult{Other: p.Target},
+				c.srv.SwapPanes(session.PaneID(p.Pane), session.PaneID(p.Target))
+		}
+		side, err := parseSide(p.Side)
+		if err != nil {
+			return nil, err
+		}
+		other, err := c.srv.SwapPaneToward(session.PaneID(p.Pane), side, session.Rect{W: p.Cols, H: p.Rows})
+		return proto.PaneSwapResult{Other: uint64(other)}, err
+
+	case proto.MethodTabMove:
+		var p proto.MoveParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.MoveTab(session.TabID(p.ID), p.Index, p.Delta)
+
+	case proto.MethodWorkspaceMove:
+		var p proto.MoveParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.MoveWorkspace(session.WorkspaceID(p.ID), p.Index, p.Delta)
 
 	case proto.MethodTabLayout:
 		var p proto.TabLayoutParams

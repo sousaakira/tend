@@ -57,6 +57,10 @@ const (
 
 	MethodEventsWait = "events.wait"
 
+	MethodPaneSwap      = "pane.swap"
+	MethodTabMove       = "tab.move"
+	MethodWorkspaceMove = "workspace.move"
+
 	MethodServerStop    = "server.stop"
 	MethodServerHandoff = "server.live_handoff"
 )
@@ -482,6 +486,78 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		return a.eventsWait(p.Kinds, p.PaneID, p.TimeoutMs)
 
+	case MethodPaneSwap:
+		var p struct {
+			PaneID       string `json:"pane_id"`
+			TargetPaneID string `json:"target_pane_id"`
+			Direction    string `json:"direction"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		if p.TargetPaneID != "" {
+			other, err := a.pane(p.TargetPaneID)
+			if err != nil {
+				return nil, err
+			}
+			if err := a.srv.SwapPanes(id, other); err != nil {
+				return nil, moveErr(err)
+			}
+			return ok2(), nil
+		}
+		side, ok := sides[p.Direction]
+		if !ok {
+			return nil, fail("invalid_params", "direction %q is not left, right, up or down", p.Direction)
+		}
+		// A layout needs a size to find a neighbour in. Any will do for
+		// deciding which pane is to the left, and this is the one panes start
+		// at when nothing has sized them.
+		other, err := a.srv.SwapPaneToward(id, side, session.Rect{W: 120, H: 40})
+		if err != nil {
+			return nil, moveErr(err)
+		}
+		return map[string]any{"type": "pane_swapped", "pane_id": PaneID(id), "other_pane_id": PaneID(other)}, nil
+
+	case MethodTabMove, MethodWorkspaceMove:
+		var p struct {
+			TabID       string `json:"tab_id"`
+			WorkspaceID string `json:"workspace_id"`
+			Index       *int   `json:"index"`
+			Delta       int    `json:"delta"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Index == nil && p.Delta == 0 {
+			return nil, fail("invalid_params", "give an index or a delta")
+		}
+		index := 0
+		if p.Index != nil {
+			index = *p.Index
+		}
+		var err error
+		if req.Method == MethodTabMove {
+			id, ok := parseID("t_", p.TabID)
+			if !ok {
+				return nil, fail("tab_not_found", "tab %s not found", p.TabID)
+			}
+			err = a.srv.MoveTab(session.TabID(id), index, p.Delta)
+		} else {
+			id, ok := parseID("w_", p.WorkspaceID)
+			if !ok {
+				return nil, fail("workspace_not_found", "workspace %s not found", p.WorkspaceID)
+			}
+			err = a.srv.MoveWorkspace(session.WorkspaceID(id), index, p.Delta)
+		}
+		if err != nil {
+			return nil, moveErr(err)
+		}
+		return ok2(), nil
+
 	case MethodServerStop:
 		pend.after = func() { _ = a.srv.Close() }
 		return ok2(), nil
@@ -706,6 +782,24 @@ func tabErr(name string, err error) error {
 		return fail("tab_not_found", "tab %s not found", name)
 	case errors.Is(err, session.ErrNoSuchWorkspace):
 		return fail("workspace_not_found", "workspace %s not found", name)
+	}
+	return err
+}
+
+var sides = map[string]session.Side{
+	"left": session.Left, "right": session.Right, "up": session.Up, "down": session.Down,
+}
+
+func moveErr(err error) error {
+	switch {
+	case errors.Is(err, session.ErrNoMove):
+		return fail("nothing_to_move", "%v", err)
+	case errors.Is(err, session.ErrNoSuchPane):
+		return fail("pane_not_found", "%v", err)
+	case errors.Is(err, session.ErrNoSuchTab):
+		return fail("tab_not_found", "%v", err)
+	case errors.Is(err, session.ErrNoSuchWorkspace):
+		return fail("workspace_not_found", "%v", err)
 	}
 	return err
 }

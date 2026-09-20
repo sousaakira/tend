@@ -143,6 +143,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   already are. Removing follows herdr's order: forced, the space closes first;
   not forced, git is asked first and a dirty worktree keeps its space.
   Verified with real git end to end.
+- **Moving and swapping** (herdr's `layout.rs` swap_panes, `workspace.rs`
+  move_tab, `app/actions.rs` move_workspace): `ctrl+b H/J/K/L` swaps the focused
+  pane with its neighbour — herdr's binding — keeping the split shape and its
+  ratios; tabs and spaces move from their right-click menus; `pane.swap`,
+  `tab.move`, `workspace.move` on both sockets. Resizing moved to herdr's
+  resize mode, `ctrl+b r`, then h/j/k/l until escape; redraw moved to
+  `ctrl+b R`. A new `session-changed` event (feature `session-changed`) tells
+  other clients about swaps, moves, renames and regrouping, which before this
+  a second client did not see until something unrelated made it look again.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -288,11 +297,19 @@ Ported (see "Ported, and checked"). Left:
 - `trust_repository` (`safe.directory`) for repositories owned by another user.
 - The `worktree.*` events.
 
-### 7. Moving and swapping — medium
+### 7. Moving and swapping — done, except moving a pane elsewhere
 
-- herdr: `pane.swap`, `pane.move`, `tab.move`, `workspace.move`,
-  `workspace.move_block`; keys `SwapPane*`, `MoveTabPrevious|Next`.
-- tend today: nothing can be reordered.
+Ported (see "Ported, and checked"). Left:
+
+- `pane.move`: a pane into another tab or space. The swap stays within a tab.
+- `workspace.move_block`: moving a group of spaces as one.
+- Dragging a tab or a space with the mouse.
+- **The rest of herdr's default keys.** tend's prefix keys are tmux's where
+  herdr's differ: herdr detaches on `q` (tend `d`), renames tabs on `shift+t`
+  and spaces on `shift+w` (tend `,` and `.`), splits on `v` and `-`, cycles
+  panes on `tab`, toggles the sidebar on `b`, reloads the config on `shift+r`.
+  This item moved the three keys it touched to herdr's (`H J K L`, `r`); the
+  rest is a decision about the owner's muscle memory, not a port.
 
 ### 8. Navigation extras — medium
 

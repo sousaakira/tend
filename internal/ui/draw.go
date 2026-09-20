@@ -195,6 +195,9 @@ type Frame struct {
 	// already draws, blinks and makes visible on any colour.
 	Copy       bool
 	CopyCursor *CopyCursor
+	// Resize marks resize mode, so the status bar can say why h/j/k/l are not
+	// reaching the pane.
+	Resize bool
 	// Zoomed marks that one pane is filling the area, so the status bar can
 	// say so — a zoomed pane and a session with one pane look identical
 	// otherwise.
@@ -679,6 +682,9 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.Zoomed {
 		left += " · zoom"
+	}
+	if f.Resize {
+		left += " · resize (hjkl, esc)"
 	}
 	if f.Copy {
 		left += " · copy " + itoa(uint64(f.Scroll)) + "/" + itoa(uint64(f.ScrollDepth))
