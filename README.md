@@ -70,9 +70,11 @@ grouped by space and tab, with what it is doing. `ctrl+b g` walks it and Enter
 jumps — which is the point, since the agent that stopped is rarely the one you
 are looking at.
 
-The mouse works too: click a pane to focus it, drag a border to resize, scroll
-to look back. A pane running something that wants the mouse itself — an editor,
-say — gets the clicks instead.
+The mouse works throughout. Click a tab to switch to it, `+` to make one,
+click a pane to focus it, drag a border to resize, scroll to look back. In the
+agent list, clicking a row goes there — a pane, a tab, or a whole space. A pane
+running something that wants the mouse itself, an editor say, gets the clicks
+instead.
 
 ## settings
 

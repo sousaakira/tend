@@ -217,13 +217,69 @@ const StatusRows = 1
 
 // TabRows is how many rows the tab bar takes for a given number of tabs.
 //
-// One tab needs no bar: a row spent saying "there is one of these" is a row
-// not spent on the terminal the user is actually looking at.
+// The bar is shown whenever there is a session, not only once there are two
+// tabs. It carries the button that makes a new one, and a button that appears
+// only after you already have what it creates is a button nobody finds.
 func TabRows(tabs int) int {
-	if tabs > 1 {
+	if tabs > 0 {
 		return 1
 	}
 	return 0
+}
+
+// NewTabLabel is the button at the end of the bar.
+const NewTabLabel = " + "
+
+// TabSegment is where one entry of the tab bar was drawn, in columns.
+//
+// Drawing and hit-testing both work from these, so a click cannot land
+// somewhere other than what it looks like it is on: there is one description
+// of the layout, not two that have to agree.
+type TabSegment struct {
+	Tab uint64
+	// New marks the button that creates a tab rather than selects one.
+	New        bool
+	Start, End int
+}
+
+// TabSegments lays out the bar across cols columns.
+func TabSegments(f Frame, cols int) []TabSegment {
+	var out []TabSegment
+	x := 0
+	for _, tab := range f.Tabs {
+		label := tabLabel(tab)
+		width := runewidth.StringWidth(label)
+		if x+width > cols {
+			break
+		}
+		out = append(out, TabSegment{Tab: tab.ID, Start: x, End: x + width})
+		x += width
+	}
+	if width := runewidth.StringWidth(NewTabLabel); x+width <= cols {
+		out = append(out, TabSegment{New: true, Start: x, End: x + width})
+	}
+	return out
+}
+
+func tabLabel(tab Tab) string {
+	label := tab.Name
+	if label == "" {
+		label = itoa(tab.ID)
+	}
+	return " " + label + " "
+}
+
+// TabAt reports what a click on the bar landed on.
+func TabAt(f Frame, x, y, cols int) (tab uint64, newTab bool, ok bool) {
+	if TabRows(len(f.Tabs)) == 0 || y != 0 {
+		return 0, false, false
+	}
+	for _, seg := range TabSegments(f, cols) {
+		if x >= seg.Start && x < seg.End {
+			return seg.Tab, seg.New, true
+		}
+	}
+	return 0, false, false
 }
 
 // Draw fills dst with the frame.
@@ -260,12 +316,17 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 		row.SetCell(x, vt.Cell{R: ' ', Style: theme.Status, Width: 1})
 	}
 
-	x := 0
+	byID := make(map[uint64]Tab, len(f.Tabs))
 	for _, tab := range f.Tabs {
-		label := tab.Name
-		if label == "" {
-			label = itoa(tab.ID)
+		byID[tab.ID] = tab
+	}
+
+	for _, seg := range TabSegments(f, dst.Cols()) {
+		if seg.New {
+			writeString(dst, seg.Start, 0, NewTabLabel, theme.StatusKey, dst.Cols())
+			continue
 		}
+		tab := byID[seg.Tab]
 		style := theme.Status
 		if tab.Active {
 			style = theme.StatusKey
@@ -275,10 +336,7 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 			// the bar exists to tell you.
 			style = theme.StatusAlert
 		}
-		x = writeString(dst, x, 0, " "+label+" ", style, dst.Cols())
-		if x >= dst.Cols() {
-			break
-		}
+		writeString(dst, seg.Start, 0, tabLabel(tab), style, dst.Cols())
 	}
 }
 

@@ -21,8 +21,14 @@ type SidebarRow struct {
 	Label  string
 	Detail string
 
-	// Pane is set on a pane row, and is what a click or Enter jumps to.
-	Pane    uint64
+	// Pane, Tab and Workspace say what a click on this row selects. Every row
+	// carries the ones that apply to it, so clicking a heading goes there
+	// rather than doing nothing — a line that looks clickable and is not is
+	// worse than one that is not drawn.
+	Pane      uint64
+	Tab       uint64
+	Workspace uint64
+
 	State   string
 	Running bool
 
@@ -108,15 +114,14 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	}
 }
 
-// SidebarPaneAt returns the pane on a given screen row, or zero. It is how a
-// click in the list turns into somewhere to go.
-func SidebarPaneAt(f Frame, x, y, rows int) uint64 {
+// SidebarRowAt returns the list row under a point, and whether there is one.
+func SidebarRowAt(f Frame, x, y int) (SidebarRow, bool) {
 	if !f.Sidebar || x >= SidebarWidth {
-		return 0
+		return SidebarRow{}, false
 	}
 	index := y - TabRows(len(f.Tabs))
 	if index < 0 || index >= len(f.SidebarRows) {
-		return 0
+		return SidebarRow{}, false
 	}
-	return f.SidebarRows[index].Pane
+	return f.SidebarRows[index], true
 }

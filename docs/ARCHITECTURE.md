@@ -398,6 +398,21 @@ just created the hardest one to find. A rename seeds the prompt with the
 current name and starts it selected, as any rename field would: typing replaces
 it, backspace keeps it and edits from the end.
 
+### Clickable things
+
+Drawing and hit-testing work from the same description of the layout. The tab
+bar computes its segments once, renders them, and answers a click from the same
+list — so a click cannot land on something other than what it looks like it is
+on, which is the failure two independent implementations eventually produce.
+
+The tab bar is shown from the first tab rather than the second. It carries the
+button that makes a new one, and a button that appears only once you already
+have what it creates is a button nobody finds.
+
+Every row of the agent list is clickable, headings included. A line that looks
+clickable and is not is worse than one that is not drawn, so a space heading
+goes to that space and a tab heading to that tab.
+
 ### Reading a chunk of input
 
 Terminal input arrives in chunks that can hold several keys, and twice now a

@@ -519,24 +519,23 @@ func TestAttachResizesASplit(t *testing.T) {
 	})
 }
 
-// TestAttachShowsTabs: a second tab makes the bar appear, and a single tab
-// spends no row on saying there is one.
+// TestAttachShowsTabs: the bar is there from the first tab, because it holds
+// the button that makes the next one. A button that appears only once you have
+// what it creates is a button nobody finds.
 func TestAttachShowsTabs(t *testing.T) {
 	a := startSession(t, 100, 24)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 
-	// One tab: the first row is the pane's own border, not a bar.
-	if first := a.lines()[0]; !strings.HasPrefix(first, "┌") {
-		t.Errorf("with one tab the top row is %q, want the pane border", first)
-	}
+	a.waitForScreen(t, "the tab bar", func(string) bool {
+		first := a.lines()[0]
+		return strings.Contains(first, "tab 1") && strings.Contains(first, "+")
+	})
 
 	a.send(t, "\x02c")
-	a.waitForScreen(t, "a tab bar", func(string) bool {
-		return !strings.HasPrefix(a.lines()[0], "┌")
+	a.waitForScreen(t, "a second tab", func(string) bool {
+		first := a.lines()[0]
+		return strings.Contains(first, "tab 1") && strings.Contains(first, "tab 2")
 	})
-	if first := a.lines()[0]; !strings.Contains(first, "tab 1") || !strings.Contains(first, "tab 2") {
-		t.Errorf("tab bar = %q, want it to name both tabs", first)
-	}
 }
 
 // TestAttachScrollsBack: a pane's history is reachable without stopping it.
@@ -888,10 +887,13 @@ func TestAttachAgentListGroupsEverything(t *testing.T) {
 // paneStartsAtLeftEdge reports whether a pane border occupies column zero,
 // which it does only when the agent list is not taking those columns.
 func (a *attached) paneStartsAtLeftEdge() bool {
-	for _, line := range a.lines() {
-		for _, r := range line {
-			return r == '┌' || r == '│' || r == '└'
-		}
+	// The tab bar is skipped: it always spans the full width.
+	lines := a.lines()
+	if len(lines) < 2 {
+		return false
+	}
+	for _, r := range lines[1] {
+		return r == '┌' || r == '│' || r == '└'
 	}
 	return false
 }
@@ -998,5 +1000,114 @@ func TestAttachNamesNewSpacesAndTabs(t *testing.T) {
 	a.send(t, "\x02c")
 	a.waitForScreen(t, "the new tab named", func(s string) bool {
 		return strings.Contains(s, "· tab 2")
+	})
+}
+
+// clickAt sends a press and release at a column and row, counted from one as
+// the terminal reports them.
+func (a *attached) clickAt(t *testing.T, col, row int) {
+	t.Helper()
+	seq := "\x1b[<0;" + itoa(col) + ";" + itoa(row) + "M" +
+		"\x1b[<0;" + itoa(col) + ";" + itoa(row) + "m"
+	a.send(t, seq)
+	time.Sleep(120 * time.Millisecond)
+}
+
+// columnOf returns the cell column of a rune in a line, counting cells rather
+// than bytes — the box-drawing characters are three bytes each.
+func columnOf(line string, want rune) int {
+	col := 0
+	for _, r := range line {
+		if r == want {
+			return col
+		}
+		col++
+	}
+	return -1
+}
+
+// TestAttachClickCreatesATab covers the plus button, which is how a tab gets
+// made by someone who does not know the keys.
+func TestAttachClickCreatesATab(t *testing.T) {
+	a := startSession(t, 90, 14)
+	a.waitForScreen(t, "the tab bar", func(string) bool {
+		return strings.Contains(a.lines()[0], "+")
+	})
+
+	plus := columnOf(a.lines()[0], '+')
+	if plus < 0 {
+		t.Fatalf("no plus button in %q", a.lines()[0])
+	}
+	a.clickAt(t, plus+1, 1)
+
+	a.waitForScreen(t, "a second tab", func(string) bool {
+		return strings.Contains(a.lines()[0], "tab 2")
+	})
+	a.waitForScreen(t, "the new tab to be the one shown", func(s string) bool {
+		return strings.Contains(s, "· tab 2")
+	})
+}
+
+// TestAttachClickSelectsATab: navigating with the mouse means clicking the
+// one you want, not cycling until it appears.
+func TestAttachClickSelectsATab(t *testing.T) {
+	a := startSession(t, 90, 14)
+	a.waitForScreen(t, "the tab bar", func(string) bool {
+		return strings.Contains(a.lines()[0], "+")
+	})
+
+	a.send(t, "printf TAB-ONE\n")
+	a.waitForScreen(t, "the marker", func(s string) bool {
+		return strings.Contains(s, "TAB-ONE")
+	})
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a second tab", func(s string) bool {
+		return !strings.Contains(s, "TAB-ONE")
+	})
+
+	first := columnOf(a.lines()[0], 't')
+	if first < 0 {
+		t.Fatalf("no tab label in %q", a.lines()[0])
+	}
+	a.clickAt(t, first+1, 1)
+
+	a.waitForScreen(t, "the first tab", func(s string) bool {
+		return strings.Contains(s, "TAB-ONE")
+	})
+}
+
+// TestAttachClickSidebarHeading: a line that looks clickable and is not is
+// worse than one that is not drawn, so the group headings go somewhere too.
+func TestAttachClickSidebarHeading(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "printf FIRST-SPACE\n")
+	a.waitForScreen(t, "the marker", func(s string) bool {
+		return strings.Contains(s, "FIRST-SPACE")
+	})
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "a second space", func(s string) bool {
+		return strings.Contains(s, "space 2")
+	})
+	a.send(t, "\x02a")
+	a.waitForScreen(t, "the agent list", func(s string) bool {
+		return strings.Contains(s, "main")
+	})
+
+	row := -1
+	for i, line := range a.lines() {
+		if strings.HasPrefix(strings.TrimSpace(line), "main") {
+			row = i
+			break
+		}
+	}
+	if row < 0 {
+		t.Fatalf("no heading for the first space:\n%s", a.text())
+	}
+	a.clickAt(t, 2, row+1)
+
+	a.waitForScreen(t, "the first space", func(s string) bool {
+		return strings.Contains(s, "FIRST-SPACE")
 	})
 }

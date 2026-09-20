@@ -199,6 +199,59 @@ func (t *tui) jumpToPane(pane uint64) error {
 	return t.refresh()
 }
 
+// showTab moves to a tab by identifier, switching space if it lives in
+// another one. Clicking something in a list should go there, wherever it is.
+func (t *tui) showTab(tab uint64) error {
+	t.mu.Lock()
+	var ws uint64
+	for _, w := range t.snap.Workspaces {
+		for _, tb := range w.Tabs {
+			if tb.ID == tab {
+				ws = w.ID
+			}
+		}
+	}
+	if ws == 0 || (t.workspace == ws && t.tab == tab) {
+		t.mu.Unlock()
+		return nil
+	}
+	t.workspace, t.tab, t.focus, t.zoom = ws, tab, 0, false
+	t.mu.Unlock()
+	return t.refresh()
+}
+
+// showWorkspace moves to a space by identifier.
+func (t *tui) showWorkspace(ws uint64) error {
+	t.mu.Lock()
+	if ws == 0 || t.workspace == ws {
+		t.mu.Unlock()
+		return nil
+	}
+	t.workspace, t.tab, t.focus, t.zoom = ws, 0, 0, false
+	t.mu.Unlock()
+	return t.refresh()
+}
+
+// newTabHere opens a tab in the space being shown and moves to it.
+func (t *tui) newTabHere() error {
+	ws := t.shownWorkspace()
+	if ws == 0 {
+		return nil
+	}
+	t.mu.Lock()
+	name := t.nextName("tab", len(t.tabsLocked()))
+	t.mu.Unlock()
+
+	tab, _, err := t.client.NewTab(ws, name, proto.PaneSpec{Command: t.config.Shell()})
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	t.tab, t.focus, t.zoom = tab, 0, false
+	t.mu.Unlock()
+	return t.refresh()
+}
+
 // --- the agent list --------------------------------------------------------
 
 // sidebarRowsLocked builds the list of everything running, grouped by
@@ -212,15 +265,18 @@ func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 	var rows []ui.SidebarRow
 	for _, w := range t.snap.Workspaces {
 		rows = append(rows, ui.SidebarRow{
-			Kind:   ui.SidebarWorkspace,
-			Label:  orDash(w.Name),
-			Active: w.ID == t.workspace,
+			Kind:      ui.SidebarWorkspace,
+			Label:     orDash(w.Name),
+			Workspace: w.ID,
+			Active:    w.ID == t.workspace,
 		})
 		for _, tab := range w.Tabs {
 			rows = append(rows, ui.SidebarRow{
-				Kind:   ui.SidebarTab,
-				Label:  orDash(tab.Name),
-				Active: tab.ID == t.tab && w.ID == t.workspace,
+				Kind:      ui.SidebarTab,
+				Label:     orDash(tab.Name),
+				Tab:       tab.ID,
+				Workspace: w.ID,
+				Active:    tab.ID == t.tab && w.ID == t.workspace,
 			})
 			for _, id := range tab.Panes {
 				p := info[id]
@@ -229,13 +285,15 @@ func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 					label = commandName(p.Command)
 				}
 				rows = append(rows, ui.SidebarRow{
-					Kind:    ui.SidebarPane,
-					Label:   label,
-					Detail:  p.Title,
-					Pane:    id,
-					State:   p.State,
-					Running: p.Running,
-					Active:  id == t.focus && tab.ID == t.tab && w.ID == t.workspace,
+					Kind:      ui.SidebarPane,
+					Label:     label,
+					Detail:    p.Title,
+					Pane:      id,
+					Tab:       tab.ID,
+					Workspace: w.ID,
+					State:     p.State,
+					Running:   p.Running,
+					Active:    id == t.focus && tab.ID == t.tab && w.ID == t.workspace,
 				})
 			}
 		}

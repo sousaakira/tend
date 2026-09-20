@@ -191,8 +191,11 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MousePress:
-		if pane := t.sidebarPaneAt(ev.X, ev.Y); pane != 0 {
-			return t.jumpToPane(pane)
+		if handled, err := t.clickTabBar(ev.X, ev.Y); handled {
+			return err
+		}
+		if handled, err := t.clickSidebar(ev.X, ev.Y); handled {
+			return err
 		}
 		if pane, side, ok := t.dividerAt(ev.X, ev.Y); ok {
 			// A press on a border is a grab, not a focus change: the user is
@@ -267,14 +270,46 @@ func (t *tui) dragDivider(ev ui.MouseEvent) error {
 	return t.refresh()
 }
 
-// sidebarPaneAt returns the pane on an agent-list row, or zero.
-func (t *tui) sidebarPaneAt(x, y int) uint64 {
+// clickTabBar switches tabs, or makes one.
+func (t *tui) clickTabBar(x, y int) (bool, error) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-	if !t.sidebar {
-		return 0
+	frame := t.buildFrame()
+	cols := t.cols
+	t.mu.Unlock()
+
+	tab, newTab, ok := ui.TabAt(frame, x, y, cols)
+	if !ok {
+		return false, nil
 	}
-	return ui.SidebarPaneAt(t.buildFrame(), x, y, t.rows)
+	if newTab {
+		return true, t.newTabHere()
+	}
+	return true, t.showTab(tab)
+}
+
+// clickSidebar goes wherever the clicked row points.
+func (t *tui) clickSidebar(x, y int) (bool, error) {
+	t.mu.Lock()
+	if !t.sidebar {
+		t.mu.Unlock()
+		return false, nil
+	}
+	frame := t.buildFrame()
+	t.mu.Unlock()
+
+	row, ok := ui.SidebarRowAt(frame, x, y)
+	if !ok {
+		return false, nil
+	}
+	switch row.Kind {
+	case ui.SidebarPane:
+		return true, t.jumpToPane(row.Pane)
+	case ui.SidebarTab:
+		return true, t.showTab(row.Tab)
+	case ui.SidebarWorkspace:
+		return true, t.showWorkspace(row.Workspace)
+	}
+	return true, nil
 }
 
 // paneAt returns the pane drawn at a point, or zero.

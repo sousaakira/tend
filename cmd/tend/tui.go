@@ -867,22 +867,7 @@ func (t *tui) command(action ui.Action) error {
 		return t.refresh()
 
 	case ui.CommandNewTab:
-		ws := t.shownWorkspace()
-		if ws == 0 {
-			return nil
-		}
-		t.mu.Lock()
-		name := t.nextName("tab", len(t.tabsLocked()))
-		t.mu.Unlock()
-
-		newTab, _, err := t.client.NewTab(ws, name, proto.PaneSpec{Command: t.config.Shell()})
-		if err != nil {
-			return err
-		}
-		t.mu.Lock()
-		t.tab = newTab
-		t.mu.Unlock()
-		return t.refresh()
+		return t.newTabHere()
 
 	case ui.CommandNextTab, ui.CommandPrevTab:
 		t.switchTab(cmd == ui.CommandNextTab, tab)
