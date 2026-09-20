@@ -44,8 +44,14 @@ type Pane struct {
 
 // UI configures the interface.
 type UI struct {
-	Mouse bool  `toml:"mouse"`
-	Theme Theme `toml:"theme"`
+	Mouse bool `toml:"mouse"`
+	// Sidebar shows the spaces and agents down the left edge. On by default:
+	// knowing which agent needs you is the reason to run tend, and a list
+	// behind a keystroke is one most people never press.
+	Sidebar bool `toml:"sidebar"`
+	// Grouped lists agents under their tab rather than flat.
+	Grouped bool  `toml:"grouped"`
+	Theme   Theme `toml:"theme"`
 }
 
 // Theme names the colours. Each is a palette name, a number from 0 to 255, or
@@ -69,7 +75,7 @@ func Defaults() Config {
 	return Config{
 		Keys:   Keys{Prefix: "ctrl+b"},
 		Pane:   Pane{Scrollback: 5000},
-		UI:     UI{Mouse: true},
+		UI:     UI{Mouse: true, Sidebar: true},
 		Server: Server{DetectInterval: "150ms"},
 	}
 }
@@ -278,6 +284,12 @@ scrollback = 5000
 [ui]
 # Click to focus a pane, drag a divider to resize, scroll to look back.
 mouse = true
+
+# Show the spaces and agents down the left edge.
+sidebar = true
+
+# List agents under their tab rather than flat.
+grouped = false
 
 [ui.theme]
 # A palette name, a number from 0 to 255, or "#rrggbb".

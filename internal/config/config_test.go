@@ -226,3 +226,28 @@ func TestPathRespectsOverride(t *testing.T) {
 		t.Errorf("Path = %q", got)
 	}
 }
+
+// TestSidebarDefaultsOn: the list of what needs attention is the reason to
+// run tend, so it is not behind a keystroke nobody presses.
+func TestSidebarDefaultsOn(t *testing.T) {
+	if !Defaults().UI.Sidebar {
+		t.Error("the sidebar should be on by default")
+	}
+	if Defaults().UI.Grouped {
+		t.Error("agents should start flat")
+	}
+
+	c, err := LoadFile(writeConfig(t, "[ui]\nsidebar = false\ngrouped = true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.UI.Sidebar {
+		t.Error("sidebar = false should turn it off")
+	}
+	if !c.UI.Grouped {
+		t.Error("grouped = true should group")
+	}
+	if !c.UI.Mouse {
+		t.Error("the other ui settings should keep their defaults")
+	}
+}

@@ -82,6 +82,8 @@ func runAttach(args []string) error {
 		lostConn: make(chan struct{}, 1),
 	}
 	t.keys.PrefixKey = prefix
+	t.sidebar = cfg.UI.Sidebar
+	t.grouped = cfg.UI.Grouped
 	return t.run()
 }
 
@@ -108,8 +110,9 @@ type tui struct {
 	workspace uint64
 
 	sidebar    bool
+	grouped    bool
 	navigating bool
-	navPane    uint64
+	nav        navTarget
 
 	prompt         promptKind
 	promptText     string
@@ -589,9 +592,8 @@ func (t *tui) buildFrame() ui.Frame {
 		frame.SidebarRows = t.sidebarRowsLocked()
 		if t.navigating {
 			for i := range frame.SidebarRows {
-				frame.SidebarRows[i].Selected =
-					frame.SidebarRows[i].Kind == ui.SidebarPane &&
-						frame.SidebarRows[i].Pane == t.navPane
+				target, ok := targetOf(frame.SidebarRows[i])
+				frame.SidebarRows[i].Selected = ok && target == t.nav
 			}
 		}
 	}

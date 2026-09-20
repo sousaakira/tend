@@ -711,3 +711,95 @@ func TestInputReleasesAHeldSequenceThatIsNotAMouseReport(t *testing.T) {
 		t.Errorf("mice = %v", mice)
 	}
 }
+
+// sidebarFrame is a frame showing the sidebar and nothing else, which is what
+// the sidebar tests are about.
+func sidebarFrame(rows []SidebarRow) Frame {
+	return Frame{Sidebar: true, SidebarRows: rows}
+}
+
+// TestSidebarDrawsBothSections: the sidebar answers two questions — where
+// else could I be, and which agent needs me — and they are separate lists.
+func TestSidebarDrawsBothSections(t *testing.T) {
+	g := vt.NewGrid(60, 14, 0)
+	Draw(g, sidebarFrame([]SidebarRow{
+		{Kind: SidebarHeading, Label: "spaces"},
+		{Kind: SidebarSpace, Label: "herdr", Detail: "master", Workspace: 1, Active: true},
+		{Kind: SidebarAction, Label: "new", Action: ActionNewSpace},
+		{Kind: SidebarBlank},
+		{Kind: SidebarHeading, Label: "agents", Trailing: "flat", Action: ActionToggleGrouped},
+		{Kind: SidebarAgent, Label: "herdr · tab 1", Detail: "claude", Pane: 7, Running: true},
+	}), DefaultTheme())
+
+	text := strings.Join(gridText(g), "\n")
+	for _, want := range []string{"spaces", "herdr", "master", "new", "agents", "flat", "claude"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the sidebar should show %q:\n%s", want, text)
+		}
+	}
+	// The branch belongs under its space, not beside it.
+	if lines := gridText(g); !strings.Contains(lines[1], "herdr") || !strings.Contains(lines[2], "master") {
+		t.Errorf("the detail should be drawn beneath the name:\n%s", text)
+	}
+}
+
+// TestSidebarTwoLineEntryIsOneTarget: clicking a branch selects the space it
+// belongs to, because that is what it looks like it should do.
+func TestSidebarTwoLineEntryIsOneTarget(t *testing.T) {
+	f := sidebarFrame([]SidebarRow{
+		{Kind: SidebarHeading, Label: "spaces"},
+		{Kind: SidebarSpace, Label: "one", Detail: "master", Workspace: 1},
+		{Kind: SidebarSpace, Label: "two", Detail: "topic", Workspace: 2},
+	})
+
+	cases := map[int]uint64{0: 0, 1: 1, 2: 1, 3: 2, 4: 2}
+	for y, want := range cases {
+		row, ok := SidebarRowAt(f, 2, y)
+		if !ok {
+			t.Errorf("row %d: nothing there", y)
+			continue
+		}
+		if row.Workspace != want {
+			t.Errorf("row %d selects workspace %d, want %d", y, row.Workspace, want)
+		}
+	}
+
+	if _, ok := SidebarRowAt(f, 2, 9); ok {
+		t.Error("below the last entry should select nothing")
+	}
+	if _, ok := SidebarRowAt(f, SidebarWidth, 1); ok {
+		t.Error("past the sidebar belongs to the pane")
+	}
+}
+
+// TestSidebarHeadingCarriesItsToggle: the toggle sits at the edge of what it
+// toggles, and clicking it has to reach it.
+func TestSidebarHeadingCarriesItsToggle(t *testing.T) {
+	f := sidebarFrame([]SidebarRow{
+		{Kind: SidebarHeading, Label: "agents", Trailing: "grouped", Action: ActionToggleGrouped},
+	})
+	row, ok := SidebarRowAt(f, SidebarWidth-4, 0)
+	if !ok || row.Action != ActionToggleGrouped {
+		t.Errorf("the toggle should be clickable, got %+v ok=%v", row, ok)
+	}
+
+	g := vt.NewGrid(40, 6, 0)
+	Draw(g, f, DefaultTheme())
+	line := gridText(g)[0]
+	if at := strings.Index(line, "grouped"); at < strings.Index(line, "agents")+len("agents") {
+		t.Errorf("the toggle should sit at the right edge:\n%q", line)
+	}
+}
+
+// TestSidebarHiddenTakesNoColumns: turning it off has to give the columns back
+// rather than leaving a blank margin.
+func TestSidebarHiddenTakesNoColumns(t *testing.T) {
+	g := vt.NewGrid(40, 6, 0)
+	Draw(g, Frame{SidebarRows: []SidebarRow{{Kind: SidebarHeading, Label: "spaces"}}}, DefaultTheme())
+	if text := strings.Join(gridText(g), "\n"); strings.Contains(text, "spaces") {
+		t.Errorf("a hidden sidebar should draw nothing:\n%s", text)
+	}
+	if _, ok := SidebarRowAt(Frame{}, 0, 0); ok {
+		t.Error("a hidden sidebar should have no targets")
+	}
+}

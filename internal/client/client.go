@@ -275,8 +275,13 @@ func (c *Client) Snapshot() (proto.SessionSnapshot, error) {
 
 // NewWorkspace adds a workspace.
 func (c *Client) NewWorkspace(name string) (uint64, error) {
+	return c.NewWorkspaceIn(name, "")
+}
+
+// NewWorkspaceIn adds a workspace rooted at a directory.
+func (c *Client) NewWorkspaceIn(name, dir string) (uint64, error) {
 	var out proto.WorkspaceNewResult
-	err := c.Call(proto.MethodWorkspaceNew, proto.WorkspaceNewParams{Name: name}, &out)
+	err := c.Call(proto.MethodWorkspaceNew, proto.WorkspaceNewParams{Name: name, Dir: dir}, &out)
 	return out.Workspace, err
 }
 

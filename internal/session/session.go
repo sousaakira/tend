@@ -74,6 +74,11 @@ type Tab struct {
 type Workspace struct {
 	ID   WorkspaceID
 	Name string
+	// Dir is what the workspace is about: the directory its panes open in,
+	// and the one whose branch is shown beside its name. A workspace is how a
+	// user says "this is the RVX backend", and a place is most of what that
+	// means.
+	Dir string
 
 	tabs   []*Tab
 	active int
@@ -199,8 +204,13 @@ func (t *Tab) Layout(area Rect) []PaneRect {
 
 // AddWorkspace appends a workspace and focuses it.
 func (s *Session) AddWorkspace(name string) *Workspace {
+	return s.AddWorkspaceIn(name, "")
+}
+
+// AddWorkspaceIn appends a workspace rooted at a directory.
+func (s *Session) AddWorkspaceIn(name, dir string) *Workspace {
 	s.nextWorkspace++
-	w := &Workspace{ID: WorkspaceID(s.nextWorkspace), Name: name, active: -1}
+	w := &Workspace{ID: WorkspaceID(s.nextWorkspace), Name: name, Dir: dir, active: -1}
 	s.workspaces = append(s.workspaces, w)
 	s.active = len(s.workspaces) - 1
 	return w

@@ -25,7 +25,7 @@ func (p *Pty) Foreground() string {
 	if p.f == nil {
 		return ""
 	}
-	pgrp, err := foregroundGroup(int(p.f.Fd()))
+	pgrp, err := foregroundGroup(p.f)
 	if err != nil || pgrp <= 0 {
 		return ""
 	}
@@ -37,14 +37,30 @@ func (p *Pty) Foreground() string {
 }
 
 // foregroundGroup asks the terminal which process group has it.
-func foregroundGroup(fd int) (int, error) {
+//
+// The descriptor is borrowed through SyscallConn rather than taken with Fd().
+// This runs on a timer while another goroutine is reading the same pty, and
+// Fd() neither holds the file open for the duration nor leaves the descriptor
+// as it found it — it detaches it from the runtime poller, which would turn
+// every later read on it into a blocking one.
+func foregroundGroup(f *os.File) (int, error) {
+	raw, err := f.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+
 	var pgrp int32
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		uintptr(fd),
-		uintptr(syscall.TIOCGPGRP),
-		uintptr(unsafe.Pointer(&pgrp)),
-	)
+	var errno syscall.Errno
+	if err := raw.Control(func(fd uintptr) {
+		_, _, errno = syscall.Syscall(
+			syscall.SYS_IOCTL,
+			fd,
+			uintptr(syscall.TIOCGPGRP),
+			uintptr(unsafe.Pointer(&pgrp)),
+		)
+	}); err != nil {
+		return 0, err
+	}
 	if errno != 0 {
 		return 0, errno
 	}

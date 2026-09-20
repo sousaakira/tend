@@ -324,7 +324,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		id, err := c.srv.NewWorkspace(p.Name)
+		id, err := c.srv.NewWorkspaceIn(p.Name, p.Dir)
 		if err != nil {
 			return nil, err
 		}
@@ -510,7 +510,11 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.ActiveWorkspace = uint64(active.ID)
 	}
 	for _, w := range sess.Workspaces() {
-		info := proto.WorkspaceInfo{ID: uint64(w.ID), Name: w.Name}
+		info := proto.WorkspaceInfo{
+			ID:   uint64(w.ID),
+			Name: w.Name,
+			Dir:  w.Dir,
+		}
 		if at := w.ActiveTab(); at != nil {
 			info.ActiveTab = uint64(at.ID)
 		}
@@ -542,6 +546,13 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		runtimes[id] = rt
 	}
 	s.mu.Unlock()
+
+	// Branches are resolved after the session lock is released: reading one
+	// touches the filesystem, and nothing that does belongs under the lock
+	// every pane operation needs.
+	for i := range snap.Workspaces {
+		snap.Workspaces[i].Branch = s.branches.lookup(snap.Workspaces[i].Dir)
+	}
 
 	// Runtime facts come from the runtimes, under their own locks, once the
 	// session lock is released.

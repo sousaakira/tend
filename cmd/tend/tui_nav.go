@@ -254,9 +254,47 @@ func (t *tui) newTabHere() error {
 
 // --- the agent list --------------------------------------------------------
 
-// sidebarRowsLocked builds the list of everything running, grouped by
-// workspace and tab.
+// sidebarRowsLocked builds both lists: the places, then what is running.
+//
+// The two are separate because they answer different questions. Spaces exist
+// whether or not anything runs in them, and the agent that stopped is rarely
+// in the space being looked at — so listing agents under their spaces alone
+// would bury the one thing the sidebar is for.
 func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
+	rows := []ui.SidebarRow{{Kind: ui.SidebarHeading, Label: "spaces"}}
+
+	for _, w := range t.snap.Workspaces {
+		rows = append(rows, ui.SidebarRow{
+			Kind:      ui.SidebarSpace,
+			Label:     orDash(w.Name),
+			Detail:    w.Branch,
+			Workspace: w.ID,
+			State:     t.spaceStateLocked(w),
+			Running:   true,
+			Active:    w.ID == t.workspace,
+		})
+	}
+	rows = append(rows,
+		ui.SidebarRow{Kind: ui.SidebarAction, Label: "new", Action: ui.ActionNewSpace},
+		ui.SidebarRow{Kind: ui.SidebarBlank},
+	)
+
+	grouped := "flat"
+	if t.grouped {
+		grouped = "grouped"
+	}
+	rows = append(rows, ui.SidebarRow{
+		Kind:     ui.SidebarHeading,
+		Label:    "agents",
+		Trailing: grouped,
+		Action:   ui.ActionToggleGrouped,
+		Active:   t.grouped,
+	})
+	return append(rows, t.agentRowsLocked()...)
+}
+
+// agentRowsLocked lists what is running, flat or under its tab.
+func (t *tui) agentRowsLocked() []ui.SidebarRow {
 	info := make(map[uint64]proto.PaneInfo, len(t.snap.Panes))
 	for _, p := range t.snap.Panes {
 		info[p.ID] = p
@@ -264,30 +302,20 @@ func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 
 	var rows []ui.SidebarRow
 	for _, w := range t.snap.Workspaces {
-		rows = append(rows, ui.SidebarRow{
-			Kind:      ui.SidebarWorkspace,
-			Label:     orDash(w.Name),
-			Workspace: w.ID,
-			Active:    w.ID == t.workspace,
-		})
 		for _, tab := range w.Tabs {
-			rows = append(rows, ui.SidebarRow{
-				Kind:      ui.SidebarTab,
-				Label:     orDash(tab.Name),
-				Tab:       tab.ID,
-				Workspace: w.ID,
-				Active:    tab.ID == t.tab && w.ID == t.workspace,
-			})
+			var entries []ui.SidebarRow
 			for _, id := range tab.Panes {
 				p := info[id]
-				label := p.Agent
-				if label == "" {
-					label = commandName(p.Command)
+				if p.Agent == "" {
+					// A shell is not an agent. Listing every pane would make
+					// the list as long as the session and hide what it exists
+					// to show.
+					continue
 				}
-				rows = append(rows, ui.SidebarRow{
-					Kind:      ui.SidebarPane,
-					Label:     label,
-					Detail:    p.Title,
+				entries = append(entries, ui.SidebarRow{
+					Kind:      ui.SidebarAgent,
+					Label:     agentLabel(w, tab),
+					Detail:    p.Agent,
 					Pane:      id,
 					Tab:       tab.ID,
 					Workspace: w.ID,
@@ -296,38 +324,148 @@ func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 					Active:    id == t.focus && tab.ID == t.tab && w.ID == t.workspace,
 				})
 			}
+			if len(entries) == 0 {
+				continue
+			}
+			if t.grouped {
+				rows = append(rows, ui.SidebarRow{
+					Kind:      ui.SidebarGroup,
+					Label:     orDash(w.Name) + " · " + orDash(tab.Name),
+					Tab:       tab.ID,
+					Workspace: w.ID,
+				})
+			}
+			rows = append(rows, entries...)
 		}
 	}
 	return rows
 }
 
-// navigate moves the selection in the agent list, skipping the headings: the
-// cursor is for choosing something to jump to, and a workspace heading is not
-// somewhere to jump.
+// agentLabel names where an agent is, since what it is goes underneath.
+func agentLabel(w proto.WorkspaceInfo, tab proto.TabInfo) string {
+	name := orDash(w.Name)
+	if tab.Name != "" {
+		name += " · " + tab.Name
+	}
+	return name
+}
+
+// spaceStateLocked is the most urgent thing happening in a space, because a
+// space marked idle while an agent inside it waits for an answer is worse
+// than no mark at all.
+func (t *tui) spaceStateLocked(w proto.WorkspaceInfo) string {
+	panes := make(map[uint64]bool)
+	for _, tab := range w.Tabs {
+		for _, id := range tab.Panes {
+			panes[id] = true
+		}
+	}
+
+	state := ""
+	for _, p := range t.snap.Panes {
+		if !panes[p.ID] || p.Agent == "" || !p.Running {
+			continue
+		}
+		switch p.State {
+		case "blocked":
+			return "blocked"
+		case "working":
+			state = "working"
+		case "idle":
+			if state == "" {
+				state = "idle"
+			}
+		}
+	}
+	return state
+}
+
+// navTarget is where a sidebar row goes, and is how the navigation cursor
+// remembers its place.
+//
+// The rows are rebuilt from the session on every refresh, so an index into
+// them is a position in a list that moves underneath the cursor. What the row
+// points at does not move.
+type navTarget struct {
+	pane      uint64
+	workspace uint64
+}
+
+// targetOf returns where a row goes, and whether it goes anywhere. Headings,
+// actions and spacers do not.
+func targetOf(r ui.SidebarRow) (navTarget, bool) {
+	switch r.Kind {
+	case ui.SidebarAgent:
+		return navTarget{pane: r.Pane, workspace: r.Workspace}, true
+	case ui.SidebarSpace:
+		return navTarget{workspace: r.Workspace}, true
+	}
+	return navTarget{}, false
+}
+
+// startTargetLocked is where the cursor opens: the focused pane if it is in
+// the list, and otherwise the space being looked at.
+//
+// The fallback matters more than it looks. Most panes are shells, and shells
+// are not listed, so opening on "nothing selected" would make the first
+// keypress move from an arbitrary end of the list rather than from here.
+func (t *tui) startTargetLocked() navTarget {
+	rows := t.sidebarRowsLocked()
+	focused := navTarget{pane: t.focus, workspace: t.workspace}
+	space := navTarget{workspace: t.workspace}
+
+	var first navTarget
+	found := false
+	for _, r := range rows {
+		target, ok := targetOf(r)
+		if !ok {
+			continue
+		}
+		if target == focused {
+			return focused
+		}
+		if target == space {
+			found = true
+		}
+		if first == (navTarget{}) {
+			first = target
+		}
+	}
+	if found {
+		return space
+	}
+	return first
+}
+
+// navigate moves the selection down the sidebar, over everything that goes
+// somewhere and nothing that does not.
+//
+// Spaces are walked as well as agents. A space with no agent running in it is
+// still somewhere the user wants to reach, and leaving it out would mean the
+// keyboard could not reach half of what the mouse can click.
 func (t *tui) navigate(delta int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	rows := t.sidebarRowsLocked()
-	panes := make([]int, 0, len(rows))
-	for i, r := range rows {
-		if r.Kind == ui.SidebarPane {
-			panes = append(panes, i)
+	targets := make([]navTarget, 0, len(rows))
+	for _, r := range rows {
+		if target, ok := targetOf(r); ok {
+			targets = append(targets, target)
 		}
 	}
-	if len(panes) == 0 {
+	if len(targets) == 0 {
 		return
 	}
 
 	at := 0
-	for i, idx := range panes {
-		if rows[idx].Pane == t.navPane {
+	for i, target := range targets {
+		if target == t.nav {
 			at = i
 			break
 		}
 	}
-	at = (at + delta + len(panes)) % len(panes)
-	t.navPane = rows[panes[at]].Pane
+	t.nav = targets[(at+delta+len(targets))%len(targets)]
 	t.dirty = true
 }
 
@@ -337,9 +475,7 @@ func (t *tui) enterNavigate() {
 	t.mu.Lock()
 	t.sidebar = true
 	t.navigating = true
-	if t.navPane == 0 {
-		t.navPane = t.focus
-	}
+	t.nav = t.startTargetLocked()
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
@@ -377,10 +513,16 @@ func (t *tui) navigateKey(key string) (bool, error) {
 		return true, nil
 	case "\r", "\n":
 		t.mu.Lock()
-		pane := t.navPane
+		target := t.nav
 		t.mu.Unlock()
 		t.leaveNavigate()
-		return true, t.jumpToPane(pane)
+		if target.pane != 0 {
+			return true, t.jumpToPane(target.pane)
+		}
+		if target.workspace != 0 {
+			return true, t.showWorkspace(target.workspace)
+		}
+		return true, nil
 	case "\x1b", "q", "\x03":
 		t.leaveNavigate()
 		return true, nil

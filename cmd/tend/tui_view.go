@@ -301,12 +301,21 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	switch row.Kind {
-	case ui.SidebarPane:
+	switch {
+	case row.Action == ui.ActionNewSpace:
+		return true, t.newWorkspace()
+	case row.Action == ui.ActionToggleGrouped:
+		t.mu.Lock()
+		t.grouped = !t.grouped
+		t.dirty = true
+		t.mu.Unlock()
+		t.wakeUp()
+		return true, nil
+	case row.Pane != 0:
 		return true, t.jumpToPane(row.Pane)
-	case ui.SidebarTab:
+	case row.Tab != 0:
 		return true, t.showTab(row.Tab)
-	case ui.SidebarWorkspace:
+	case row.Workspace != 0:
 		return true, t.showWorkspace(row.Workspace)
 	}
 	return true, nil

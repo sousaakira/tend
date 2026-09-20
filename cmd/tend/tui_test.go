@@ -15,6 +15,7 @@ import (
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/server"
 	"github.com/sousaakira/tend/internal/transport"
+	"github.com/sousaakira/tend/internal/ui"
 	"github.com/sousaakira/tend/internal/vt"
 )
 
@@ -93,6 +94,10 @@ func startSession(t *testing.T, cols, rows int) *attached {
 
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	// Point at a file that does not exist, so the tests see the defaults
+	// rather than whatever settings the machine running them happens to have.
+	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	t.Setenv("TEND_CONFIG", configPath)
 
 	path, err := transport.SocketPath("tui")
 	if err != nil {
@@ -121,6 +126,7 @@ func startSession(t *testing.T, cols, rows int) *attached {
 		Size: pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
 		Env: append(os.Environ(),
 			"TEND_RUNTIME_DIR="+runtimeDir,
+			"TEND_CONFIG="+configPath,
 			// A predictable shell, so what a new pane runs does not depend on
 			// whoever is running the tests.
 			"SHELL=/bin/sh",
@@ -708,14 +714,18 @@ func TestAttachClickFocusesAPane(t *testing.T) {
 	})
 
 	// Focus follows a split, so it is on the right-hand pane. Clicking the
-	// left one and typing must put the text there.
-	a.send(t, "\x1b[<0;5;5M\x1b[<0;5;5m")
-	time.Sleep(150 * time.Millisecond)
+	// left one and typing must put the text there. The sidebar owns the
+	// leftmost columns, so the click aims between it and the divider.
+	divider := a.dividerColumn()
+	if divider < 0 {
+		t.Fatalf("no divider:\n%s", a.text())
+	}
+	a.clickAt(t, (ui.SidebarWidth+divider)/2, 5)
 	a.send(t, "printf clicked\n")
 
 	a.waitForScreen(t, "the click to move focus", func(string) bool {
 		for _, line := range a.lines() {
-			if i := strings.Index(line, "clicked"); i >= 0 && i < 43 {
+			if i := columnOfString(line, "clicked"); i >= 0 && i < divider {
 				return true // it landed in the left pane
 			}
 		}
@@ -773,17 +783,39 @@ func itoa(v int) string {
 	return string(buf[i:])
 }
 
+// sendUntil retypes a line until the screen shows what it should produce.
+func (a *attached) sendUntil(t *testing.T, keys, what string, cond func(string) bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		a.send(t, keys)
+		for i := 0; i < 8; i++ {
+			if cond(a.text()) {
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	t.Fatalf("timed out waiting for %s; the screen was:\n%s", what, a.text())
+}
+
 // TestAttachReconnects: a server restarting is not the client's failure, and
 // exiting when it happens loses the user's place for a reason that had
 // nothing to do with them.
 func TestAttachReconnects(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	t.Setenv("TEND_CONFIG", configPath)
 	bin := buildBinary(t)
 
 	p, err := pty.Start(bin, []string{"attach", "-s", "again"}, pty.Options{
 		Size: pty.Size{Cols: 80, Rows: 14},
-		Env:  append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh"),
+		Env: append(os.Environ(),
+			"TEND_RUNTIME_DIR="+runtimeDir,
+			"TEND_CONFIG="+configPath,
+			"SHELL=/bin/sh",
+		),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -800,6 +832,12 @@ func TestAttachReconnects(t *testing.T) {
 
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 
+	// Mark the old session, so the screen after the reconnect can be told
+	// from the one still on the terminal when the server went away.
+	a.sendUntil(t, "printf OLD-SESSION\n", "the marker", func(s string) bool {
+		return strings.Contains(s, "OLD-SESSION")
+	})
+
 	// Stop the server out from under it.
 	c, err := connect("again", nil)
 	if err != nil {
@@ -811,13 +849,19 @@ func TestAttachReconnects(t *testing.T) {
 	_ = c.Close()
 
 	// The client says so rather than vanishing, then finds its way back: it
-	// starts a server itself, exactly as it did the first time.
+	// starts a server itself, exactly as it did the first time. The marker
+	// going is what says the screen is the new session rather than the last
+	// frame of the old one.
 	a.waitForScreen(t, "a session again", func(s string) bool {
-		return strings.Contains(s, "┌") && !strings.Contains(s, "OFFLINE")
+		return strings.Contains(s, "┌") &&
+			!strings.Contains(s, "OFFLINE") &&
+			!strings.Contains(s, "OLD-SESSION")
 	})
 
-	a.send(t, "printf back-again\n")
-	a.waitForScreen(t, "the new session to work", func(s string) bool {
+	// The pane is drawn as soon as it exists, which is before the shell
+	// inside it has read anything, so the first line typed can land before
+	// anything is listening. Say it again until it is heard.
+	a.sendUntil(t, "printf back-again\n", "the new session to work", func(s string) bool {
 		return strings.Contains(s, "back-again")
 	})
 }
@@ -857,30 +901,29 @@ func TestAttachTabsAreScopedToTheirSpace(t *testing.T) {
 func TestAttachAgentListGroupsEverything(t *testing.T) {
 	a := startSession(t, 100, 18)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-	a.send(t, "\x02|")
-	a.waitForScreen(t, "two panes", func(s string) bool {
-		return strings.Count(s, "┌") == 2
-	})
 	a.send(t, "\x02s")
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
 
-	a.send(t, "\x02a")
-	a.waitForScreen(t, "the agent list", func(s string) bool {
-		return strings.Contains(s, "main") && strings.Contains(s, "space 2")
-	})
-
-	// Both spaces, their tabs, and every pane are listed together.
+	// Every space is listed, not only the one being looked at.
 	text := a.text()
-	if strings.Count(text, "tab 1") < 2 {
-		t.Errorf("the list should show each space's tabs:\n%s", text)
+	if !strings.Contains(text, "spaces") || !strings.Contains(text, "agents") {
+		t.Errorf("both sections should be shown:\n%s", text)
+	}
+	if !strings.Contains(text, "main") || !strings.Contains(text, "space 2") {
+		t.Errorf("the list should show every space:\n%s", text)
 	}
 
 	// Closing it gives the columns back: the pane returns to the left edge.
 	a.send(t, "\x02a")
 	a.waitForScreen(t, "the list to close", func(string) bool {
 		return a.paneStartsAtLeftEdge()
+	})
+
+	a.send(t, "\x02a")
+	a.waitForScreen(t, "the list to come back", func(s string) bool {
+		return strings.Contains(s, "spaces")
 	})
 }
 
@@ -914,7 +957,7 @@ func TestAttachNavigateJumpsAcrossSpaces(t *testing.T) {
 		return strings.Contains(s, "space 2") && !strings.Contains(s, "FIRST-SPACE")
 	})
 
-	// Walk the list back to the first space's pane and jump to it.
+	// Walk the list back to the first space and jump to it.
 	a.send(t, "\x02g")
 	a.waitForScreen(t, "navigate mode", func(s string) bool {
 		return strings.Contains(s, "NAVIGATE")
@@ -1013,6 +1056,15 @@ func (a *attached) clickAt(t *testing.T, col, row int) {
 	time.Sleep(120 * time.Millisecond)
 }
 
+// columnOfString returns the cell column where a substring starts, or -1.
+func columnOfString(line, want string) int {
+	i := strings.Index(line, want)
+	if i < 0 {
+		return -1
+	}
+	return len([]rune(line[:i]))
+}
+
 // columnOf returns the cell column of a rune in a line, counting cells rather
 // than bytes — the box-drawing characters are three bytes each.
 func columnOf(line string, want rune) int {
@@ -1090,14 +1142,13 @@ func TestAttachClickSidebarHeading(t *testing.T) {
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
-	a.send(t, "\x02a")
-	a.waitForScreen(t, "the agent list", func(s string) bool {
+	a.waitForScreen(t, "the space list", func(s string) bool {
 		return strings.Contains(s, "main")
 	})
 
 	row := -1
 	for i, line := range a.lines() {
-		if strings.HasPrefix(strings.TrimSpace(line), "main") {
+		if strings.Contains(line, "main") && strings.Contains(line, "○") {
 			row = i
 			break
 		}
@@ -1109,5 +1160,82 @@ func TestAttachClickSidebarHeading(t *testing.T) {
 
 	a.waitForScreen(t, "the first space", func(s string) bool {
 		return strings.Contains(s, "FIRST-SPACE")
+	})
+}
+
+// fakeAgentBin writes an executable with the given name. Linux takes a
+// process's name from the file that was executed, so a script is enough.
+func fakeAgentBin(t *testing.T, name, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// lineContaining returns the screen row holding a substring, counted from one
+// as the mouse reports rows.
+func (a *attached) lineContaining(t *testing.T, want string) int {
+	t.Helper()
+	for i, line := range a.lines() {
+		if strings.Contains(line, want) {
+			return i + 1
+		}
+	}
+	t.Fatalf("no line containing %q:\n%s", want, a.text())
+	return 0
+}
+
+// TestAttachSidebarIsShownByDefault: the list of what needs attention is the
+// reason to run tend, and a list behind a keystroke is one nobody presses.
+func TestAttachSidebarIsShownByDefault(t *testing.T) {
+	a := startSession(t, 90, 14)
+	a.waitForScreen(t, "the sidebar", func(s string) bool {
+		return strings.Contains(s, "spaces") && strings.Contains(s, "agents")
+	})
+	if a.paneStartsAtLeftEdge() {
+		t.Errorf("the sidebar should own the leftmost columns:\n%s", a.text())
+	}
+}
+
+// TestAttachSidebarShowsTheBranch covers what tells two spaces on the same
+// repository apart.
+func TestAttachSidebarShowsTheBranch(t *testing.T) {
+	a := startSession(t, 90, 14)
+	a.waitForScreen(t, "the branch", func(s string) bool {
+		return strings.Contains(s, "master") || strings.Contains(s, "main\n")
+	})
+}
+
+// TestAttachTogglesGroupedByClicking: the toggle sits in the heading, and
+// clicking it is the only way to reach it with the mouse.
+func TestAttachTogglesGroupedByClicking(t *testing.T) {
+	a := startSession(t, 90, 14)
+	a.waitForScreen(t, "the agents heading", func(s string) bool {
+		return strings.Contains(s, "flat")
+	})
+
+	a.clickAt(t, ui.SidebarWidth-4, a.lineContaining(t, "agents"))
+	a.waitForScreen(t, "the list to group", func(s string) bool {
+		return strings.Contains(s, "grouped")
+	})
+
+	a.clickAt(t, ui.SidebarWidth-4, a.lineContaining(t, "agents"))
+	a.waitForScreen(t, "the list to flatten", func(s string) bool {
+		return strings.Contains(s, "flat")
+	})
+}
+
+// TestAttachClickNewSpace: the row says "new", so clicking it has to make one.
+func TestAttachClickNewSpace(t *testing.T) {
+	a := startSession(t, 90, 14)
+	a.waitForScreen(t, "the new row", func(s string) bool {
+		return strings.Contains(s, "new")
+	})
+
+	a.clickAt(t, 2, a.lineContaining(t, "new"))
+	a.waitForScreen(t, "a second space", func(s string) bool {
+		return strings.Contains(s, "space 2")
 	})
 }

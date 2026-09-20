@@ -21,6 +21,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -52,6 +53,55 @@ const (
 	defaultAdoptInterval = time.Second
 )
 
+// branchTTL is how long a directory's branch is trusted before being read
+// again.
+const branchTTL = 2 * time.Second
+
+// branchCache remembers each workspace directory's branch, since a snapshot is
+// taken on every redraw and reading one touches the filesystem.
+//
+// It has its own lock rather than the server's. Resolving a branch is I/O, and
+// the server lock is the one every pane operation needs — holding it across a
+// file read would put the whole session behind a slow disk. Keeping the locks
+// separate also keeps this callable from inside a snapshot, which already
+// holds the session lock and would otherwise deadlock on itself.
+type branchCache struct {
+	mu      sync.Mutex
+	entries map[string]branchEntry
+}
+
+func newBranchCache() *branchCache {
+	return &branchCache{entries: make(map[string]branchEntry)}
+}
+
+// lookup returns a directory's branch, reading it again once it goes stale.
+func (c *branchCache) lookup(dir string) string {
+	if dir == "" {
+		return ""
+	}
+
+	c.mu.Lock()
+	entry, ok := c.entries[dir]
+	fresh := ok && time.Since(entry.at) < branchTTL
+	c.mu.Unlock()
+	if fresh {
+		return entry.name
+	}
+
+	name := session.Branch(dir)
+
+	c.mu.Lock()
+	c.entries[dir] = branchEntry{name: name, at: time.Now()}
+	c.mu.Unlock()
+	return name
+}
+
+// branchEntry is a cached branch name and when it was read.
+type branchEntry struct {
+	name string
+	at   time.Time
+}
+
 // ErrClosed is returned once the server has shut down.
 var ErrClosed = errors.New("server: closed")
 
@@ -73,6 +123,9 @@ type Config struct {
 	// AdoptInterval is how often a pane is checked for the program now in
 	// charge of its terminal. Zero picks a default.
 	AdoptInterval time.Duration
+	// Dir is where a workspace created without one is rooted. Empty uses the
+	// server's own working directory, which is where its panes start anyway.
+	Dir string
 }
 
 // PaneSpec describes a pane to open.
@@ -118,8 +171,9 @@ type Server struct {
 	// conns tracks connected clients so shutdown can hang them up. Without
 	// this they sit blocked on a socket read that nothing ever ends, and Close
 	// waits on them forever.
-	conns  map[*clientConn]struct{}
-	closed bool
+	conns    map[*clientConn]struct{}
+	branches *branchCache
+	closed   bool
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -150,6 +204,11 @@ func New(cfg Config) (*Server, error) {
 	if cfg.AdoptInterval <= 0 {
 		cfg.AdoptInterval = defaultAdoptInterval
 	}
+	if cfg.Dir == "" {
+		// A failure here is not worth refusing to start over: it only means
+		// spaces show no branch.
+		cfg.Dir, _ = os.Getwd()
+	}
 
 	s := &Server{
 		cfg:      cfg,
@@ -159,6 +218,7 @@ func New(cfg Config) (*Server, error) {
 		runtimes: make(map[session.PaneID]*paneRuntime),
 		titles:   make(map[session.PaneID]string),
 		conns:    make(map[*clientConn]struct{}),
+		branches: newBranchCache(),
 		done:     make(chan struct{}),
 	}
 
@@ -237,12 +297,24 @@ func (s *Server) Subscribe(buffer int) *Subscription { return s.events.subscribe
 
 // NewWorkspace adds a workspace and focuses it.
 func (s *Server) NewWorkspace(name string) (session.WorkspaceID, error) {
+	return s.NewWorkspaceIn(name, "")
+}
+
+// NewWorkspaceIn adds a workspace rooted at a directory.
+//
+// A workspace with no directory of its own takes the server's, since that is
+// where its panes start. Without it the space would show no branch, which is
+// the one thing that tells two spaces on the same repository apart.
+func (s *Server) NewWorkspaceIn(name, dir string) (session.WorkspaceID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return 0, ErrClosed
 	}
-	return s.session.AddWorkspace(name).ID, nil
+	if dir == "" {
+		dir = s.cfg.Dir
+	}
+	return s.session.AddWorkspaceIn(name, dir).ID, nil
 }
 
 // NewTab creates a tab with one pane and starts its process.

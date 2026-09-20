@@ -98,8 +98,13 @@ type TabInfo struct {
 
 // WorkspaceInfo describes a workspace.
 type WorkspaceInfo struct {
-	ID        uint64    `json:"id"`
-	Name      string    `json:"name,omitempty"`
+	ID   uint64 `json:"id"`
+	Name string `json:"name,omitempty"`
+	// Dir is what the workspace is about, and Branch the git branch checked
+	// out there. Branch is computed by the server because only it can see the
+	// directory: a client may be on another machine entirely.
+	Dir       string    `json:"dir,omitempty"`
+	Branch    string    `json:"branch,omitempty"`
 	Tabs      []TabInfo `json:"tabs"`
 	ActiveTab uint64    `json:"active_tab,omitempty"`
 }
@@ -127,6 +132,7 @@ type PaneSpec struct {
 // WorkspaceNewParams creates a workspace.
 type WorkspaceNewParams struct {
 	Name string `json:"name,omitempty"`
+	Dir  string `json:"dir,omitempty"`
 }
 
 // WorkspaceNewResult reports the new workspace.

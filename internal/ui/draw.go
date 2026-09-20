@@ -35,6 +35,7 @@ type Theme struct {
 
 	Sidebar            vt.Style
 	SidebarActive      vt.Style
+	SidebarDetail      vt.Style
 	SidebarGroup       vt.Style
 	SidebarGroupActive vt.Style
 
@@ -64,6 +65,7 @@ func DefaultTheme() Theme {
 
 		Sidebar:            vt.Style{},
 		SidebarActive:      vt.Style{Attrs: vt.AttrBold},
+		SidebarDetail:      dim,
 		SidebarGroup:       dim,
 		SidebarGroupActive: vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
 
@@ -187,8 +189,8 @@ type Frame struct {
 	// Prefix marks that the prefix key is armed and the next key is a command.
 	Prefix bool
 
-	// Sidebar shows the agent list down the left edge, and SidebarRows is
-	// what it holds.
+	// Sidebar shows the spaces and agents down the left edge, and SidebarRows
+	// is what it holds.
 	Sidebar     bool
 	SidebarRows []SidebarRow
 	// Navigating marks that the list has the keyboard.
