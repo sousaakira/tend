@@ -373,6 +373,14 @@ func (c *Client) PaneScreenAt(pane uint64, offset int) (proto.PaneScreenResult, 
 
 // AdjustSplit moves one edge of a pane. side is "left", "right", "up" or
 // "down"; cols and rows are the size the tab is being drawn in.
+// PaneText reads the text in a region of a pane, which may reach outside the
+// view into the scrollback.
+func (c *Client) PaneText(p proto.PaneTextParams) (string, error) {
+	var out proto.PaneTextResult
+	err := c.Call(proto.MethodPaneText, p, &out)
+	return out.Text, err
+}
+
 func (c *Client) AdjustSplit(pane uint64, side string, cells, cols, rows int) error {
 	return c.Call(proto.MethodPaneAdjust, proto.PaneAdjustParams{
 		Target: pane, Side: side, Cells: cells, Cols: cols, Rows: rows,

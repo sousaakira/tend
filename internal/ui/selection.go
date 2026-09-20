@@ -30,12 +30,26 @@ type Selection struct {
 	// both in the pane's own cells with the top-left at zero.
 	AnchorX, AnchorY int
 	CursorX, CursorY int
-	// Scroll is how far back the pane was being read when the drag started.
-	// A selection follows the text, not the screen, so scrolling under a
-	// finished selection must not move what it covers.
+	// Scroll is how far back the pane was being read when the ends were last
+	// set. A selection follows the text, not the screen: when the view moves
+	// under it the ends move with it, so what it covers does not change.
 	Scroll int
+	// Block takes a rectangle instead of a run of text.
+	//
+	// A run is right for prose and wrong for anything laid out in columns,
+	// which inside an agent is most of what is on screen: the agent draws its
+	// own panels, and a run spanning three lines takes the whole width of the
+	// middle one, panel and all. A rectangle takes the columns the drag
+	// covered and nothing beside them.
+	Block bool
 	// Dragging marks that the button is still down.
 	Dragging bool
+}
+
+// bounds returns the rectangle the two ends span.
+func (s Selection) bounds() (left, top, right, bottom int) {
+	return min(s.AnchorX, s.CursorX), min(s.AnchorY, s.CursorY),
+		max(s.AnchorX, s.CursorX), max(s.AnchorY, s.CursorY)
 }
 
 // Empty reports whether the selection covers nothing.
@@ -60,6 +74,10 @@ func (s Selection) covers(x, y int) bool {
 	if s.Empty() {
 		return false
 	}
+	if s.Block {
+		left, top, right, bottom := s.bounds()
+		return x >= left && x <= right && y >= top && y <= bottom
+	}
 	fromX, fromY, toX, toY := s.ordered()
 	switch {
 	case y < fromY || y > toY:
@@ -72,80 +90,6 @@ func (s Selection) covers(x, y int) bool {
 		return x <= toX
 	}
 	return true
-}
-
-// Text is what the selection covers, as lines.
-//
-// Trailing blanks are dropped from every line but the last: a terminal pads
-// its rows to the full width, and pasting that padding turns one line of code
-// into one line of code followed by seventy spaces.
-func (s Selection) Text(screen *vt.Screen) string {
-	if s.Empty() || screen == nil {
-		return ""
-	}
-	fromX, fromY, toX, toY := s.ordered()
-
-	var out []byte
-	for y := fromY; y <= toY; y++ {
-		row := lineAt(screen, y, s.Scroll)
-		if row == nil {
-			continue
-		}
-		start, end := 0, row.Len()-1
-		if y == fromY {
-			start = fromX
-		}
-		if y == toY {
-			end = toX
-		}
-		if y > fromY {
-			out = append(out, '\n')
-		}
-		out = append(out, trimRight(runsOf(row, start, end))...)
-	}
-	return string(out)
-}
-
-// runsOf reads a row's runes between two columns.
-func runsOf(row *vt.Row, from, to int) []byte {
-	var out []byte
-	for x := max(from, 0); x <= to && x < row.Len(); x++ {
-		cell := row.Cell(x)
-		if cell.Width == 0 {
-			// The right half of a wide character holds no rune of its own.
-			continue
-		}
-		r := cell.R
-		if r == 0 {
-			r = ' '
-		}
-		out = append(out, []byte(string(r))...)
-	}
-	return out
-}
-
-// trimRight drops trailing spaces, which a terminal pads its rows with.
-func trimRight(line []byte) []byte {
-	at := len(line)
-	for at > 0 && line[at-1] == ' ' {
-		at--
-	}
-	return line[:at]
-}
-
-// lineAt returns a pane's row, counting the scrollback the view is showing.
-func lineAt(screen *vt.Screen, y, scroll int) *vt.Row {
-	grid := screen.MainGrid()
-	if scroll <= 0 {
-		return grid.Line(y)
-	}
-	// Scrolled back, the top of the view is `scroll` lines into the history,
-	// and the view runs on into the live screen once the history is spent.
-	at := y - scroll
-	if at < 0 {
-		return grid.HistoryLine(grid.HistoryLen() + at)
-	}
-	return grid.Line(at)
 }
 
 // drawSelection reverses the cells a selection covers.

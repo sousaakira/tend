@@ -43,6 +43,7 @@ var Methods = []string{
 	proto.MethodPaneResize,
 	proto.MethodPaneSubscribe,
 	proto.MethodPaneScreen,
+	proto.MethodPaneText,
 	proto.MethodPaneAdjust,
 	proto.MethodTabLayout,
 	proto.MethodServerShutdown,
@@ -430,6 +431,13 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return c.srv.paneScreen(session.PaneID(p.Pane), p.Offset)
 
+	case proto.MethodPaneText:
+		var p proto.PaneTextParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.PaneText(session.PaneID(p.Pane), p)
+
 	case proto.MethodPaneAdjust:
 		var p proto.PaneAdjustParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -641,4 +649,113 @@ func (s *Server) paneScreen(id session.PaneID, offset int) (proto.PaneScreenResu
 	out.History = history
 	out.Text = rt.screenText()
 	return out, nil
+}
+
+// PaneText returns the text in a region of a pane.
+func (s *Server) PaneText(id session.PaneID, p proto.PaneTextParams) (proto.PaneTextResult, error) {
+	s.mu.Lock()
+	rt, ok := s.runtimes[id]
+	s.mu.Unlock()
+	if !ok {
+		return proto.PaneTextResult{}, fmt.Errorf("%w: %d", session.ErrNoSuchPane, id)
+	}
+
+	var out proto.PaneTextResult
+	rt.withScreen(func(screen *vt.Screen) {
+		out.Text = paneText(screen, p)
+	})
+	return out, nil
+}
+
+// paneText cuts a region out of a terminal.
+//
+// A viewport row is turned into a position in everything the pane has — the
+// history first, then the live screen — so a row above the view is three lines
+// into the history and the arithmetic is the same either side of that line.
+func paneText(screen *vt.Screen, p proto.PaneTextParams) string {
+	grid := screen.MainGrid()
+	history := grid.HistoryLen()
+	total := history + grid.Rows()
+	if total == 0 {
+		return ""
+	}
+
+	fromRow, fromCol, toRow, toCol := ordered(p)
+	top := history - max(p.Scroll, 0)
+	first := min(max(top+fromRow, 0), total-1)
+	last := min(max(top+toRow, 0), total-1)
+
+	var out []byte
+	for at := first; at <= last; at++ {
+		row := grid.Line(at - history)
+		if at < history {
+			row = grid.HistoryLine(at)
+		}
+		if at > first {
+			out = append(out, '\n')
+		}
+		if row == nil {
+			continue
+		}
+
+		start, end := fromCol, toCol
+		if !p.Block {
+			// A run takes the end of the first line, all of the middle ones
+			// and the start of the last, which is what dragging over prose is
+			// asking for.
+			start, end = 0, row.Len()-1
+			if at == first {
+				start = fromCol
+			}
+			if at == last {
+				end = toCol
+			}
+		}
+		out = append(out, trimRight(cellsOf(row, start, end))...)
+	}
+	return string(out)
+}
+
+// ordered puts the corners of a region in reading order.
+//
+// A rectangle has corners and a run has a beginning and an end, so which of
+// the two ends came first matters for one and not the other.
+func ordered(p proto.PaneTextParams) (fromRow, fromCol, toRow, toCol int) {
+	if p.Block {
+		return min(p.FromRow, p.ToRow), min(p.FromCol, p.ToCol),
+			max(p.FromRow, p.ToRow), max(p.FromCol, p.ToCol)
+	}
+	if p.FromRow < p.ToRow || (p.FromRow == p.ToRow && p.FromCol <= p.ToCol) {
+		return p.FromRow, p.FromCol, p.ToRow, p.ToCol
+	}
+	return p.ToRow, p.ToCol, p.FromRow, p.FromCol
+}
+
+// cellsOf reads a row's runes between two columns, counting cells rather than
+// runes: a wide character fills two columns and its second half holds no rune
+// of its own.
+func cellsOf(row *vt.Row, from, to int) []byte {
+	var out []byte
+	for x := max(from, 0); x <= to && x < row.Len(); x++ {
+		cell := row.Cell(x)
+		if cell.Width == 0 {
+			continue
+		}
+		r := cell.R
+		if r == 0 {
+			r = ' '
+		}
+		out = append(out, []byte(string(r))...)
+	}
+	return out
+}
+
+// trimRight drops the blanks a terminal pads its rows with. Pasting them turns
+// one line of code into one line and seventy spaces.
+func trimRight(line []byte) []byte {
+	at := len(line)
+	for at > 0 && line[at-1] == ' ' {
+		at--
+	}
+	return line[:at]
 }

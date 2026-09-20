@@ -29,6 +29,7 @@ const (
 	MethodPaneResize    = "pane.resize"
 	MethodPaneSubscribe = "pane.subscribe"
 	MethodPaneScreen    = "pane.screen"
+	MethodPaneText      = "pane.text"
 
 	MethodPaneAdjust = "pane.adjust"
 
@@ -128,6 +129,34 @@ type WorkspaceInfo struct {
 	Group     string    `json:"group,omitempty"`
 	Tabs      []TabInfo `json:"tabs"`
 	ActiveTab uint64    `json:"active_tab,omitempty"`
+}
+
+// PaneTextParams asks for the text in a region of a pane.
+//
+// The rows are counted from the top of the view at Scroll and may fall outside
+// it: a selection dragged past the edge covers text the client has scrolled
+// away from, and the point of asking is that the server still has it.
+//
+// The region is cut where the cells are rather than by the caller, because a
+// column is a property of the terminal: a wide character fills two of them and
+// a combining mark none, so counting runes in a line of text gets a different
+// answer than counting cells on a screen.
+type PaneTextParams struct {
+	Pane   uint64 `json:"pane"`
+	Scroll int    `json:"scroll,omitempty"`
+	// FromRow and ToRow are inclusive viewport rows; FromCol and ToCol are
+	// the columns where the drag started and ended.
+	FromRow int `json:"from_row"`
+	FromCol int `json:"from_col"`
+	ToRow   int `json:"to_row"`
+	ToCol   int `json:"to_col"`
+	// Block takes a rectangle instead of a run of text.
+	Block bool `json:"block,omitempty"`
+}
+
+// PaneTextResult carries what the region holds.
+type PaneTextResult struct {
+	Text string `json:"text"`
 }
 
 // SessionSnapshot is the whole session as a client sees it.

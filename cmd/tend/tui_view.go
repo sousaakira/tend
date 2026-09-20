@@ -548,3 +548,26 @@ func (t *tui) focusPane(pane uint64) {
 		t.wakeUp()
 	}
 }
+
+// scrollPaneBy moves a named pane's view, entering the scrollback if it is not
+// already in it.
+//
+// scrollBy works on whichever pane the scroll view is on, which is the right
+// answer for the wheel and the keys. A selection is dragged in one particular
+// pane, and it must not move a view that belongs to another one.
+func (t *tui) scrollPaneBy(pane uint64, lines int) error {
+	t.mu.Lock()
+	current := t.scrollPane
+	t.mu.Unlock()
+
+	if current != pane {
+		if lines <= 0 {
+			// Already at the present: there is nowhere further forward to go.
+			return nil
+		}
+		t.mu.Lock()
+		t.scrollPane, t.scrollOffset = pane, 0
+		t.mu.Unlock()
+	}
+	return t.scrollBy(lines)
+}

@@ -2054,3 +2054,123 @@ func TestAttachSelectsInsideAProgramThatWantsTheMouse(t *testing.T) {
 		return strings.Count(a.text(), "[<0;") > before+1
 	})
 }
+
+// TestAttachSelectsARectangle: an agent draws its own panels, so a run
+// spanning three lines takes the whole width of the middle one and everything
+// beside it. Alt takes the columns instead, which is the convention every
+// terminal already uses for this.
+func TestAttachSelectsARectangle(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf 'AAA  ppp\\nBBB  qqq\\nCCC  rrr\\n'\n", "the text", func(s string) bool {
+		return strings.Contains(s, "CCC  rrr")
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	// The last row holding it, so the command that produced it is skipped.
+	bottom := 0
+	for i, line := range a.lines() {
+		if strings.Contains(line, "CCC  rrr") {
+			bottom = i + 1
+		}
+	}
+	if bottom == 0 {
+		t.Fatalf("no output row:\n%s", a.text())
+	}
+	top := bottom - 2
+	col := columnOfString(a.lines()[top-1], "AAA") + 1
+
+	// A run takes the whole of the middle line.
+	a.dragFromTo(t, 0, col, top, col+2, bottom)
+	a.waitForScreen(t, "the run", func(string) bool {
+		return strings.TrimSpace(a.reversedOn(top)) == "BBB  qqq"
+	})
+
+	// A rectangle takes the columns dragged over, on every line.
+	const alt = 8
+	a.dragFromTo(t, alt, col, top, col+2, bottom)
+	a.waitForScreen(t, "the rectangle", func(string) bool {
+		return strings.TrimSpace(a.reversedOn(top)) == "BBB"
+	})
+	for i, want := range []string{"AAA", "BBB", "CCC"} {
+		if got := strings.TrimSpace(a.reversedOn(top - 1 + i)); got != want {
+			t.Errorf("row %d marked %q, want %q", i, got, want)
+		}
+	}
+	a.waitForScreen(t, "the copy to say so", func(s string) bool {
+		return strings.Contains(s, "(block)")
+	})
+}
+
+// TestAttachScrollsWhileSelecting is the reason the view follows the pointer:
+// a selection that stops at the edge of the screen can only ever take what
+// happens to be on it.
+func TestAttachScrollsWhileSelecting(t *testing.T) {
+	const rows = 14
+	a := startSession(t, 100, rows)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "for i in $(seq 1 40); do echo LINE-$i; done\n", "the output", func(s string) bool {
+		return strings.Contains(s, "LINE-40")
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	row := a.lineContaining(t, "LINE-40")
+	col := columnOfString(a.lines()[row-1], "LINE-40") + 1
+
+	// Press on the last line, drag to the top edge, and hold there. Reports
+	// stop arriving once the pointer stops moving, so what happens next is
+	// the draw loop's doing.
+	a.send(t, "\x1b[<0;"+itoa(col+6)+";"+itoa(row)+"M")
+	time.Sleep(120 * time.Millisecond)
+	a.send(t, "\x1b[<32;"+itoa(col)+";2M")
+
+	a.waitForScreen(t, "the view to follow", func(s string) bool {
+		return strings.Contains(s, "LINE-1 ") || strings.Contains(s, "LINE-2 ")
+	})
+	a.send(t, "\x1b[<0;"+itoa(col)+";2m")
+
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied ") && strings.Contains(s, "lines")
+	})
+	// More than the pane is tall, which is the whole point.
+	status := a.lines()[len(a.lines())-1]
+	at := strings.Index(status, "copied ")
+	var n int
+	for _, r := range status[at+len("copied "):] {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+	}
+	if n <= rows {
+		t.Errorf("copied %d lines from a %d-row pane; the selection should have reached past it:\n%s",
+			n, rows, status)
+	}
+}
+
+// TestAttachDoesNotScrollWhileSelectingInside: the view follows the pointer at
+// the edge and nowhere else, or a careful drag in the middle would slide the
+// text out from under it.
+func TestAttachDoesNotScrollWhileSelectingInside(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "for i in $(seq 1 30); do echo LINE-$i; done\n", "the output", func(s string) bool {
+		return strings.Contains(s, "LINE-30")
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	row := a.lineContaining(t, "LINE-30")
+	col := columnOfString(a.lines()[row-1], "LINE-30") + 1
+	before := a.text()
+
+	// A drag that ends two rows short of the top.
+	a.dragFromTo(t, 0, col, row, col, row-3)
+	time.Sleep(600 * time.Millisecond)
+
+	if strings.Contains(a.text(), "scroll ") {
+		t.Errorf("a drag inside the pane should not have moved the view:\n%s", a.text())
+	}
+	if !strings.Contains(a.text(), "LINE-30") || !strings.Contains(before, "LINE-30") {
+		t.Errorf("the view should be where it was:\n%s", a.text())
+	}
+}

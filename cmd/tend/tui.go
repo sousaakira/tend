@@ -126,6 +126,9 @@ type tui struct {
 	// press is a press in a mouse-reporting pane that has not yet turned out
 	// to be either a click or the start of a drag.
 	press *pendingPress
+	// autoScroll is which way the view moves while a drag is held against an
+	// edge: -1 back through the history, 1 towards the present.
+	autoScroll int
 	// spacesScroll and agentsScroll are how far each list is scrolled, in
 	// entries. Separate because the lists are: one filling up must not push
 	// the other out of sight, which is the whole reason they are divided.
@@ -246,6 +249,9 @@ func (t *tui) run() error {
 			// A push arrived; the ticker decides when it becomes a frame.
 
 		case <-ticker.C:
+			if err := t.autoScrollSelection(); err != nil {
+				t.setMessage(err.Error(), true)
+			}
 			t.expireMessage()
 			if err := t.paint(); err != nil {
 				return err

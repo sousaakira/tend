@@ -394,12 +394,31 @@ func (in *Input) disarm() {
 
 // HelpLines renders the bindings for the help overlay.
 func HelpLines() []string {
-	lines := make([]string, 0, len(Keys)+1)
+	lines := make([]string, 0, len(Keys)+len(Gestures)+2)
 	lines = append(lines, "ctrl+b then:")
 	for _, k := range Keys {
 		lines = append(lines, "  "+pad(k.Key, 5)+" "+k.Help)
 	}
+	lines = append(lines, "mouse:")
+	for _, g := range Gestures {
+		lines = append(lines, "  "+pad(g.Gesture, 9)+" "+g.Help)
+	}
 	return lines
+}
+
+// Gestures are what the mouse does, listed beside the keys because somebody
+// looking for how to copy looks in the same place either way.
+//
+// They are not in Keys: that table maps a key to a command and is checked to
+// be exactly that, and a drag is neither.
+var Gestures = []struct {
+	Gesture string
+	Help    string
+}{
+	{"drag", "select text"},
+	{"alt+drag", "select a block"},
+	{"right", "menu for what is under it"},
+	{"wheel", "scroll back"},
 }
 
 func pad(s string, width int) string {

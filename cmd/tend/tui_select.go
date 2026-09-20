@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/sousaakira/tend/internal/clipboard"
+	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
 )
 
@@ -17,6 +18,13 @@ import (
 //
 // So tend marks the selection itself, over the pane the drag started in, and
 // hands the text to the terminal to put on the clipboard.
+
+// blockModifier switches a drag from a run of text to a rectangle.
+//
+// It is the convention every terminal already uses for this, which matters
+// more than any argument for a different key: somebody reaching for block
+// selection reaches for alt without being told.
+const blockModifier = ui.ModAlt
 
 // A press cannot be told from the start of a drag, and in a pane whose own
 // program asked for the mouse the two want opposite things: a click belongs to
@@ -111,9 +119,21 @@ func (t *tui) dragSelection(ev ui.MouseEvent) bool {
 	// edge to take the rest of a line is the ordinary way to select, and
 	// dropping those reports would make the selection stop short of where the
 	// pointer plainly is.
+	// Dragging past the edge asks for more than the screen is showing, so the
+	// view follows the pointer. The direction is remembered rather than acted
+	// on here: reports arrive only while the pointer moves, and holding still
+	// against the edge is exactly when the scrolling has to keep going.
+	t.autoScroll = t.edgeDirectionLocked(t.sel.Pane, ev.Y)
+
 	x, y := t.clampToPaneLocked(t.sel.Pane, ev.X, ev.Y)
-	if x != t.sel.CursorX || y != t.sel.CursorY {
+	// The shape is read on every report rather than fixed at the press, so
+	// the modifier can be taken or let go part way through a drag and the
+	// mark answers at once. Deciding it once would mean starting over to
+	// change your mind.
+	block := ev.Mods.Has(blockModifier)
+	if x != t.sel.CursorX || y != t.sel.CursorY || block != t.sel.Block {
 		t.sel.CursorX, t.sel.CursorY = x, y
+		t.sel.Block = block
 		t.dirty = true
 	}
 	return true
@@ -146,8 +166,8 @@ func (t *tui) endSelection() bool {
 		return false
 	}
 	t.sel.Dragging = false
+	t.autoScroll = 0
 	sel := *t.sel
-	screen := t.screens[sel.Pane]
 	if sel.Empty() {
 		// A click is not a selection. Clearing it here means a stray click
 		// does not leave a one-cell mark behind.
@@ -156,13 +176,96 @@ func (t *tui) endSelection() bool {
 	t.dirty = true
 	t.mu.Unlock()
 
-	text := sel.Text(screen)
+	if sel.Empty() {
+		t.wakeUp()
+		return true
+	}
+
+	// The text comes from the server, not from the rows on screen. A drag
+	// that scrolled covers more than the view is showing, and the scrollback
+	// it covers is not here.
+	text, err := t.client.PaneText(proto.PaneTextParams{
+		Pane:    sel.Pane,
+		Scroll:  sel.Scroll,
+		FromRow: sel.AnchorY,
+		FromCol: sel.AnchorX,
+		ToRow:   sel.CursorY,
+		ToCol:   sel.CursorX,
+		Block:   sel.Block,
+	})
+	if err != nil {
+		t.setMessage("copy failed: "+err.Error(), true)
+		return true
+	}
 	if text == "" {
 		t.wakeUp()
 		return true
 	}
-	t.copyToClipboard(text)
+	t.copyToClipboard(text, sel.Block)
 	return true
+}
+
+// edgeDirectionLocked reports which way the view should move for a pointer at
+// a pane's edge: -1 back through the history, 1 towards the present, 0 for a
+// pointer that is comfortably inside.
+func (t *tui) edgeDirectionLocked(pane uint64, y int) int {
+	for _, r := range t.paneRects() {
+		if r.Pane != pane {
+			continue
+		}
+		switch {
+		case y <= r.Y:
+			return -1
+		case y >= r.Y+r.Rows-1:
+			return 1
+		}
+		return 0
+	}
+	return 0
+}
+
+// autoScrollSelection moves the view while a drag is held against an edge.
+//
+// It runs on the draw loop rather than on mouse reports because those stop
+// arriving the moment the pointer stops moving, and a pointer held at the
+// edge is precisely the case this exists for.
+func (t *tui) autoScrollSelection() error {
+	t.mu.Lock()
+	dir := t.autoScroll
+	dragging := t.sel != nil && t.sel.Dragging
+	pane := uint64(0)
+	if t.sel != nil {
+		pane = t.sel.Pane
+	}
+	before := t.selectionScrollLocked(pane)
+	t.mu.Unlock()
+	if dir == 0 || !dragging || pane == 0 {
+		return nil
+	}
+
+	if err := t.scrollPaneBy(pane, -dir); err != nil {
+		return err
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.sel == nil {
+		return nil
+	}
+	// The anchor follows the text and the cursor does not. The anchor marks
+	// where the drag began, which has just moved down the screen; the cursor
+	// marks where the pointer is, and the pointer has not moved. That is the
+	// whole of the behaviour: holding against the edge sweeps the far end
+	// backwards through text the view is only now showing.
+	moved := t.selectionScrollLocked(pane) - before
+	if moved == 0 {
+		// Nothing left to scroll, so there is nothing more to take.
+		return nil
+	}
+	t.sel.AnchorY += moved
+	t.sel.Scroll = t.selectionScrollLocked(pane)
+	t.dirty = true
+	return nil
 }
 
 // clearSelection drops the mark, if there is one.
@@ -189,7 +292,7 @@ func (t *tui) clearSelection() {
 //
 // So the message reports what is actually known: a tool that took the text can
 // be waited on and believed, and a sequence can only be said to have been sent.
-func (t *tui) copyToClipboard(text string) {
+func (t *tui) copyToClipboard(text string, block bool) {
 	if seq := ui.SetClipboard(text); seq != "" {
 		_, _ = io.WriteString(os.Stdout, seq)
 	}
@@ -197,11 +300,11 @@ func (t *tui) copyToClipboard(text string) {
 	via, err := clipboard.Copy(text)
 	switch {
 	case err == nil && via != "":
-		t.setMessage(copiedMessage(text, via), false)
+		t.setMessage(copiedMessage(text, via, block), false)
 	case errors.Is(err, clipboard.ErrNoTool):
 		// Nothing local to hand it to, so the terminal is the only hope and
 		// there is no way to know whether it took it.
-		t.setMessage(copiedMessage(text, "terminal")+"?", false)
+		t.setMessage(copiedMessage(text, "terminal", block)+"?", false)
 	default:
 		t.setMessage("copy failed: "+err.Error(), true)
 	}
@@ -209,7 +312,7 @@ func (t *tui) copyToClipboard(text string) {
 
 // copiedMessage says how much was taken and where it went, since the mark is
 // about to be redrawn and the user has nothing else to go on.
-func copiedMessage(text, via string) string {
+func copiedMessage(text, via string, block bool) string {
 	lines := 1
 	for _, r := range text {
 		if r == '\n' {
@@ -219,6 +322,9 @@ func copiedMessage(text, via string) string {
 	what := itoaInt(len([]rune(text))) + " characters"
 	if lines > 1 {
 		what = itoaInt(lines) + " lines"
+	}
+	if block {
+		what += " (block)"
 	}
 	return "copied " + what + " · " + via
 }

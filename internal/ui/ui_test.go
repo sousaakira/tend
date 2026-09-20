@@ -451,22 +451,33 @@ func TestInputKeepsOrderWithinAChunk(t *testing.T) {
 }
 
 // TestHelpMatchesTheBindings keeps the help text from drifting away from what
-// the keys actually do.
+// the keys and the mouse actually do.
 func TestHelpMatchesTheBindings(t *testing.T) {
 	lines := HelpLines()
-	if len(lines) != len(Keys)+1 {
-		t.Fatalf("help has %d lines for %d bindings", len(lines), len(Keys))
+	// A heading for each of the two lists, and a line for every entry.
+	if want := len(Keys) + len(Gestures) + 2; len(lines) != want {
+		t.Fatalf("help has %d lines, want %d", len(lines), want)
 	}
-	for _, k := range Keys {
-		found := false
+
+	mentioned := func(what string) bool {
 		for _, line := range lines {
-			if strings.Contains(line, k.Help) {
-				found = true
-				break
+			if strings.Contains(line, what) {
+				return true
 			}
 		}
-		if !found {
-			t.Errorf("help does not mention %q", k.Help)
+		return false
+	}
+	for _, k := range Keys {
+		if !mentioned(k.Help) {
+			t.Errorf("help does not mention the %q key", k.Help)
+		}
+	}
+	for _, g := range Gestures {
+		if !mentioned(g.Help) {
+			t.Errorf("help does not mention the %q gesture", g.Help)
+		}
+		if !mentioned(g.Gesture) {
+			t.Errorf("help does not say how to %q", g.Help)
 		}
 	}
 }
@@ -1455,48 +1466,6 @@ func selScreen(t *testing.T, cols, rows int, lines ...string) *vt.Screen {
 	return s
 }
 
-// TestSelectionTakesARunOfText: a selection spanning three lines takes the end
-// of the first, all of the second and the start of the third, which is what
-// dragging over prose is asking for.
-func TestSelectionTakesARunOfText(t *testing.T) {
-	screen := selScreen(t, 40, 5, "alpha bravo", "charlie delta", "echo foxtrot")
-
-	// Within one line.
-	one := Selection{Pane: 1, AnchorX: 0, AnchorY: 0, CursorX: 4, CursorY: 0}
-	if got := one.Text(screen); got != "alpha" {
-		t.Errorf("one line = %q, want %q", got, "alpha")
-	}
-
-	// Across three, ending mid-word.
-	many := Selection{Pane: 1, AnchorX: 6, AnchorY: 0, CursorX: 3, CursorY: 2}
-	want := "bravo\ncharlie delta\necho"
-	if got := many.Text(screen); got != want {
-		t.Errorf("three lines = %q, want %q", got, want)
-	}
-
-	// Dragged backwards, the same text comes out: which end moved is not
-	// something the clipboard should know about.
-	back := Selection{Pane: 1, AnchorX: 3, AnchorY: 2, CursorX: 6, CursorY: 0}
-	if got := back.Text(screen); got != want {
-		t.Errorf("dragged backwards = %q, want %q", got, want)
-	}
-
-	// A terminal pads its rows to the full width, and pasting that padding
-	// turns one line of code into one line and seventy spaces.
-	whole := Selection{Pane: 1, AnchorX: 0, AnchorY: 0, CursorX: 39, CursorY: 1}
-	if got := whole.Text(screen); got != "alpha bravo\ncharlie delta" {
-		t.Errorf("padded rows = %q", got)
-	}
-
-	// Nothing selected is nothing copied.
-	if got := (Selection{Pane: 1}).Text(screen); got != "" {
-		t.Errorf("empty selection = %q", got)
-	}
-	if got := many.Text(nil); got != "" {
-		t.Errorf("no screen = %q", got)
-	}
-}
-
 // TestSelectionMarksWhatItCovers: the mark reverses what is there rather than
 // painting over it, so styled text stays readable in any theme.
 func TestSelectionMarksWhatItCovers(t *testing.T) {
@@ -1536,5 +1505,29 @@ func TestSetClipboardIsTheTerminalsJob(t *testing.T) {
 	}
 	if SetClipboard("") != "" {
 		t.Error("nothing to copy should send nothing")
+	}
+}
+
+// TestSelectionBlockTakesOnlyTheColumns is the case an agent creates: it draws
+// its own panel down the right of the pane, and a run spanning three lines
+// takes the whole width of the middle one, panel and all.
+func TestSelectionBlockTakesOnlyTheColumns(t *testing.T) {
+	screen := selScreen(t, 40, 5, "AAA  ppp", "BBB  qqq", "CCC  rrr")
+	drag := Selection{Pane: 1, AnchorX: 0, AnchorY: 0, CursorX: 2, CursorY: 2}
+
+	drag.Block = true
+
+	// The mark shows the shape; cutting the text out of it is the server's
+	// job, because a column is a property of the cells and those live there.
+	f := Frame{
+		Panes:     []Pane{{ID: 1, Rect: Rect{X: 0, Y: 0, Cols: 40, Rows: 6}, Screen: screen, Running: true}},
+		Selection: &drag,
+	}
+	g := vt.NewGrid(40, 8, 0)
+	Draw(g, f, DefaultTheme())
+	for i, want := range []string{"AAA", "BBB", "CCC"} {
+		if got := reversedRuns(g, 1+i); got != want {
+			t.Errorf("row %d marked %q, want %q", i, got, want)
+		}
 	}
 }
