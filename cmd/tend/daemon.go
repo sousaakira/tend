@@ -25,8 +25,16 @@ import (
 
 // sessionFlag adds the -s flag every client command shares.
 func sessionFlag(fs *flag.FlagSet) *string {
+	// Registered alongside the session name, so every command that can name a
+	// session can also say which machine it is on. A remote session that
+	// could be attached to but not listed or killed would be half a feature.
+	fs.StringVar(&remoteHost, "ssh", "", "the machine the session is on, as `user@host`")
 	return fs.String("s", transport.DefaultSessionName, "session name")
 }
+
+// remoteHost is the machine named by -ssh, or empty for this one. One process
+// talks to one session, so this is set once while the flags are read.
+var remoteHost string
 
 // connect dials a session, reporting the missing-server case in a way that
 // says what to do about it rather than quoting a socket error.
@@ -36,6 +44,9 @@ func sessionFlag(fs *flag.FlagSet) *string {
 // it would report an empty session rather than the absence of one. Commands
 // that are meant to put you in a session use openSession instead.
 func connect(name string, handler client.Handler) (*client.Client, error) {
+	if remoteHost != "" {
+		return client.DialRemote(transport.RemoteArgv(remoteHost, name), handler)
+	}
 	path, err := transport.SocketPath(name)
 	if err != nil {
 		return nil, err
@@ -63,6 +74,16 @@ func notRunning(err error) bool {
 // only because of how this is built. The server outlives the client either
 // way, so starting it here changes nothing about what happens afterwards.
 func openSession(name string, handler client.Handler) (*client.Client, error) {
+	return openSessionOn(remoteHost, name, handler)
+}
+
+// openSessionOn opens a session on another machine when host is set, and here
+// otherwise. Starting the server is the far side's job in the first case:
+// `tend bridge` does there what this function does here.
+func openSessionOn(host, name string, handler client.Handler) (*client.Client, error) {
+	if host != "" {
+		return client.DialRemote(transport.RemoteArgv(host, name), handler)
+	}
 	path, err := transport.SocketPath(name)
 	if err != nil {
 		return nil, err

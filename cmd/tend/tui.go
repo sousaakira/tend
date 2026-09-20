@@ -41,7 +41,7 @@ func runAttach(args []string) error {
 	name := sessionFlag(fs)
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(),
-			"usage: tend attach [-s session]\n\n"+
+			"usage: tend attach [-s session] [-ssh user@host]\n\n"+
 				"draws a session's panes and forwards the keyboard to the focused one.\n"+
 				"ctrl+b is the prefix; ctrl+b ? lists the keys. ctrl+b d detaches,\n"+
 				"leaving everything running.\n\n")
@@ -73,6 +73,7 @@ func runAttach(args []string) error {
 	t := &tui{
 		config:   cfg,
 		session:  *name,
+		host:     remoteHost,
 		theme:    ui.ThemeFrom(cfg.UI.Theme),
 		painter:  vt.NewPainter(),
 		screens:  make(map[uint64]*vt.Screen),
@@ -98,6 +99,9 @@ func runAttach(args []string) error {
 type tui struct {
 	config  config.Config
 	session string
+	// host is the machine the session is on, or empty for this one. It is
+	// kept so a reconnect goes back to the same place it lost.
+	host    string
 	theme   ui.Theme
 	client  *client.Client
 	painter *vt.Painter
@@ -187,7 +191,7 @@ type tui struct {
 }
 
 func (t *tui) run() error {
-	c, err := openSession(t.session, t)
+	c, err := openSessionOn(t.host, t.session, t)
 	if err != nil {
 		return err
 	}
@@ -280,7 +284,7 @@ func (t *tui) reconnect() error {
 		if t.detach {
 			return nil
 		}
-		c, err := openSession(t.session, t)
+		c, err := openSessionOn(t.host, t.session, t)
 		if err == nil {
 			old := t.client
 			t.client = c
@@ -680,6 +684,18 @@ func (t *tui) trackPointer(on bool) {
 	_, _ = io.WriteString(os.Stdout, seq)
 }
 
+// sessionLabel names the session, and the machine when it is not this one.
+//
+// Two windows showing "default" look identical, and the one on the production
+// host is the one where a mistaken keystroke costs something. The machine is
+// said first because it is the part that differs.
+func (t *tui) sessionLabel() string {
+	if t.host == "" {
+		return t.session
+	}
+	return t.host + ":" + t.session
+}
+
 // markSelected puts the navigation cursor on whichever row it points at.
 func markSelected(rows []ui.SidebarRow, nav navTarget) {
 	for i := range rows {
@@ -691,7 +707,7 @@ func markSelected(rows []ui.SidebarRow, nav navTarget) {
 // buildFrame assembles what to draw. The caller holds the lock.
 func (t *tui) buildFrame() ui.Frame {
 	frame := ui.Frame{
-		Session:   t.session,
+		Session:   t.sessionLabel(),
 		Message:   t.message,
 		Alert:     t.alert,
 		Prefix:    t.keys.Armed(),

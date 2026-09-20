@@ -2460,3 +2460,86 @@ func TestAttachStillHandsOverTheMouseToAnOlderServer(t *testing.T) {
 		return strings.Contains(s, "[<32;5;")
 	})
 }
+
+// TestAttachOverSSH covers a session on another machine end to end, with a
+// local shell standing in for ssh: the client runs the command, the command
+// runs `tend bridge` "there", and the ordinary protocol goes through it.
+//
+// The two sides get separate runtime directories, which is what makes it a
+// test of remoteness rather than of a pipe: if the client fell back to its own
+// socket the session would turn up in the wrong one.
+func TestAttachOverSSH(t *testing.T) {
+	bin := buildBinary(t)
+	near, far := t.TempDir(), t.TempDir()
+	configPath := filepath.Join(t.TempDir(), "absent.toml")
+
+	// Stands in for ssh: drops the host and the word "tend", and runs the
+	// rest with this build, as if on a machine with its own runtime directory.
+	stand := filepath.Join(t.TempDir(), "fake-ssh")
+	script := "#!/bin/sh\nshift; shift\nTEND_RUNTIME_DIR=" + far + " exec " + bin + " \"$@\"\n"
+	if err := os.WriteFile(stand, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := pty.Start(bin, []string{"attach", "-ssh", "user@farhost", "-s", "far"}, pty.Options{
+		Size: pty.Size{Cols: 100, Rows: 16},
+		Env: append(os.Environ(),
+			"TEND_RUNTIME_DIR="+near,
+			"TEND_CONFIG="+configPath,
+			"TEND_SSH="+stand,
+			"SHELL=/bin/sh",
+			"TERM=xterm-256color",
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(100, 16, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stop := exec.Command(bin, "kill", "-s", "far", "-server")
+		stop.Env = append(os.Environ(), "TEND_RUNTIME_DIR="+far)
+		_ = stop.Run()
+	})
+
+	a.waitForScreen(t, "a pane from the far side", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf REMOTE-OK\n", "the far shell to answer", func(s string) bool {
+		return strings.Contains(s, "REMOTE-OK")
+	})
+
+	// The machine is named, because two windows showing the same session name
+	// are otherwise identical and only one of them is production.
+	if status := a.lines()[len(a.lines())-1]; !strings.Contains(status, "user@farhost:far") {
+		t.Errorf("the status line should say where the session is: %q", status)
+	}
+
+	// And the session lives there, not here.
+	if _, err := os.Stat(filepath.Join(far, "far.sock")); err != nil {
+		t.Errorf("the far side should hold the socket: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(near, "far.sock")); err == nil {
+		t.Error("the near side should not have started a server of its own")
+	}
+}
+
+// TestAttachOverSSHSaysWhyItFailed: "connection closed" says nothing, and the
+// reason — tend not installed there, a host key refused — is on stderr.
+func TestAttachOverSSHSaysWhyItFailed(t *testing.T) {
+	bin := buildBinary(t)
+	stand := filepath.Join(t.TempDir(), "fake-ssh")
+	script := "#!/bin/sh\necho 'sh: tend: command not found' >&2\nexit 127\n"
+	if err := os.WriteFile(stand, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(bin, "ls", "-s", "far", "-ssh", "user@farhost")
+	cmd.Env = append(os.Environ(), "TEND_RUNTIME_DIR="+t.TempDir(), "TEND_SSH="+stand)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected a failure, got:\n%s", out)
+	}
+	if !strings.Contains(string(out), "command not found") {
+		t.Errorf("the far side's complaint should be shown:\n%s", out)
+	}
+}

@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,10 +66,33 @@ func Dial(socketPath string, handler Handler) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return attach(nc, handler)
+	return Attach(nc, handler)
 }
 
-func attach(nc net.Conn, handler Handler) (*Client, error) {
+// DialRemote reaches a session on another machine through the command that
+// carries it, and completes the handshake.
+//
+// When the handshake fails, what the command said on stderr is the reason and
+// is put in the error: "tend: command not found" or a refused host key is what
+// the user needs, and "connection closed" is what they would otherwise get.
+func DialRemote(argv []string, handler Handler) (*Client, error) {
+	rc, err := transport.Remote(argv)
+	if err != nil {
+		return nil, err
+	}
+	c, err := Attach(rc, handler)
+	if err != nil {
+		_ = rc.Close()
+		if why := rc.Complaint(); why != "" {
+			return nil, fmt.Errorf("%w: %s", err, why)
+		}
+		return nil, err
+	}
+	return c, nil
+}
+
+// Attach completes the handshake over a connection that is already open.
+func Attach(nc io.ReadWriteCloser, handler Handler) (*Client, error) {
 	if handler == nil {
 		handler = nopHandler{}
 	}

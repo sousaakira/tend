@@ -39,6 +39,8 @@ commands that need no server:
   screen            render captured terminal output as tend parses it
   watch             run a command on a pty and report its agent state
   session           run several commands as panes in one process
+  bridge            carry a session over stdin and stdout, for ssh
+  completion        print a shell completion script (bash, zsh, fish)
   version           print the version
 
 run "tend <command> -h" for a command's options.
@@ -81,6 +83,10 @@ func main() {
 		err = runFollow(args[1:])
 	case "config":
 		err = runConfig(args[1:])
+	case "bridge":
+		err = runBridge(args[1:])
+	case "completion":
+		err = runCompletion(args[1:])
 	case "version":
 		fmt.Printf("tend %s\n", version)
 	case "-h", "--help", "help":
