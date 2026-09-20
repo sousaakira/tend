@@ -130,6 +130,14 @@ func startServer(name string) error {
 	// The server's output goes to a file rather than nowhere. It is the only
 	// record of why a session failed to start, and a background process with
 	// no output is one that fails silently.
+	// The directory is made here, not left to the server. The log is opened
+	// before the server exists, and the runtime directory is on a filesystem
+	// that is emptied at logout: the first tend after a reboot found nothing
+	// there and failed on its own log file, before it had started anything.
+	// Private, like the socket that goes in it.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("creating the runtime directory: %w", err)
+	}
 	log, err := os.OpenFile(serverLog(path), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("opening the server log: %w", err)

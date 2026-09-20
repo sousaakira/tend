@@ -2667,3 +2667,47 @@ func shellPid(screen, marker string) string {
 	}
 	return rest[:end]
 }
+
+// TestBareTendStartsWhenTheRuntimeDirectoryIsGone is the first tend after a
+// reboot. The runtime directory lives on a filesystem that is emptied at
+// logout, and the log is opened before the server exists — so tend failed on
+// its own log file, before it had started anything, every time the machine had
+// been restarted.
+func TestBareTendStartsWhenTheRuntimeDirectoryIsGone(t *testing.T) {
+	// A path that does not exist yet, as /run/user/<uid>/tend does not.
+	runtimeDir := filepath.Join(t.TempDir(), "not", "made", "yet")
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	t.Setenv("TEND_CONFIG", configPath)
+
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, nil, pty.Options{
+		Size: pty.Size{Cols: 80, Rows: 20},
+		Env: append(os.Environ(),
+			"TEND_RUNTIME_DIR="+runtimeDir,
+			"TEND_CONFIG="+configPath,
+			"SHELL=/bin/sh",
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(80, 20, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stopSession(t, "default")
+	})
+
+	a.waitForScreen(t, "a session, from a directory that was not there", func(s string) bool {
+		return strings.Contains(s, "┌")
+	})
+	// Made private, since the socket goes in it.
+	info, err := os.Stat(runtimeDir)
+	if err != nil {
+		t.Fatalf("the runtime directory should have been made: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Errorf("the runtime directory is %o, want 700", perm)
+	}
+}
