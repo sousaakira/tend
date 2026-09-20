@@ -1342,7 +1342,12 @@ func TestSidebarKeepsRoomForAgentsThatHaveNotArrived(t *testing.T) {
 		spaceRows(20)...,
 	))
 	_, many := SidebarRegions(full, rows)
-	if many.Rows > rows*2/5 {
+	if many.Rows > agentsCeiling(SidebarHeight(rows)) {
 		t.Errorf("a long list of agents took %d of %d lines", many.Rows, rows)
+	}
+	// At the ceiling the two are even; the agents never get more than half.
+	if spacesOf, _ := SidebarRegions(full, rows); spacesOf.Rows < many.Rows {
+		t.Errorf("spaces %d, agents %d: the agents should never take the larger share",
+			spacesOf.Rows, many.Rows)
 	}
 }

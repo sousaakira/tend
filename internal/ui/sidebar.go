@@ -163,6 +163,16 @@ func SidebarHeight(rows int) int { return max(rows-StatusRows, 0) }
 // dragged at it. One line is not a list, it is a heading with nothing under it.
 const sidebarMinSection = 3
 
+// agentsFloor and agentsCeiling bound the strip the agents get by default.
+//
+// The floor is what makes it a place rather than a remainder: the list people
+// watch should not have to earn its room by already being full, and without
+// slack the first agent to appear has nowhere to appear. The ceiling keeps the
+// spaces the larger of the two, since a space goes on existing and an agent is
+// only what happens to be running.
+func agentsFloor(height int) int   { return max(sidebarMinSection, height/3) }
+func agentsCeiling(height int) int { return max(agentsFloor(height), height/2) }
+
 // SidebarSplitAt is the line the divider sits on: the spaces list is above it
 // and the agents list below.
 //
@@ -190,8 +200,7 @@ func SidebarSplitAt(f Frame, rows int) int {
 		// nowhere to appear — and the list people watch should not have to
 		// earn its room by already being full.
 		want := sectionHeight(f.Agents) + footerHeight(f.Agents)
-		floor := max(sidebarMinSection, height/4)
-		want = min(max(want, floor), height*2/5)
+		want = min(max(want, agentsFloor(height)), agentsCeiling(height))
 		at = height - want - 1
 	}
 	return min(max(at, sidebarMinSection), height-sidebarMinSection-1)
