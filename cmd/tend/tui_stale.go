@@ -113,6 +113,9 @@ type mismatch struct {
 func (t *tui) disagree() (mismatch, bool) {
 	hello := t.client.Server()
 	serverAhead, clientAhead := proto.Compare(hello.Methods)
+	featuresAhead, featuresBehind := proto.CompareFeatures(hello.Features)
+	serverAhead = serverAhead || featuresAhead
+	clientAhead = clientAhead || featuresBehind
 	if !serverAhead && !clientAhead {
 		return mismatch{}, false
 	}

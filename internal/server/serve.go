@@ -325,10 +325,11 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			methods = c.srv.cfg.Advertise
 		}
 		return proto.HelloResult{
-			Version: proto.Version,
-			Server:  "tend",
-			Build:   c.srv.cfg.Build,
-			Methods: methods,
+			Version:  proto.Version,
+			Server:   "tend",
+			Build:    c.srv.cfg.Build,
+			Methods:  methods,
+			Features: c.srv.features(),
 		}, nil
 
 	case proto.MethodSessionSnapshot:

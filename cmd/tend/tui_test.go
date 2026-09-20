@@ -127,6 +127,13 @@ func startSessionIn(t *testing.T, cols, rows int, dir string) *attached {
 
 func startSessionWith(t *testing.T, cols, rows int, build, dir string, advertise ...string) *attached {
 	t.Helper()
+	return startSessionConfigured(t, cols, rows, server.Config{Build: build, Dir: dir, Advertise: advertise})
+}
+
+// startSessionConfigured runs the session's server from a given configuration,
+// for the tests that need a server unlike the one this build would start.
+func startSessionConfigured(t *testing.T, cols, rows int, cfg server.Config) *attached {
+	t.Helper()
 
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
@@ -143,14 +150,10 @@ func startSessionWith(t *testing.T, cols, rows int, build, dir string, advertise
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv, err := server.New(server.Config{
-		Build:          build,
-		Advertise:      advertise,
-		Dir:            dir,
-		DetectInterval: 20 * time.Millisecond,
-		DefaultSize:    pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
-		ShutdownGrace:  time.Second,
-	})
+	cfg.DetectInterval = 20 * time.Millisecond
+	cfg.DefaultSize = pty.Size{Cols: uint16(cols), Rows: uint16(rows)}
+	cfg.ShutdownGrace = time.Second
+	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2424,4 +2427,36 @@ func TestAttachForcesItsOwnSelectionWithTheModifier(t *testing.T) {
 	if strings.Contains(a.text(), "[<") {
 		t.Errorf("a forced selection should not reach the program:\n%s", a.text())
 	}
+}
+
+// TestAttachNoticesAServerMissingAFeature: a change that adds no method is
+// invisible in the method list. A client forwarding the mouse to a server that
+// does not say which encoding the program wants, and waiting for a clipboard
+// event that server has never heard of, fails without anything saying why.
+func TestAttachNoticesAServerMissingAFeature(t *testing.T) {
+	a := startSessionConfigured(t, 100, 20, server.Config{Build: "older", OmitFeatures: true})
+	a.waitForScreen(t, "the notice", func(s string) bool {
+		return strings.Contains(s, "older server") && strings.Contains(s, "restart it now")
+	})
+}
+
+// TestAttachStillHandsOverTheMouseToAnOlderServer: what that server leaves out
+// is read as the common case rather than as "no drags, legacy encoding", which
+// would send a modern program reports it cannot parse.
+func TestAttachStillHandsOverTheMouseToAnOlderServer(t *testing.T) {
+	a := startSessionConfigured(t, 100, 16, server.Config{Build: version, OmitFeatures: true})
+	a.waitForScreen(t, "the notice", func(s string) bool { return strings.Contains(s, "older server") })
+	a.send(t, "\r") // carry on with it
+	a.waitForScreen(t, "the notice to go", func(s string) bool { return !strings.Contains(s, "older server") })
+
+	prog := fakeAgentBin(t, "mouser", "printf '\\033[?1002h\\033[?1006h'; printf 'READY\\n'; cat")
+	a.sendUntil(t, prog+"\n", "the program", func(s string) bool { return strings.Contains(s, "READY") })
+	time.Sleep(400 * time.Millisecond)
+
+	row := a.lineContaining(t, "READY")
+	col := columnOfString(a.lines()[row-1], "READY") + 1
+	a.dragFromTo(t, 0, col, row, col+4, row)
+	a.waitForScreen(t, "the drag, in the encoding the program reads", func(s string) bool {
+		return strings.Contains(s, "[<32;5;")
+	})
 }

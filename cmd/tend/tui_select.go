@@ -348,6 +348,14 @@ func (t *tui) forwardMouse(pane uint64, ev ui.MouseEvent, clamp bool) (bool, err
 	if !info.Mouse || !inside {
 		return false, nil
 	}
+	if !t.serverHas(proto.FeatureMouseDetail) {
+		// A server from before it reported the detail says only that the
+		// program wants the mouse. Reading the missing fields as "no drags,
+		// legacy encoding" sends a modern program reports it cannot parse and
+		// withholds the ones it needs, so the overwhelmingly common answer is
+		// assumed instead: button events with drags, in SGR.
+		info.MouseDrag, info.MouseSGR = true, true
+	}
 	// Only what it subscribed to. A program that asked for clicks alone has
 	// no code for a drag report, and what it does with one is its own
 	// business and nobody's idea of correct.
@@ -363,6 +371,16 @@ func (t *tui) forwardMouse(pane uint64, ev ui.MouseEvent, clamp bool) (bool, err
 		return true, nil
 	}
 	return true, t.client.SendInput(pane, seq)
+}
+
+// serverHas reports whether the server said it provides a feature.
+func (t *tui) serverHas(feature string) bool {
+	for _, f := range t.client.Server().Features {
+		if f == feature {
+			return true
+		}
+	}
+	return false
 }
 
 // beginGesture gives a press to the pane's program and remembers that the rest

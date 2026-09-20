@@ -27,6 +27,7 @@ import (
 
 	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/detect"
+	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/session"
 	"github.com/sousaakira/tend/internal/vt"
@@ -192,6 +193,9 @@ type Config struct {
 	// Build is this binary's version, reported in the handshake so a client
 	// can say which two builds are talking.
 	Build string
+	// OmitFeatures leaves the feature list out of the handshake, which is
+	// what a server from before there was one looks like.
+	OmitFeatures bool
 	// Advertise overrides the method list sent in the handshake. Empty means
 	// everything this build serves, which is what a real server sends; naming
 	// fewer is how an older one is stood up to test against.
@@ -495,6 +499,14 @@ func (s *Server) CloseTab(id session.TabID) error {
 		s.events.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
 	}
 	return nil
+}
+
+// features is what this server says it provides beyond its methods.
+func (s *Server) features() []string {
+	if s.cfg.OmitFeatures {
+		return nil
+	}
+	return proto.KnownFeatures
 }
 
 // GroupWorkspace moves a workspace into a group, or out of one.

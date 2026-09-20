@@ -108,7 +108,26 @@ type HelloResult struct {
 	// a client needs to explain a method the server has never heard of.
 	Build   string   `json:"build,omitempty"`
 	Methods []string `json:"methods,omitempty"`
+	// Features are things a server does that are not methods: events it
+	// sends, fields it fills in. A change of that kind is invisible in the
+	// method list, and it is how a client ended up forwarding the mouse to a
+	// server that did not say which encoding the program wanted, and waiting
+	// for a clipboard event that server had never heard of.
+	Features []string `json:"features,omitempty"`
 }
+
+// Features a server of this build provides.
+const (
+	// FeaturePaneClipboard: a pane's OSC 52 write is passed on as an event.
+	FeaturePaneClipboard = "pane-clipboard"
+	// FeatureMouseDetail: the snapshot says how much mouse a pane asked for
+	// and in which encoding.
+	FeatureMouseDetail = "mouse-detail"
+)
+
+// KnownFeatures is every feature this build knows of, for the same reason
+// KnownMethods exists.
+var KnownFeatures = []string{FeaturePaneClipboard, FeatureMouseDetail}
 
 // --- session ---------------------------------------------------------------
 
@@ -404,12 +423,21 @@ type Event struct {
 // lacks have diverged rather than one being behind, and saying "you are old"
 // to either of them would be wrong.
 func Compare(advertised []string) (serverAhead, clientAhead bool) {
+	return compare(advertised, KnownMethods, MethodHello)
+}
+
+// CompareFeatures is Compare for the things that are not methods.
+func CompareFeatures(advertised []string) (serverAhead, clientAhead bool) {
+	return compare(advertised, KnownFeatures, "")
+}
+
+func compare(advertised, mine []string, skip string) (serverAhead, clientAhead bool) {
 	has := make(map[string]bool, len(advertised))
 	for _, m := range advertised {
 		has[m] = true
 	}
-	known := make(map[string]bool, len(KnownMethods))
-	for _, m := range KnownMethods {
+	known := make(map[string]bool, len(mine))
+	for _, m := range mine {
 		known[m] = true
 	}
 
@@ -418,8 +446,8 @@ func Compare(advertised []string) (serverAhead, clientAhead bool) {
 			serverAhead = true
 		}
 	}
-	for _, m := range KnownMethods {
-		if m != MethodHello && !has[m] {
+	for _, m := range mine {
+		if m != skip && !has[m] {
 			clientAhead = true
 		}
 	}
