@@ -120,6 +120,10 @@ type WorkspaceInfo struct {
 	// directory: a client may be on another machine entirely.
 	Dir    string `json:"dir,omitempty"`
 	Branch string `json:"branch,omitempty"`
+	// Ahead and Behind are how far the checkout has drifted from the branch
+	// it follows. Zero for both means in step, or nothing to be in step with.
+	Ahead  int `json:"ahead,omitempty"`
+	Behind int `json:"behind,omitempty"`
 	// Group is what the workspace is kept with. Empty means it stands alone.
 	Group     string    `json:"group,omitempty"`
 	Tabs      []TabInfo `json:"tabs"`

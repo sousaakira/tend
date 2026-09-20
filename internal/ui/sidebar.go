@@ -137,9 +137,23 @@ func TrailingStart(r SidebarRow) int {
 // SidebarSection is one of the two lists.
 type SidebarSection struct {
 	Rows []SidebarRow
+	// Footer sits against the bottom of the section, below the scrolling
+	// rows. Buttons belong at the edge of the thing they act on, and one that
+	// floats after the last entry moves every time the list grows — so the
+	// place to reach for it changes with something the user did not do.
+	Footer []SidebarRow
 	// Scroll is how many entries are scrolled off the top of this list. It is
 	// clamped where it is drawn, so a client need not track what fits.
 	Scroll int
+}
+
+// footerHeight is how many lines a section's footer takes.
+func footerHeight(s SidebarSection) int {
+	total := 0
+	for _, r := range s.Footer {
+		total += r.height()
+	}
+	return total
 }
 
 // SidebarHeight is how many lines the sidebar has, divider included.
@@ -166,7 +180,19 @@ func SidebarSplitAt(f Frame, rows int) int {
 
 	at := f.SidebarSplit
 	if at <= 0 {
-		at = min(sectionHeight(f.Spaces), height/2)
+		// The spaces get the room by default and the agents a contained strip
+		// at the bottom. A space is a place that goes on existing; an agent is
+		// what happens to be running, and there are rarely many at once. The
+		// split going the other way meant a long list of places scrolled in a
+		// keyhole under a mostly empty one.
+		// A floor as well as a ceiling. Sizing the strip to what is in it
+		// means an empty one is three lines and the first agent to appear has
+		// nowhere to appear — and the list people watch should not have to
+		// earn its room by already being full.
+		want := sectionHeight(f.Agents) + footerHeight(f.Agents)
+		floor := max(sidebarMinSection, height/4)
+		want = min(max(want, floor), height*2/5)
+		at = height - want - 1
 	}
 	return min(max(at, sidebarMinSection), height-sidebarMinSection-1)
 }
@@ -200,7 +226,7 @@ func scrollable(s SidebarSection, height int) (pinned []SidebarRow, rest []Sideb
 	for _, r := range pinned {
 		height -= r.height()
 	}
-	return pinned, s.Rows[at:], max(height, 0)
+	return pinned, s.Rows[at:], max(height-footerHeight(s), 0)
 }
 
 // sidebarRegions returns the lines each list is drawn in, and the divider row.
@@ -357,7 +383,7 @@ func drawSection(dst *vt.Grid, s SidebarSection, region Rect, width int, theme T
 		return
 	}
 	limit := width - 1
-	pinned, rest, _ := scrollable(s, region.Rows)
+	pinned, rest, room := scrollable(s, region.Rows)
 	from := sidebarScroll(s, region.Rows)
 
 	y := region.Y
@@ -369,12 +395,21 @@ func drawSection(dst *vt.Grid, s SidebarSection, region Rect, width int, theme T
 	head := y
 	last := from
 	for _, r := range rest[min(from, len(rest)):] {
-		if y+r.height() > region.Y+region.Rows {
+		if y+r.height() > head+room {
 			break
 		}
 		drawSidebarRow(dst, r, y, limit, theme)
 		y += r.height()
 		last++
+	}
+
+	// The footer is drawn against the bottom of the region rather than after
+	// the last entry, so it stays where the hand expects it however long the
+	// list gets.
+	at := region.Y + region.Rows - footerHeight(s)
+	for _, r := range s.Footer {
+		drawSidebarRow(dst, r, at, limit, theme)
+		at += r.height()
 	}
 
 	// Say which way there is more. A list that silently ends is one the user
@@ -546,25 +581,40 @@ func SidebarRowAt(f Frame, x, y, rows int) (SidebarRow, bool) {
 }
 
 func rowInSection(s SidebarSection, region Rect, x, y int) (SidebarRow, bool) {
+	// The footer is looked at first: it is drawn over the bottom of the
+	// region, and a click there means the footer, not whatever entry would
+	// have reached that far.
+	at := region.Y + region.Rows - footerHeight(s)
+	for _, r := range s.Footer {
+		if y >= at && y < at+r.height() {
+			return resolveTrailing(r, x, y, at), true
+		}
+		at += r.height()
+	}
+
 	pinned, rest, _ := scrollable(s, region.Rows)
 	from := sidebarScroll(s, region.Rows)
 
-	at := region.Y
+	at = region.Y
 	walk := append(append([]SidebarRow{}, pinned...), rest[min(from, len(rest)):]...)
 	for _, r := range walk {
 		height := r.height()
 		if y >= at && y < at+height {
-			// A trailing button is its own target. Without this the "menu"
-			// beside "new" would create a space, which is the one thing
-			// somebody reaching for a menu did not ask for.
-			if start := TrailingStart(r); r.TrailingAction != "" && start >= 0 && x >= start && y == at {
-				r.Action = r.TrailingAction
-			}
-			return r, true
+			return resolveTrailing(r, x, y, at), true
 		}
 		at += height
 	}
 	return SidebarRow{}, false
+}
+
+// resolveTrailing points a row at its trailing button when the click was on
+// one. Without it the "menu" beside "new" would create a space, which is the
+// one thing somebody reaching for a menu did not ask for.
+func resolveTrailing(r SidebarRow, x, y, top int) SidebarRow {
+	if start := TrailingStart(r); r.TrailingAction != "" && start >= 0 && x >= start && y == top {
+		r.Action = r.TrailingAction
+	}
+	return r
 }
 
 // SidebarRevealScroll is the smallest offset that brings an entry into view,

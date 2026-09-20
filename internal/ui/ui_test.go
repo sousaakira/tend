@@ -1251,3 +1251,98 @@ func TestSidebarHandleTogglesFromEitherSide(t *testing.T) {
 		t.Errorf("the tabs should start past the handle:\n%q", lines[0])
 	}
 }
+
+// TestSidebarFooterStaysAtTheBottom: a button that floats after the last entry
+// moves every time the list grows, so the place to reach for it changes with
+// something the user did not do.
+func TestSidebarFooterStaysAtTheBottom(t *testing.T) {
+	const rows = 24
+	f := sidebarFrame(spaceRows(2), []SidebarRow{{Kind: SidebarHeading, Label: "agents"}})
+	f.Spaces.Footer = []SidebarRow{{
+		Kind: SidebarAction, Label: "new", Action: ActionNewSpace,
+		Trailing: "menu", TrailingAction: ActionOpenMenu,
+	}}
+	spaces, _ := SidebarRegions(f, rows)
+	foot := spaces.Y + spaces.Rows - 1
+
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	lines := gridText(g)
+	if !strings.Contains(lines[foot], "new") || !strings.Contains(lines[foot], "menu") {
+		t.Errorf("the footer should be on the last line of its section:\n%q", lines[foot])
+	}
+	// Directly above the divider, not floating after the entries.
+	if at := SidebarSplitAt(f, rows); foot != at-1 {
+		t.Errorf("footer at %d, divider at %d: they should touch", foot, at)
+	}
+
+	// A longer list does not move it.
+	f.Spaces.Rows = spaceRows(12)
+	g = vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	if line := gridText(g)[foot]; !strings.Contains(line, "new") {
+		t.Errorf("the footer moved when the list grew:\n%q", line)
+	}
+
+	// And it is clickable where it is drawn, both halves of it.
+	if row, ok := SidebarRowAt(f, 2, foot, rows); !ok || row.Action != ActionNewSpace {
+		t.Errorf("the footer should be a target, got %+v ok=%v", row, ok)
+	}
+	at := TrailingStart(f.Spaces.Footer[0])
+	if row, ok := SidebarRowAt(f, at, foot, rows); !ok || row.Action != ActionOpenMenu {
+		t.Errorf("the footer's button should be its own target, got %+v", row)
+	}
+}
+
+// TestSidebarGivesTheRoomToSpaces: a space is a place that goes on existing,
+// an agent is what happens to be running, and there are rarely many at once.
+func TestSidebarGivesTheRoomToSpaces(t *testing.T) {
+	const rows = 30
+	f := sidebarFrame(spaceRows(12), []SidebarRow{
+		{Kind: SidebarHeading, Label: "agents"},
+		{Kind: SidebarAgent, Label: "one", Detail: "claude", Pane: 1},
+	})
+	spaces, agents := SidebarRegions(f, rows)
+
+	if spaces.Rows <= agents.Rows {
+		t.Errorf("spaces got %d lines, agents %d: the spaces should have the room",
+			spaces.Rows, agents.Rows)
+	}
+	if agents.Rows < sidebarMinSection {
+		t.Errorf("the agents list should keep a usable strip, got %d", agents.Rows)
+	}
+	// And the default is a default: a drag still decides.
+	f.SidebarSplit = 6
+	if got := SidebarSplitAt(f, rows); got != 6 {
+		t.Errorf("a dragged split should be kept, got %d", got)
+	}
+}
+
+// TestSidebarKeepsRoomForAgentsThatHaveNotArrived: sizing the strip to what is
+// in it means an empty one is three lines and the first agent to appear has
+// nowhere to appear.
+func TestSidebarKeepsRoomForAgentsThatHaveNotArrived(t *testing.T) {
+	const rows = 30
+	empty := sidebarFrame(spaceRows(12), []SidebarRow{{Kind: SidebarHeading, Label: "agents"}})
+	_, agents := SidebarRegions(empty, rows)
+
+	if agents.Rows <= sectionHeight(empty.Agents) {
+		t.Errorf("an empty list got %d lines for %d of content: it should keep room",
+			agents.Rows, sectionHeight(empty.Agents))
+	}
+	// But not so much that the spaces suffer for it.
+	spaces, _ := SidebarRegions(empty, rows)
+	if spaces.Rows <= agents.Rows {
+		t.Errorf("spaces %d, agents %d: the spaces still get the room", spaces.Rows, agents.Rows)
+	}
+
+	// A full list is capped rather than taking the column.
+	full := sidebarFrame(spaceRows(2), append(
+		[]SidebarRow{{Kind: SidebarHeading, Label: "agents"}},
+		spaceRows(20)...,
+	))
+	_, many := SidebarRegions(full, rows)
+	if many.Rows > rows*2/5 {
+		t.Errorf("a long list of agents took %d of %d lines", many.Rows, rows)
+	}
+}

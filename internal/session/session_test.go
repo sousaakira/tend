@@ -2,6 +2,9 @@ package session
 
 import (
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/sousaakira/tend/internal/detect"
@@ -718,5 +721,59 @@ func TestGroupWorkspace(t *testing.T) {
 	}
 	if err := s.CheckInvariants(); err != nil {
 		t.Error(err)
+	}
+}
+
+// TestAheadBehind: the arrows only mean anything against a branch that
+// follows another one.
+func TestAheadBehind(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin")
+	clone := filepath.Join(dir, "clone")
+
+	git := func(at string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = at
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	git(dir, "init", "-q", origin)
+	git(origin, "commit", "-q", "--allow-empty", "-m", "one")
+	git(dir, "clone", "-q", origin, clone)
+
+	// In step with its upstream: nothing to report.
+	if got := AheadBehind(clone); !got.Empty() {
+		t.Errorf("a fresh clone = %+v, want nothing", got)
+	}
+
+	git(clone, "commit", "-q", "--allow-empty", "-m", "two")
+	git(clone, "commit", "-q", "--allow-empty", "-m", "three")
+	if got := AheadBehind(clone); got.Ahead != 2 || got.Behind != 0 {
+		t.Errorf("two commits ahead = %+v", got)
+	}
+
+	// A branch with no upstream has nothing to be ahead or behind of, which
+	// is not an error.
+	git(clone, "checkout", "-q", "-b", "solo")
+	if got := AheadBehind(clone); !got.Empty() {
+		t.Errorf("a branch with no upstream = %+v, want nothing", got)
+	}
+
+	// Neither is a directory that is not a repository at all.
+	if got := AheadBehind(t.TempDir()); !got.Empty() {
+		t.Errorf("not a repository = %+v", got)
+	}
+	if got := AheadBehind(""); !got.Empty() {
+		t.Errorf("no directory = %+v", got)
 	}
 }

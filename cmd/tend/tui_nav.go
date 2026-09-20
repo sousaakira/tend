@@ -299,14 +299,17 @@ func (t *tui) newTabHere() error {
 func (t *tui) spacesSectionLocked() ui.SidebarSection {
 	rows := []ui.SidebarRow{{Kind: ui.SidebarHeading, Label: "spaces"}}
 	rows = append(rows, t.spaceRowsLocked()...)
-	rows = append(rows, ui.SidebarRow{
-		Kind:           ui.SidebarAction,
-		Label:          "new",
-		Action:         ui.ActionNewSpace,
-		Trailing:       "menu",
-		TrailingAction: ui.ActionOpenMenu,
-	})
-	return ui.SidebarSection{Rows: rows, Scroll: t.spacesScroll}
+	return ui.SidebarSection{
+		Rows: rows,
+		Footer: []ui.SidebarRow{{
+			Kind:           ui.SidebarAction,
+			Label:          "new",
+			Action:         ui.ActionNewSpace,
+			Trailing:       "menu",
+			TrailingAction: ui.ActionOpenMenu,
+		}},
+		Scroll: t.spacesScroll,
+	}
 }
 
 // agentsSectionLocked is the bottom list: the heading with its toggle, and
@@ -376,7 +379,7 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 	return ui.SidebarRow{
 		Kind:      ui.SidebarSpace,
 		Label:     orDash(w.Name),
-		Detail:    w.Branch,
+		Detail:    branchLabel(w),
 		Group:     w.Group,
 		Depth:     depth,
 		Workspace: w.ID,
@@ -384,6 +387,26 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 		Running:   true,
 		Active:    w.ID == t.workspace,
 	}
+}
+
+// branchLabel is what goes under a space: its branch, and how far it has
+// drifted from the branch it follows.
+//
+// The arrows are only shown when there is something to show. "↑0 ↓0" is the
+// ordinary state of every checkout, and a column of it would train the eye to
+// skip exactly where the exception appears.
+func branchLabel(w proto.WorkspaceInfo) string {
+	label := w.Branch
+	if label == "" {
+		return ""
+	}
+	if w.Ahead > 0 {
+		label += " ↑" + itoaInt(w.Ahead)
+	}
+	if w.Behind > 0 {
+		label += " ↓" + itoaInt(w.Behind)
+	}
+	return label
 }
 
 // groupMembersLocked returns a group's spaces in session order.

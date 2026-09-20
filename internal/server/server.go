@@ -68,10 +68,14 @@ const branchTTL = 2 * time.Second
 type branchCache struct {
 	mu      sync.Mutex
 	entries map[string]branchEntry
+	track   map[string]trackEntry
 }
 
 func newBranchCache() *branchCache {
-	return &branchCache{entries: make(map[string]branchEntry)}
+	return &branchCache{
+		entries: make(map[string]branchEntry),
+		track:   make(map[string]trackEntry),
+	}
 }
 
 // lookup returns a directory's branch, reading it again once it goes stale.
@@ -94,6 +98,68 @@ func (c *branchCache) lookup(dir string) string {
 	c.entries[dir] = branchEntry{name: name, at: time.Now()}
 	c.mu.Unlock()
 	return name
+}
+
+// trackingTTL is how long a directory's ahead/behind is trusted. Longer than
+// the branch's, because it costs a process rather than two file reads and
+// changes only when somebody commits, fetches or pushes.
+const trackingTTL = 10 * time.Second
+
+// trackingCheck is how often the server looks for a directory whose drift has
+// gone stale. It is not how often git runs.
+const trackingCheck = time.Second
+
+// tracking returns what is known about a directory's drift, without going and
+// finding out.
+//
+// Never blocking is the point. Reading this runs git, and a snapshot is what a
+// client waits on to draw a frame — a redraw must not sit behind a subprocess,
+// however short its timeout. The numbers are refreshed on a timer instead, so
+// the worst this returns is the answer from a moment ago, or none at all the
+// first time a directory is seen.
+func (c *branchCache) tracking(dir string) session.Tracking {
+	if dir == "" {
+		return session.Tracking{}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.track[dir].value
+}
+
+// refreshTracking reads the drift of every directory given and reports whether
+// any of them changed.
+//
+// This is the only place git is run, and it is called from the server's own
+// loop rather than from anything a client is waiting on.
+func (c *branchCache) refreshTracking(dirs []string) (changed bool) {
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		c.mu.Lock()
+		entry, ok := c.track[dir]
+		fresh := ok && time.Since(entry.at) < trackingTTL
+		c.mu.Unlock()
+		if fresh {
+			continue
+		}
+
+		next := session.AheadBehind(dir)
+
+		c.mu.Lock()
+		if !ok || entry.value != next {
+			changed = true
+		}
+		c.track[dir] = trackEntry{value: next, at: time.Now()}
+		c.mu.Unlock()
+	}
+	return changed
+}
+
+// trackEntry is a cached tracking count and when it was read.
+type trackEntry struct {
+	value session.Tracking
+	at    time.Time
 }
 
 // branchEntry is a cached branch name and when it was read.
@@ -706,6 +772,14 @@ func (s *Server) detectLoop() {
 	adopt := time.NewTicker(s.cfg.AdoptInterval)
 	defer adopt.Stop()
 
+	// The check is frequent and the work is not: refreshTracking skips every
+	// directory whose answer is still fresh, so this wakes each second and
+	// runs git only for one it has not seen for trackingTTL. Waking on the
+	// long period instead would leave a new space showing no drift for ten
+	// seconds, which reads as "in step" rather than "not looked yet".
+	track := time.NewTicker(trackingCheck)
+	defer track.Stop()
+
 	for {
 		select {
 		case <-s.done:
@@ -714,8 +788,31 @@ func (s *Server) detectLoop() {
 			s.detectOnce()
 		case <-adopt.C:
 			s.adoptOnce()
+		case <-track.C:
+			s.trackOnce()
 		}
 	}
+}
+
+// trackOnce updates how far each workspace has drifted from its upstream.
+func (s *Server) trackOnce() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	dirs := make([]string, 0, len(s.session.Workspaces()))
+	for _, w := range s.session.Workspaces() {
+		dirs = append(dirs, w.Dir)
+	}
+	s.mu.Unlock()
+
+	if !s.branches.refreshTracking(dirs) {
+		return
+	}
+	// Clients read this from the session, so they are told to look again the
+	// same way a change of agent state tells them.
+	s.events.publish(Event{Kind: EventPaneState})
 }
 
 // adoptOnce points each pane at whichever agent is now running in it.

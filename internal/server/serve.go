@@ -573,7 +573,10 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 	// touches the filesystem, and nothing that does belongs under the lock
 	// every pane operation needs.
 	for i := range snap.Workspaces {
-		snap.Workspaces[i].Branch = s.branches.lookup(snap.Workspaces[i].Dir)
+		dir := snap.Workspaces[i].Dir
+		snap.Workspaces[i].Branch = s.branches.lookup(dir)
+		t := s.branches.tracking(dir)
+		snap.Workspaces[i].Ahead, snap.Workspaces[i].Behind = t.Ahead, t.Behind
 	}
 
 	// Runtime facts come from the runtimes, under their own locks, once the

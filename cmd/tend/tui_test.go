@@ -102,6 +102,18 @@ func startSession(t *testing.T, cols, rows int) *attached {
 // meeting a server older than itself can be tested.
 func startSessionBuilt(t *testing.T, cols, rows int, build string) *attached {
 	t.Helper()
+	return startSessionWith(t, cols, rows, build, "")
+}
+
+// startSessionIn runs the session's server rooted at a directory, which is
+// what a workspace with none of its own takes.
+func startSessionIn(t *testing.T, cols, rows int, dir string) *attached {
+	t.Helper()
+	return startSessionWith(t, cols, rows, version, dir)
+}
+
+func startSessionWith(t *testing.T, cols, rows int, build, dir string) *attached {
+	t.Helper()
 
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
@@ -120,6 +132,7 @@ func startSessionBuilt(t *testing.T, cols, rows int, build string) *attached {
 	}
 	srv, err := server.New(server.Config{
 		Build:          build,
+		Dir:            dir,
 		DetectInterval: 20 * time.Millisecond,
 		DefaultSize:    pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
 		ShutdownGrace:  time.Second,
@@ -1787,5 +1800,75 @@ func TestAttachHidesTheSidebarFromItsHandle(t *testing.T) {
 	a.clickAt(t, 1, 1)
 	a.waitForScreen(t, "the sidebar to come back", func(s string) bool {
 		return strings.Contains(s, "spaces")
+	})
+}
+
+// TestAttachPinsTheSpaceButtonsAboveTheDivider: the buttons act on the spaces
+// list, so they sit at its edge rather than floating after its last entry,
+// where every new space would move them.
+func TestAttachPinsTheSpaceButtonsAboveTheDivider(t *testing.T) {
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "the sidebar", func(s string) bool {
+		return strings.Contains(s, "new") && strings.Contains(s, "menu")
+	})
+
+	where := func() (buttons, divider int) {
+		return a.lineContaining(t, "new") - 1, a.sidebarDividerRow()
+	}
+	buttons, divider := where()
+	if divider < 0 || buttons != divider-1 {
+		t.Fatalf("buttons at %d, divider at %d: they should touch:\n%s", buttons, divider, a.sidebarText())
+	}
+
+	// Adding spaces does not move them.
+	for i := 0; i < 4; i++ {
+		a.send(t, "\x02s")
+		time.Sleep(150 * time.Millisecond)
+	}
+	a.waitForScreen(t, "more spaces", func(string) bool {
+		return strings.Contains(a.sidebarText(), "space 5")
+	})
+	if moved, _ := where(); moved != buttons {
+		t.Errorf("the buttons moved from %d to %d when the list grew:\n%s", buttons, moved, a.sidebarText())
+	}
+
+	// And they still work where they are.
+	a.clickAt(t, 2, buttons+1)
+	a.waitForScreen(t, "a new space", func(string) bool {
+		return strings.Contains(a.sidebarText(), "space 6")
+	})
+}
+
+// TestAttachShowsHowFarASpaceHasDrifted: the branch alone does not say whether
+// there is anything to push, which is most of what a checkout's state means.
+func TestAttachShowsHowFarASpaceHasDrifted(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin")
+	clone := filepath.Join(dir, "clone")
+	git := func(at string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = at
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git(dir, "init", "-q", origin)
+	git(origin, "commit", "-q", "--allow-empty", "-m", "one")
+	git(dir, "clone", "-q", origin, clone)
+	git(clone, "commit", "-q", "--allow-empty", "-m", "two")
+
+	// The server roots a workspace at its own directory, so it is started in
+	// the clone.
+	a := startSessionIn(t, 100, 20, clone)
+	a.waitForScreen(t, "the drift", func(string) bool {
+		return strings.Contains(a.sidebarText(), "↑1")
 	})
 }
