@@ -193,6 +193,10 @@ type Config struct {
 	// Build is this binary's version, reported in the handshake so a client
 	// can say which two builds are talking.
 	Build string
+	// StateFile is where the session's arrangement is written, and read back
+	// from when a server starts. Empty means the session is not kept: it lives
+	// exactly as long as the process does.
+	StateFile string
 	// OmitFeatures leaves the feature list out of the handshake, which is
 	// what a server from before there was one looks like.
 	OmitFeatures bool
@@ -216,6 +220,10 @@ type PaneSpec struct {
 	// command; a command that matches nothing simply gets no detector, since
 	// plenty of useful panes are not agents.
 	Agent string
+
+	// history is what a restored pane had said before, fed to its terminal
+	// ahead of the new process so the past is above the prompt.
+	history []byte
 
 	// Size is the pane's initial terminal size. Zero uses the server default.
 	Size pty.Size
@@ -257,6 +265,9 @@ type Server struct {
 	conns    map[*clientConn]struct{}
 	branches *branchCache
 	closed   bool
+	// lastSaved is the session as it was last written to the state file, so
+	// a snapshot identical to it is not written again.
+	lastSaved []byte
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -305,8 +316,17 @@ func New(cfg Config) (*Server, error) {
 		done:     make(chan struct{}),
 	}
 
+	// Before anything can connect: a client must never see the empty session
+	// that exists for an instant ahead of the restored one, or it would fill
+	// it with a fresh shell and the two would be merged.
+	s.restore()
+
 	s.wg.Add(1)
 	go s.detectLoop()
+	if s.cfg.StateFile != "" {
+		s.wg.Add(1)
+		go s.persistLoop()
+	}
 	return s, nil
 }
 
@@ -317,6 +337,19 @@ func New(cfg Config) (*Server, error) {
 // blocked on the master is a plain syscall Go cannot interrupt. A pane that
 // ignores the hangup is killed once the grace period runs out.
 func (s *Server) Close() error {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
+
+	// Written down while the panes are still alive. A moment later they are
+	// hung up, and their directories and their last lines go with them: this
+	// is the last point at which the session can still be asked what it is.
+	s.saveStructure()
+	s.saveHistory()
+
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -576,6 +609,11 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	}
 
 	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback, spec.Command[0], spec.Agent)
+	if len(spec.history) > 0 {
+		// Before the reader starts, so the old output is above the new
+		// process's first line rather than mixed into it.
+		rt.write(spec.history)
+	}
 	s.runtimes[id] = rt
 	s.titles[id] = ""
 	if manifest != nil {

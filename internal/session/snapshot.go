@@ -1,0 +1,257 @@
+package session
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/sousaakira/tend/internal/detect"
+)
+
+// A snapshot is the session as it can be written down: which spaces, tabs and
+// panes exist, how each tab is divided, and what each pane was running and
+// where. It is what lets a server that has been stopped come back to the same
+// arrangement instead of an empty screen.
+//
+// It does not hold processes. Nothing written to a file can: the shells and
+// agents die with the server, and a restored pane is a new shell started in
+// the directory the old one was in. What carries over is the place, not the
+// program — which is how herdr does it, and the honest limit of a file.
+
+// SnapshotVersion is the format this build writes. A file from a newer build
+// is refused rather than half-read: restoring part of a layout is worse than
+// restoring none, because it looks like it worked.
+const SnapshotVersion = 1
+
+// ErrSnapshotVersion means the file was written by a build this one does not
+// understand.
+var ErrSnapshotVersion = errors.New("session: snapshot version not understood")
+
+// Snapshot is the whole session.
+type Snapshot struct {
+	Version    int                 `json:"version"`
+	Active     int                 `json:"active"`
+	Workspaces []WorkspaceSnapshot `json:"workspaces"`
+
+	// The counters are kept so identifiers handed out after a restore do not
+	// collide with ones a client may still be holding.
+	NextPane      uint64 `json:"next_pane"`
+	NextTab       uint64 `json:"next_tab"`
+	NextWorkspace uint64 `json:"next_workspace"`
+}
+
+// WorkspaceSnapshot is one space.
+type WorkspaceSnapshot struct {
+	ID     uint64        `json:"id"`
+	Name   string        `json:"name,omitempty"`
+	Dir    string        `json:"dir,omitempty"`
+	Group  string        `json:"group,omitempty"`
+	Active int           `json:"active"`
+	Tabs   []TabSnapshot `json:"tabs"`
+}
+
+// TabSnapshot is one tab and how it is divided.
+type TabSnapshot struct {
+	ID     uint64         `json:"id"`
+	Name   string         `json:"name,omitempty"`
+	Active uint64         `json:"active"`
+	Layout LayoutSnapshot `json:"layout"`
+	Panes  []PaneSnapshot `json:"panes"`
+}
+
+// PaneSnapshot is what is needed to start a pane again.
+type PaneSnapshot struct {
+	ID      uint64   `json:"id"`
+	Title   string   `json:"title,omitempty"`
+	Command []string `json:"command,omitempty"`
+	// Dir is where the pane was when the snapshot was taken, which is not
+	// where it started: somebody who has spent an hour three directories down
+	// wants to come back there, not to where the shell was opened.
+	Dir   string `json:"dir,omitempty"`
+	Agent string `json:"agent,omitempty"`
+}
+
+// LayoutSnapshot is the split tree. A leaf names a pane; anything else has
+// children and the share of the space each one takes.
+type LayoutSnapshot struct {
+	Pane  uint64           `json:"pane,omitempty"`
+	Dir   string           `json:"dir,omitempty"`
+	Sizes []float64        `json:"sizes,omitempty"`
+	Kids  []LayoutSnapshot `json:"kids,omitempty"`
+}
+
+// Snapshot writes the session down.
+//
+// dirs gives each pane's current directory, for the panes whose process could
+// be asked. A pane missing from it keeps the directory it started in.
+func (s *Session) Snapshot(dirs map[PaneID]string) Snapshot {
+	snap := Snapshot{
+		Version:       SnapshotVersion,
+		Active:        s.active,
+		NextPane:      s.nextPane,
+		NextTab:       s.nextTab,
+		NextWorkspace: s.nextWorkspace,
+	}
+	for _, w := range s.workspaces {
+		ws := WorkspaceSnapshot{
+			ID: uint64(w.ID), Name: w.Name, Dir: w.Dir, Group: w.Group, Active: w.active,
+		}
+		for _, t := range w.tabs {
+			ts := TabSnapshot{
+				ID: uint64(t.ID), Name: t.Name, Active: uint64(t.active),
+				Layout: snapshotNode(t.root),
+			}
+			// In layout order, so the file reads the way the screen does and
+			// two snapshots of the same session compare equal.
+			for _, id := range t.Panes() {
+				p := t.panes[id]
+				if p == nil {
+					continue
+				}
+				dir := p.Dir
+				if now := dirs[id]; now != "" {
+					dir = now
+				}
+				ts.Panes = append(ts.Panes, PaneSnapshot{
+					ID: uint64(p.ID), Title: p.Title, Command: p.Command, Dir: dir, Agent: p.Agent,
+				})
+			}
+			ws.Tabs = append(ws.Tabs, ts)
+		}
+		snap.Workspaces = append(snap.Workspaces, ws)
+	}
+	return snap
+}
+
+func snapshotNode(n *node) LayoutSnapshot {
+	if n == nil {
+		return LayoutSnapshot{}
+	}
+	if len(n.kids) == 0 {
+		return LayoutSnapshot{Pane: uint64(n.pane)}
+	}
+	out := LayoutSnapshot{Dir: directionName(n.dir), Sizes: append([]float64(nil), n.sizes...)}
+	for _, kid := range n.kids {
+		out.Kids = append(out.Kids, snapshotNode(kid))
+	}
+	return out
+}
+
+func directionName(d Direction) string {
+	if d == Rows {
+		return "rows"
+	}
+	return "columns"
+}
+
+// Restore builds a session from a snapshot.
+//
+// The result is checked before it is returned. A file is outside input: it may
+// have been edited, truncated by a full disk, or written by a build with a bug
+// this one does not share, and a session that violates its own invariants
+// fails later, somewhere unrelated, in a way that points nowhere near the file.
+func Restore(snap Snapshot) (*Session, error) {
+	if snap.Version != SnapshotVersion {
+		return nil, fmt.Errorf("%w: file is version %d, this build reads %d",
+			ErrSnapshotVersion, snap.Version, SnapshotVersion)
+	}
+
+	s := New()
+	s.nextPane, s.nextTab, s.nextWorkspace = snap.NextPane, snap.NextTab, snap.NextWorkspace
+
+	for _, ws := range snap.Workspaces {
+		w := &Workspace{
+			ID: WorkspaceID(ws.ID), Name: ws.Name, Dir: ws.Dir, Group: ws.Group, active: -1,
+		}
+		for _, ts := range ws.Tabs {
+			t := &Tab{ID: TabID(ts.ID), Name: ts.Name, panes: make(map[PaneID]*Pane)}
+			for _, ps := range ts.Panes {
+				id := PaneID(ps.ID)
+				if _, dup := s.index[id]; dup || id == 0 {
+					return nil, fmt.Errorf("session: snapshot names pane %d twice, or not at all", ps.ID)
+				}
+				t.panes[id] = &Pane{
+					ID: id, Title: ps.Title, Command: ps.Command, Dir: ps.Dir, Agent: ps.Agent,
+					State: detect.StateUnknown,
+				}
+				s.index[id] = t
+			}
+
+			root, err := restoreNode(ts.Layout, t.panes)
+			if err != nil {
+				return nil, fmt.Errorf("session: tab %d: %w", ts.ID, err)
+			}
+			t.root = root
+			t.active = PaneID(ts.Active)
+			if _, ok := t.panes[t.active]; !ok {
+				// The focused pane is a convenience, not a fact worth failing
+				// over. Anything in the tab will do.
+				if all := t.Panes(); len(all) > 0 {
+					t.active = all[0]
+				}
+			}
+			if len(t.panes) == 0 {
+				continue // a tab with nothing in it is not a tab
+			}
+			w.tabs = append(w.tabs, t)
+		}
+		if len(w.tabs) > 0 {
+			w.active = min(max(ws.Active, 0), len(w.tabs)-1)
+		}
+		s.workspaces = append(s.workspaces, w)
+	}
+
+	switch {
+	case len(s.workspaces) == 0:
+		s.active = 0
+	default:
+		s.active = min(max(snap.Active, 0), len(s.workspaces)-1)
+	}
+	s.raiseCounters()
+
+	if err := s.CheckInvariants(); err != nil {
+		return nil, fmt.Errorf("session: snapshot does not describe a valid session: %w", err)
+	}
+	return s, nil
+}
+
+// restoreNode rebuilds a split tree, refusing one that names a pane the tab
+// does not have or gives its children shares that do not match them.
+func restoreNode(l LayoutSnapshot, panes map[PaneID]*Pane) (*node, error) {
+	if len(l.Kids) == 0 {
+		id := PaneID(l.Pane)
+		if _, ok := panes[id]; !ok {
+			return nil, fmt.Errorf("layout names pane %d, which the tab does not have", l.Pane)
+		}
+		return leaf(id), nil
+	}
+	if len(l.Sizes) != len(l.Kids) {
+		return nil, fmt.Errorf("layout has %d children and %d sizes", len(l.Kids), len(l.Sizes))
+	}
+
+	n := &node{dir: Columns, sizes: append([]float64(nil), l.Sizes...)}
+	if l.Dir == "rows" {
+		n.dir = Rows
+	}
+	for _, kid := range l.Kids {
+		child, err := restoreNode(kid, panes)
+		if err != nil {
+			return nil, err
+		}
+		n.kids = append(n.kids, child)
+	}
+	return n, nil
+}
+
+// raiseCounters makes sure no identifier handed out from here on repeats one
+// already in the session, whatever the file said the counters were.
+func (s *Session) raiseCounters() {
+	for _, w := range s.workspaces {
+		s.nextWorkspace = max(s.nextWorkspace, uint64(w.ID))
+		for _, t := range w.tabs {
+			s.nextTab = max(s.nextTab, uint64(t.ID))
+			for id := range t.panes {
+				s.nextPane = max(s.nextPane, uint64(id))
+			}
+		}
+	}
+}

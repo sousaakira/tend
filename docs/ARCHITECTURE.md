@@ -442,6 +442,10 @@ aside. That milestone is done, and the goal has since widened to a 1:1 port of
 herdr, those included.
 
 What has crossed over, what has not, and where each missing piece lives in
-herdr's source is tracked in `PORTING.md`, which is the work queue. The largest
-thing still missing is restoring a session after the server itself restarts:
-panes outlive clients, not yet the process that owns them.
+herdr's source is tracked in `PORTING.md`, which is the work queue.
+
+A session outlives its server as a description, not as processes. The server
+writes the arrangement down (`internal/server/persist.go`) and the next one to
+start reads it back: same spaces, tabs and splits, each pane a new process in
+the directory the old one was in, under the old one's scrollback. Handing live
+processes from one server to the next is the part still missing.

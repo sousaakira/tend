@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/sousaakira/tend/internal/detect"
@@ -775,5 +776,147 @@ func TestAheadBehind(t *testing.T) {
 	}
 	if got := AheadBehind(""); !got.Empty() {
 		t.Errorf("no directory = %+v", got)
+	}
+}
+
+// buildBusySession is a session with some of everything in it: two spaces, one
+// in a group, tabs, and a tab divided both ways.
+func buildBusySession(t *testing.T) *Session {
+	t.Helper()
+	s := New()
+	a := s.AddWorkspaceIn("alpha", "/work/alpha")
+	_, first, err := s.AddTab(a.ID, "main", PaneSpec{Command: []string{"zsh"}, Dir: "/work/alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.SplitPane(first.ID, Columns, PaneSpec{Command: []string{"zsh"}, Dir: "/work/alpha/src"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SplitPane(second.ID, Rows, PaneSpec{Command: []string{"claude"}, Agent: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.AddTab(a.ID, "logs", PaneSpec{Command: []string{"tail", "-f", "x"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := s.AddWorkspaceIn("beta", "/work/beta")
+	if err := s.GroupWorkspace(b.ID, "clients"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.AddTab(b.ID, "tab 1", PaneSpec{Command: []string{"zsh"}}); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// TestSnapshotRoundTrip: what is written down has to come back as the same
+// session, or a restart quietly rearranges somebody's work.
+func TestSnapshotRoundTrip(t *testing.T) {
+	s := buildBusySession(t)
+	before := s.Snapshot(nil)
+
+	restored, err := Restore(before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+	after := restored.Snapshot(nil)
+	if !reflect.DeepEqual(before, after) {
+		t.Errorf("the session changed across a save and a restore:\nbefore %+v\nafter  %+v", before, after)
+	}
+
+	// The shape of a divided tab survives, not only its membership.
+	tab := restored.Workspaces()[0].Tabs()[0]
+	if got := len(tab.Panes()); got != 3 {
+		t.Errorf("first tab has %d panes, want 3", got)
+	}
+	if restored.Workspaces()[1].Group != "clients" {
+		t.Error("the group should survive")
+	}
+}
+
+// TestSnapshotRecordsWhereAPaneIsNow: somebody who has spent an hour three
+// directories down wants to come back there, not to where the shell opened.
+func TestSnapshotRecordsWhereAPaneIsNow(t *testing.T) {
+	s := buildBusySession(t)
+	first := s.Workspaces()[0].Tabs()[0].Panes()[0]
+
+	snap := s.Snapshot(map[PaneID]string{first: "/work/alpha/deep/down"})
+	if got := snap.Workspaces[0].Tabs[0].Panes[0].Dir; got != "/work/alpha/deep/down" {
+		t.Errorf("dir = %q, want where the pane is now", got)
+	}
+	// A pane nobody could ask keeps the directory it started in.
+	if got := snap.Workspaces[0].Tabs[0].Panes[1].Dir; got != "/work/alpha/src" {
+		t.Errorf("dir = %q, want where it started", got)
+	}
+}
+
+// TestRestoreHandsOutFreshIdentifiers: an identifier repeated after a restore
+// would point a client's stale reference at somebody else's pane.
+func TestRestoreHandsOutFreshIdentifiers(t *testing.T) {
+	snap := buildBusySession(t).Snapshot(nil)
+	// Counters lower than what is in the file, as an edited or older file
+	// might have.
+	snap.NextPane, snap.NextTab, snap.NextWorkspace = 0, 0, 0
+
+	s, err := Restore(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := make(map[PaneID]bool)
+	for _, w := range s.Workspaces() {
+		for _, tab := range w.Tabs() {
+			for _, id := range tab.Panes() {
+				seen[id] = true
+			}
+		}
+	}
+	_, fresh, err := s.AddTab(s.Workspaces()[0].ID, "new", PaneSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen[fresh.ID] {
+		t.Errorf("pane %d was handed out twice", fresh.ID)
+	}
+}
+
+// TestRestoreRefusesWhatItCannotTrust: a file is outside input. A session that
+// violates its own invariants fails later, somewhere unrelated, in a way that
+// points nowhere near the file.
+func TestRestoreRefusesWhatItCannotTrust(t *testing.T) {
+	good := func() Snapshot { return buildBusySession(t).Snapshot(nil) }
+
+	newer := good()
+	newer.Version = SnapshotVersion + 1
+	if _, err := Restore(newer); !errors.Is(err, ErrSnapshotVersion) {
+		t.Errorf("a newer file = %v, want ErrSnapshotVersion", err)
+	}
+
+	ghost := good()
+	ghost.Workspaces[0].Tabs[0].Layout.Kids[0].Pane = 9999
+	if _, err := Restore(ghost); err == nil {
+		t.Error("a layout naming a pane the tab does not have should be refused")
+	}
+
+	lopsided := good()
+	lopsided.Workspaces[0].Tabs[0].Layout.Sizes = []float64{1}
+	if _, err := Restore(lopsided); err == nil {
+		t.Error("sizes that do not match the children should be refused")
+	}
+
+	twice := good()
+	dup := twice.Workspaces[0].Tabs[0].Panes[0]
+	twice.Workspaces[1].Tabs[0].Panes = append(twice.Workspaces[1].Tabs[0].Panes, dup)
+	if _, err := Restore(twice); err == nil {
+		t.Error("the same pane in two tabs should be refused")
+	}
+
+	// An empty session is a real one and restores as itself.
+	empty, err := Restore(New().Snapshot(nil))
+	if err != nil || len(empty.Workspaces()) != 0 {
+		t.Errorf("an empty session = %v, %v", empty, err)
 	}
 }

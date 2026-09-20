@@ -1,0 +1,7 @@
+//go:build !linux
+
+package pty
+
+// Cwd is not known on this platform, and a restored pane starts where the
+// original was opened.
+func (p *Pty) Cwd() string { return "" }

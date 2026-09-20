@@ -351,3 +351,61 @@ func rowsEqual(a, b *Row) bool {
 	}
 	return true
 }
+
+// RenderHistory encodes what a pane has said, oldest line first, as text that
+// can be fed to a fresh terminal to give it the same past.
+//
+// It is the main screen's scrollback followed by the main screen, never the
+// alternate one. A full-screen program's display is not history — it is a
+// picture the program will redraw the moment it runs again — and replaying it
+// into a new shell would leave the remains of an editor above the prompt.
+//
+// Lines are trimmed of trailing blanks and ended with CR LF, so the result
+// scrolls into a terminal of any width the way the original output did.
+// maxLines keeps the newest lines when there are more; zero means all.
+func RenderHistory(s *Screen, maxLines int) (ansi []byte, lines int) {
+	g := s.MainGrid()
+	history := g.HistoryLen()
+
+	// Blank rows at the bottom of the screen are not output, they are the
+	// part of the terminal nothing has been written to yet.
+	last := g.Rows() - 1
+	for last >= 0 && rowBlank(g.Line(last)) {
+		last--
+	}
+	total := history + last + 1
+	if total <= 0 {
+		return nil, 0
+	}
+	first := 0
+	if maxLines > 0 && total > maxLines {
+		first = total - maxLines
+	}
+
+	var e encoder
+	e.reset()
+	for at := first; at < total; at++ {
+		row := g.Line(at - history)
+		if at < history {
+			row = g.HistoryLine(at)
+		}
+		if row != nil {
+			e.row(row, trimmedLen(row))
+		}
+		e.setStyle(DefaultStyle)
+		e.buf = append(e.buf, '\r', '\n')
+	}
+	return e.buf, total - first
+}
+
+// rowBlank reports whether a row holds nothing worth keeping.
+func rowBlank(r *Row) bool { return r == nil || trimmedLen(r) == 0 }
+
+// trimmedLen is a row's length without the blank cells a terminal pads it with.
+func trimmedLen(r *Row) int {
+	end := r.Len()
+	for end > 0 && r.Cell(end-1).IsBlank() && r.Combining(end-1) == nil {
+		end--
+	}
+	return end
+}

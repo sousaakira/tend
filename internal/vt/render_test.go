@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -295,4 +296,65 @@ func BenchmarkPainterIdleFrame(b *testing.B) {
 	for b.Loop() {
 		_ = p.Paint(g, 0, 0, true)
 	}
+}
+
+// TestRenderHistoryGivesAFreshTerminalTheSamePast: what a pane said has to
+// survive being written down and read back, or a restored session comes back
+// with its layout and none of its context.
+func TestRenderHistoryGivesAFreshTerminalTheSamePast(t *testing.T) {
+	old := NewScreen(30, 4, 100)
+	for i := 1; i <= 10; i++ {
+		_, _ = old.Write([]byte("line " + strconv.Itoa(i) + "\r\n"))
+	}
+	_, _ = old.Write([]byte("\x1b[31mred\x1b[0m tail"))
+
+	ansi, lines := RenderHistory(old, 0)
+	if lines != 11 {
+		t.Fatalf("lines = %d, want 11", lines)
+	}
+
+	fresh := NewScreen(30, 4, 100)
+	_, _ = fresh.Write(ansi)
+	got := pastText(fresh)
+	if !strings.Contains(got, "line 1\n") || !strings.Contains(got, "line 10\n") || !strings.Contains(got, "red tail") {
+		t.Errorf("the past did not survive:\n%s", got)
+	}
+
+	// The newest lines are the ones kept when there is a limit.
+	short, n := RenderHistory(old, 3)
+	if n != 3 || strings.Contains(string(short), "line 1\r") || !strings.Contains(string(short), "red") {
+		t.Errorf("limited to 3 = %d lines: %q", n, short)
+	}
+
+	// An untouched terminal has no past, rather than a screenful of blanks.
+	if ansi, n := RenderHistory(NewScreen(30, 4, 100), 0); n != 0 || len(ansi) != 0 {
+		t.Errorf("an empty terminal = %d lines, %q", n, ansi)
+	}
+}
+
+// TestRenderHistoryLeavesOutTheAlternateScreen: a full-screen program's display
+// is a picture it will redraw, not something that was said. Replaying it into
+// a new shell leaves the remains of an editor above the prompt.
+func TestRenderHistoryLeavesOutTheAlternateScreen(t *testing.T) {
+	s := NewScreen(30, 4, 100)
+	_, _ = s.Write([]byte("before the editor\r\n"))
+	_, _ = s.Write([]byte("\x1b[?1049h\x1b[HEDITOR UI"))
+
+	ansi, _ := RenderHistory(s, 0)
+	if strings.Contains(string(ansi), "EDITOR UI") || !strings.Contains(string(ansi), "before the editor") {
+		t.Errorf("history = %q", ansi)
+	}
+}
+
+// pastText is a screen's scrollback and rows as plain lines.
+func pastText(s *Screen) string {
+	g := s.MainGrid()
+	var b strings.Builder
+	for i := 0; i < g.HistoryLen(); i++ {
+		b.WriteString(g.HistoryLine(i).Text() + "\n")
+	}
+	for y := 0; y < g.Rows(); y++ {
+		b.WriteString(g.Line(y).Text() + "\n")
+	}
+	return b.String()
 }

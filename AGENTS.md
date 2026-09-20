@@ -87,7 +87,9 @@ server, and everything the new code added on the server side is simply absent.
 
 - After changing anything under `internal/server`, `internal/vt`,
   `internal/session` or `internal/pty`: the server must be restarted
-  (`make restart`, or `tend kill -s <name> -server`). This closes its panes.
+  (`make restart`, or `tend kill -s <name> -server`). The layout, each pane's
+  directory and its scrollback come back; **the programs running in the panes
+  do not** — a restored pane is a new shell. An agent mid-task is lost.
 - After changing only `cmd/tend` or `internal/ui`: restarting the client is
   enough (`ctrl+b d`, then `tend`).
 - `tend kill -s <name>` **without** `-server` closes panes by number and leaves

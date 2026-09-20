@@ -201,8 +201,16 @@ func runServe(args []string) error {
 	}
 	defer ln.Close()
 
+	stateFile := ""
+	if cfg.Server.Persist {
+		if stateFile, err = transport.StatePath(*name); err != nil {
+			return err
+		}
+	}
+
 	srv, err := server.New(server.Config{
 		Build:          version,
+		StateFile:      stateFile,
 		DetectInterval: detect,
 		Scrollback:     cfg.Scrollback(),
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},

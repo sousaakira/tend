@@ -193,10 +193,7 @@ func startSessionConfigured(t *testing.T, cols, rows int, cfg server.Config) *at
 		// is in a temporary directory that is about to be deleted, and the
 		// process outlives the run. Whatever is answering on the socket gets
 		// shut down, which is nothing at all in the ordinary case.
-		if c, err := connect("tui", nil); err == nil {
-			_ = c.Shutdown()
-			_ = c.Close()
-		}
+		stopSession(t, "tui")
 	})
 	return a
 }
@@ -220,6 +217,38 @@ func (a *attached) dividerColumn() int {
 		}
 	}
 	return -1
+}
+
+// stopSession shuts a session's server down and waits for it to be gone.
+//
+// Waiting is the point. A server told to stop writes the session down on its
+// way out, and a test that deletes its temporary directory while that is
+// happening fails on a directory that is not empty — for a reason that has
+// nothing to do with what the test was about.
+func stopSession(t *testing.T, name string) {
+	t.Helper()
+	c, err := connect(name, nil)
+	if err != nil {
+		return // nothing is running, which is the ordinary case
+	}
+	_ = c.Shutdown()
+	_ = c.Close()
+	if path, err := transport.SocketPath(name); err == nil {
+		waitForSocketGone(path)
+	}
+}
+
+// waitForSocketGone returns once a server has removed its socket, which it
+// does last of all, or after a bound so a hung server fails the test that
+// follows rather than hanging the run.
+func waitForSocketGone(path string) {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // TestAttachDrawsAPane is the whole stack in one assertion: a server starts a
@@ -434,10 +463,7 @@ func TestBareTendStartsItsOwnServer(t *testing.T) {
 
 	t.Cleanup(func() {
 		_ = p.Close()
-		if c, err := connect("default", nil); err == nil {
-			_ = c.Shutdown()
-			_ = c.Close()
-		}
+		stopSession(t, "default")
 	})
 
 	a.waitForScreen(t, "a session drawn from nothing", func(s string) bool {
@@ -469,10 +495,7 @@ func TestStartedServerOutlivesTheClient(t *testing.T) {
 	go func() { _, _ = io.Copy(a, p) }()
 
 	t.Cleanup(func() {
-		if c, err := connect("auto", nil); err == nil {
-			_ = c.Shutdown()
-			_ = c.Close()
-		}
+		stopSession(t, "auto")
 	})
 
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
@@ -660,10 +683,7 @@ func TestAttachUsesTheConfiguredPrefix(t *testing.T) {
 	go func() { _, _ = io.Copy(a, p) }()
 	t.Cleanup(func() {
 		_ = p.Close()
-		if c, err := connect("cfg", nil); err == nil {
-			_ = c.Shutdown()
-			_ = c.Close()
-		}
+		stopSession(t, "cfg")
 	})
 
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
@@ -877,10 +897,7 @@ func TestAttachReconnects(t *testing.T) {
 	go func() { _, _ = io.Copy(a, p) }()
 	t.Cleanup(func() {
 		_ = p.Close()
-		if c, err := connect("again", nil); err == nil {
-			_ = c.Shutdown()
-			_ = c.Close()
-		}
+		stopSession(t, "again")
 	})
 
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
@@ -902,13 +919,14 @@ func TestAttachReconnects(t *testing.T) {
 	_ = c.Close()
 
 	// The client says so rather than vanishing, then finds its way back: it
-	// starts a server itself, exactly as it did the first time. The marker
-	// going is what says the screen is the new session rather than the last
-	// frame of the old one.
-	a.waitForScreen(t, "a session again", func(s string) bool {
-		return strings.Contains(s, "┌") &&
-			!strings.Contains(s, "OFFLINE") &&
-			!strings.Contains(s, "OLD-SESSION")
+	// starts a server itself, exactly as it did the first time, and that
+	// server comes back to the session the old one wrote down. "reconnected"
+	// is what says this is the new server rather than the last frame of the
+	// old one, and the marker still being there is what says nothing was lost.
+	a.waitForScreen(t, "the session again", func(s string) bool {
+		return strings.Contains(s, "reconnected") &&
+			strings.Contains(s, "┌") &&
+			strings.Contains(s, "OLD-SESSION")
 	})
 
 	// The pane is drawn as soon as it exists, which is before the shell
@@ -2501,6 +2519,7 @@ func TestAttachOverSSH(t *testing.T) {
 		stop := exec.Command(bin, "kill", "-s", "far", "-server")
 		stop.Env = append(os.Environ(), "TEND_RUNTIME_DIR="+far)
 		_ = stop.Run()
+		waitForSocketGone(filepath.Join(far, "far.sock"))
 	})
 
 	a.waitForScreen(t, "a pane from the far side", func(s string) bool { return strings.Contains(s, "┌") })
@@ -2542,4 +2561,109 @@ func TestAttachOverSSHSaysWhyItFailed(t *testing.T) {
 	if !strings.Contains(string(out), "command not found") {
 		t.Errorf("the far side's complaint should be shown:\n%s", out)
 	}
+}
+
+// TestAttachComesBackToTheSameLayoutAfterARestart is what used to cost the most
+// time: replacing the server — to pick up a new build, or because it died —
+// took every space, tab and split with it. The arrangement is written down now,
+// and the server that starts next reads it back.
+func TestAttachComesBackToTheSameLayoutAfterARestart(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	t.Setenv("TEND_CONFIG", configPath)
+	bin := buildBinary(t)
+
+	p, err := pty.Start(bin, []string{"attach", "-s", "keep"}, pty.Options{
+		Size: pty.Size{Cols: 110, Rows: 20},
+		Env: append(os.Environ(),
+			"TEND_RUNTIME_DIR="+runtimeDir,
+			"TEND_CONFIG="+configPath,
+			"SHELL=/bin/sh",
+			"TERM=xterm-256color",
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(110, 20, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stopSession(t, "keep")
+	})
+
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf BEFORE-THE-RESTART\n", "the marker", func(s string) bool {
+		return strings.Contains(s, "BEFORE-THE-RESTART")
+	})
+	// The shell says who it is, so that afterwards "a pane answered" can be
+	// told apart from "the old pane had not been killed yet".
+	a.sendUntil(t, "printf 'OLD-SHELL-%s-\\n' $$\n", "the old shell's pid", func(s string) bool {
+		return shellPid(s, "OLD-SHELL-") != ""
+	})
+	oldPid := shellPid(a.text(), "OLD-SHELL-")
+	// A split, a second tab and a second space: some of everything.
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool { return strings.Count(s, "┌") == 2 })
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "a second space", func(string) bool {
+		return strings.Contains(a.sidebarText(), "space 2")
+	})
+
+	// Stop the server out from under the client, as a restart does. Not
+	// stopSession: that waits for the socket to go, and here it never does,
+	// because the client starts the replacement on the same path at once.
+	c, err := connect("keep", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Shutdown(); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Close()
+
+	// Nothing below waits for the "reconnected" notice. It is on screen for a
+	// moment and then gone, and what it stands for is checked directly: the
+	// old server is stopped, so a pane that answers is a restored one.
+	// Both spaces are back.
+	a.waitForScreen(t, "the spaces", func(string) bool {
+		side := a.sidebarText()
+		return strings.Contains(side, "main") && strings.Contains(side, "space 2")
+	})
+	// And in the first one, the split and what had been said in it.
+	a.clickAt(t, 4, a.lineContaining(t, "main"))
+	a.waitForScreen(t, "the split and its past", func(s string) bool {
+		return strings.Count(s, "┌") == 2 && strings.Contains(s, "BEFORE-THE-RESTART")
+	})
+
+	// The panes are alive, not pictures of panes — and they are new processes
+	// under the old output, not the old ones in the moment before they die.
+	a.sendUntil(t, "printf 'NEW-SHELL-%s-\\n' $$\n", "a restored pane to answer", func(s string) bool {
+		pid := shellPid(s, "NEW-SHELL-")
+		return pid != "" && pid != oldPid
+	})
+	if !strings.Contains(a.text(), "OLD-SHELL-"+oldPid) {
+		t.Errorf("the old shell's output should still be above the new one:\n%s", a.text())
+	}
+}
+
+// shellPid reads a pid a shell printed after a marker, or "" when it has not
+// been printed whole yet. The trailing dash is what says it is whole.
+func shellPid(screen, marker string) string {
+	at := strings.LastIndex(screen, marker)
+	if at < 0 {
+		return ""
+	}
+	rest := screen[at+len(marker):]
+	end := strings.IndexByte(rest, '-')
+	if end <= 0 {
+		return ""
+	}
+	for _, r := range rest[:end] {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return rest[:end]
 }

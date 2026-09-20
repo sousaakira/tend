@@ -68,6 +68,10 @@ type Theme struct {
 type Server struct {
 	// DetectInterval is how often panes are re-examined, as "150ms".
 	DetectInterval string `toml:"detect_interval"`
+	// Persist writes the session down so that a restarted server comes back
+	// to the same spaces, tabs and splits. On by default: losing an
+	// arrangement to a restart is a surprise, and keeping one is not.
+	Persist bool `toml:"persist"`
 }
 
 // Defaults returns the configuration tend uses when told nothing.
@@ -76,7 +80,7 @@ func Defaults() Config {
 		Keys:   Keys{Prefix: "ctrl+b"},
 		Pane:   Pane{Scrollback: 5000},
 		UI:     UI{Mouse: true, Sidebar: true},
-		Server: Server{DetectInterval: "150ms"},
+		Server: Server{DetectInterval: "150ms", Persist: true},
 	}
 }
 
@@ -302,4 +306,9 @@ grouped = false
 [server]
 # How often panes are re-examined for agent state.
 detect_interval = "150ms"
+
+# Write the session down, so a restarted server comes back to the same spaces,
+# tabs and splits, each pane in the directory it was in and under what it had
+# said. Programs do not survive a restart; the place does.
+persist = true
 `

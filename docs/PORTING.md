@@ -79,6 +79,14 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 - **Remote sessions over ssh**: `tend attach -ssh user@host`, via `tend bridge`
   on the far side. Tested with a stand-in for ssh; not yet against a real sshd.
 - **Shell completions**: bash, zsh, fish (`tend completion <shell>`).
+- **Session persistence**: the arrangement is written to
+  `$XDG_STATE_HOME/tend/<session>.json` (structure, checked every second) and
+  `<session>.history.json` (scrollback, every 30s and at shutdown), and read
+  back when a server starts. Spaces, groups, tabs, the split tree, each pane's
+  *current* directory and its scrollback come back; programs do not — a
+  restored pane is a new process. `[server] persist = false` turns it off.
+  herdr's equivalent is `persist/`. Not ported from it: agent session resume
+  (queue item 12).
 - **Settings file** with validation, `tend config`.
 
 ## Different from herdr on purpose
@@ -98,18 +106,17 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 Ordered by how much each changes daily use. Sizes are herdr's, as a guide to
 effort, not a target.
 
-### 1. Session persistence and live handoff — large
+### 1. Live handoff — large
 
-Restarting tend's server loses every pane. herdr restores the layout after a
-restart and can replace a running server without dropping its panes.
+Replacing a running server without killing what runs in its panes. herdr passes
+the live panes to the new server; tend's restart brings back the *place* (see
+"Session persistence" under Ported) but every program dies with the old server,
+so an agent mid-task is lost.
 
-- herdr: `persist/snapshot.rs` (1266), `persist/restore.rs` (1722),
-  `persist/io.rs`; handoff in `server/headless/lifecycle.rs`, `update.rs`
-  (`server.live_handoff`); user docs `session-state.mdx`,
-  `persistence-remote.mdx`.
-- tend today: nothing. `make restart` and the `r` key on the mismatch notice
-  both close the session's panes.
-- This is the feature whose absence has cost the owner the most time.
+- herdr: `server/headless/lifecycle.rs`, `update.rs` (`server.live_handoff`),
+  `remote/attach.rs`; user docs `persistence-remote.mdx`.
+- tend today: none. The mechanism needed is passing pty file descriptors to the
+  new process (`SCM_RIGHTS` over the Unix socket, or exec with inherited fds).
 
 ### 2. Agent integrations (hooks) — large
 
