@@ -2,6 +2,7 @@ package server
 
 import (
 	"sync"
+	"time"
 
 	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/detect"
@@ -37,8 +38,14 @@ type paneRuntime struct {
 	mu       sync.Mutex
 	screen   *vt.Screen
 	detector *agent.Detector
-	dirty    bool
-	title    string
+	// arbiter weighs what hooks report against what the detector reads, and
+	// shown is its last answer that was passed on — so a change is noticed
+	// whichever side it came from.
+	arbiter   *agent.Arbiter
+	shown     agent.Effective
+	shownRule string
+	dirty     bool
+	title     string
 	// foreground is the program last seen in charge of the terminal, so the
 	// costly part — resolving and swapping the detector — happens only when
 	// it actually changes.
@@ -70,6 +77,7 @@ func newPaneRuntime(
 	manifest *detect.Manifest,
 	scrollback int,
 	command, explicit string,
+	known func(string) bool,
 ) *paneRuntime {
 	rt := &paneRuntime{
 		id:       id,
@@ -81,11 +89,14 @@ func newPaneRuntime(
 		parked:   make(chan struct{}, 1),
 		verdict:  make(chan bool, 1),
 		gone:     make(chan struct{}),
+		arbiter:  agent.NewArbiter(known),
 	}
 	if manifest != nil {
 		rt.agentID = manifest.ID
 		rt.detector = agent.NewDetector(manifest)
 	}
+	rt.arbiter.Observe(rt.agentID, detect.StateUnknown, false, time.Now())
+	rt.shown = rt.arbiter.Effective()
 	// The terminal reports a title from inside Write, which runs under this
 	// runtime's lock. Recording it here and letting the detection loop apply
 	// it keeps that callback from reaching for the session lock.
@@ -141,11 +152,39 @@ func (rt *paneRuntime) write(b []byte) [][]byte {
 	return copies
 }
 
+// settleLocked asks the arbiter what the pane should be shown as, and reports
+// whether that differs from what was last passed on. The caller holds the lock.
+func (rt *paneRuntime) settleLocked() (eff agent.Effective, rule string, changed bool) {
+	eff = rt.arbiter.Effective()
+	switch {
+	case eff.Source != "":
+		rule = "hook:" + eff.Source
+	case rt.detector != nil:
+		rule = rt.detector.Rule()
+	}
+	if eff == rt.shown && rule == rt.shownRule {
+		return eff, rule, false
+	}
+	rt.shown, rt.shownRule = eff, rule
+	return eff, rule, true
+}
+
+// hooked runs fn against the arbiter — a report, a release — and settles.
+func (rt *paneRuntime) hooked(fn func(*agent.Arbiter) bool) (accepted bool, eff agent.Effective, rule string, changed bool) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	accepted = fn(rt.arbiter)
+	eff, rule, changed = rt.settleLocked()
+	return accepted, eff, rule, changed
+}
+
 // observation is what one poll of a pane found.
 type observation struct {
 	title        string
 	titleChanged bool
 
+	// agent is who the pane is shown as, which a hook may have decided.
+	agent        string
 	state        detect.State
 	rule         string
 	stateChanged bool
@@ -174,15 +213,17 @@ func (rt *paneRuntime) poll(lastTitle string) observation {
 		rt.mouse = mouse
 		obs.mouseChanged = true
 	}
-	if !rt.dirty || rt.detector == nil {
-		return obs
+	if rt.dirty && rt.detector != nil {
+		rt.dirty = false
+		res, _ := rt.detector.Update(rt.screen)
+		// The detector's own conclusion, not this reading's: an ambiguous
+		// screen leaves the previous state standing, and an ambiguous reading
+		// is no evidence of a blocker either.
+		rt.arbiter.Observe(rt.agentID, rt.detector.State(),
+			res.VisibleBlocker && !res.SkipStateUpdate, time.Now())
 	}
-	rt.dirty = false
-
-	res, changed := rt.detector.Update(rt.screen)
-	if changed {
-		obs.state = res.State
-		obs.rule = res.RuleID
+	if eff, rule, changed := rt.settleLocked(); changed {
+		obs.agent, obs.state, obs.rule = eff.Agent, eff.State, rule
 		obs.stateChanged = true
 	}
 	return obs
@@ -223,7 +264,11 @@ func (rt *paneRuntime) adoptAgent(m *detect.Manifest) (changed bool, agentID str
 	}
 	// The screen has not changed, but what is being looked for has.
 	rt.dirty = true
-	return true, rt.agentID
+	// Told at once rather than at the next reading: a hook's report about the
+	// agent that has just left must not survive until the screen next changes.
+	rt.arbiter.Observe(next, detect.StateUnknown, false, time.Now())
+	eff, _, _ := rt.settleLocked()
+	return true, eff.Agent
 }
 
 // foregroundChanged reports the program in charge of the terminal, and whether
@@ -276,14 +321,13 @@ func (rt *paneRuntime) status() PaneStatus {
 		MouseSGR:    modes.MouseEncoding == vt.MouseEncodingSGR || modes.MouseEncoding == vt.MouseEncodingSGRPixels,
 		ID:          rt.id,
 		Title:       rt.title,
-		Agent:       rt.agentID,
+		Agent:       rt.shown.Agent,
+		State:       rt.shown.State,
+		Rule:        rt.shownRule,
+		Message:     rt.shown.Message,
 		Running:     rt.running,
 		ExitErr:     rt.exitErr,
 		Pid:         rt.pty.Pid(),
-	}
-	if rt.detector != nil {
-		st.State = rt.detector.State()
-		st.Rule = rt.detector.Rule()
 	}
 	return st
 }

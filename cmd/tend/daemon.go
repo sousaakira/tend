@@ -16,11 +16,13 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/sousaakira/tend/internal/api"
 	"github.com/sousaakira/tend/internal/client"
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/server"
+	"github.com/sousaakira/tend/internal/session"
 	"github.com/sousaakira/tend/internal/transport"
 )
 
@@ -205,6 +207,10 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	apiPath, err := transport.APISocketPath(*name)
+	if err != nil {
+		return err
+	}
 
 	stateFile := ""
 	if cfg.Server.Persist {
@@ -224,6 +230,13 @@ func runServe(args []string) error {
 	// after an install is the new build — that being the point. It is started
 	// the way this one was, plus the word that says its panes are waiting.
 	self, selfErr := os.Executable()
+	bin := ""
+	if selfErr == nil {
+		bin = self
+	}
+	srvCfg.PaneEnv = func(id session.PaneID) []string {
+		return api.PaneEnv(apiPath, id, bin)
+	}
 	replacement := []string{self, "serve", "-s", *name, "-inherit",
 		"-cols", strconv.Itoa(*cols), "-rows", strconv.Itoa(*rows)}
 	if *interval > 0 {
@@ -231,33 +244,59 @@ func runServe(args []string) error {
 	}
 
 	var (
-		srv *server.Server
-		ln  net.Listener
+		srv   *server.Server
+		ln    net.Listener
+		apiLn net.Listener
 	)
 	if *inherited {
-		// Replace is set through a listener that does not exist until the
-		// server does, hence the indirection.
+		// Replace is set through listeners that do not exist until the server
+		// does, hence the indirection. The automation socket may be missing
+		// when the parent was from before this feature: start one then.
 		if selfErr == nil {
-			srvCfg.Replace = func(h *server.Handoff) error { return replaceWith(ln, replacement)(h) }
+			srvCfg.Replace = func(h *server.Handoff) error {
+				return replaceWith(ln, apiLn, replacement)(h)
+			}
 		}
-		if srv, ln, err = inherit(srvCfg); err != nil {
+		if srv, ln, apiLn, err = inherit(srvCfg); err != nil {
 			return err
+		}
+		if apiLn == nil {
+			if apiLn, err = transport.Listen(apiPath); err != nil {
+				_ = ln.Close()
+				_ = srv.Close()
+				return err
+			}
 		}
 	} else {
 		if ln, err = transport.Listen(path); err != nil {
 			return err
 		}
+		if apiLn, err = transport.Listen(apiPath); err != nil {
+			_ = ln.Close()
+			return err
+		}
 		if selfErr == nil {
-			srvCfg.Replace = replaceWith(ln, replacement)
+			srvCfg.Replace = replaceWith(ln, apiLn, replacement)
 		}
 		if srv, err = server.New(srvCfg); err != nil {
 			_ = ln.Close()
+			_ = apiLn.Close()
 			return err
 		}
 	}
 	defer ln.Close()
+	defer apiLn.Close()
 
 	fmt.Fprintf(os.Stderr, "%s session %q listening on %s\n", tag(), *name, path)
+	fmt.Fprintf(os.Stderr, "%s automation on %s\n", tag(), apiPath)
+
+	automation := api.New(srv, version)
+	defer automation.Close()
+	go func() {
+		if err := automation.Serve(apiLn); err != nil {
+			fmt.Fprintf(os.Stderr, "%s automation socket: %v\n", tag(), err)
+		}
+	}()
 
 	// One shutdown path: a signal closes the server, which hangs up the panes
 	// and the clients, which ends Serve.
@@ -267,8 +306,10 @@ func runServe(args []string) error {
 	go func() {
 		<-stop
 		fmt.Fprintf(os.Stderr, "\n%s stopping session %q\n", tag(), *name)
+		automation.Close()
 		_ = srv.Close()
 		_ = ln.Close()
+		_ = apiLn.Close()
 	}()
 
 	if err := srv.Serve(ln); err != nil {

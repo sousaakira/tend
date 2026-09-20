@@ -89,6 +89,29 @@ func validSessionName(name string) error {
 	return nil
 }
 
+// APISocketPath is where a session's automation socket lives.
+//
+// A directory of its own rather than a second name beside the first: sessions
+// are found by listing sockets, and a session must not appear twice, nor a
+// session called "work.api" be mistaken for the automation half of "work".
+func APISocketPath(name string) (string, error) {
+	if name == "" {
+		name = DefaultSessionName
+	}
+	if err := validSessionName(name); err != nil {
+		return "", err
+	}
+	dir, err := runtimeDir()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "api", name+".sock")
+	if err := checkPathLength(path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // Listen creates the socket for a session and starts accepting on it.
 //
 // A socket left behind by a crashed server would otherwise block every later

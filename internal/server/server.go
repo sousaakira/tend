@@ -213,6 +213,10 @@ type Config struct {
 	// process is the caller's business, which is why it is a function: the
 	// server knows what to hand over, not what to hand it to.
 	Replace func(*Handoff) error
+	// PaneEnv returns what is added to the environment of a pane's process:
+	// where the session's automation socket is and which pane this is, which
+	// is all a hook inside an agent has to go on. Nil adds nothing.
+	PaneEnv func(session.PaneID) []string
 }
 
 // PaneSpec describes a pane to open.
@@ -245,6 +249,8 @@ type PaneStatus struct {
 	Running bool
 	Pid     int
 	ExitErr string
+	// Message is what a hook said alongside its state, if one is behind it.
+	Message string
 	// Mouse is whether the pane's program asked for mouse reports at all.
 	// MouseDrag and MouseMotion say how much it asked for, and MouseSGR how
 	// it wants them written: a client forwarding the mouse has to send what
@@ -625,16 +631,26 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 		size = s.cfg.DefaultSize
 	}
 
+	env := spec.Env
+	if s.cfg.PaneEnv != nil {
+		if env == nil {
+			// Nil means "inherit", and appending to nil would mean "only
+			// these", which starts a shell with no PATH.
+			env = os.Environ()
+		}
+		env = append(env[:len(env):len(env)], s.cfg.PaneEnv(id)...)
+	}
+
 	p, err := pty.Start(spec.Command[0], spec.Command[1:], pty.Options{
 		Dir:  spec.Dir,
-		Env:  spec.Env,
+		Env:  env,
 		Size: size,
 	})
 	if err != nil {
 		return fmt.Errorf("server: starting %s: %w", spec.Command[0], err)
 	}
 
-	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback, spec.Command[0], spec.Agent)
+	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback, spec.Command[0], spec.Agent, s.knownAgent)
 	if len(spec.history) > 0 {
 		// Before the reader starts, so the old output is above the new
 		// process's first line rather than mixed into it.
@@ -962,16 +978,18 @@ func (s *Server) adoptOnce() {
 			continue
 		}
 
+		st := rt.status()
 		s.mu.Lock()
 		if _, live := s.runtimes[rt.id]; live {
-			_ = s.session.SetPaneState(rt.id, agentID, detect.StateUnknown)
+			_ = s.session.SetPaneState(rt.id, agentID, st.State)
 		}
 		s.mu.Unlock()
 
 		s.events.publish(Event{
 			Kind:  EventPaneState,
 			Pane:  rt.id,
-			State: detect.StateUnknown,
+			State: st.State,
+			Rule:  st.Rule,
 		})
 	}
 }
@@ -1017,7 +1035,7 @@ func (s *Server) detectOnce() {
 			}
 		}
 		if obs.stateChanged {
-			_ = s.session.SetPaneState(w.rt.id, w.rt.agentID, obs.state)
+			_ = s.session.SetPaneState(w.rt.id, obs.agent, obs.state)
 		}
 		s.mu.Unlock()
 

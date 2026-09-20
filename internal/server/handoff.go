@@ -61,6 +61,11 @@ type HandoffManifest struct {
 	Session session.Snapshot `json:"session"`
 	// Panes is in the order the terminals are handed over.
 	Panes []HandoffPane `json:"panes"`
+	// APIListener reports that the automation socket's listener follows the
+	// last pane's terminal. It is set by whoever passes the descriptors, and
+	// absent from a server older than that socket — whose replacement then
+	// opens one itself.
+	APIListener bool `json:"api_listener,omitempty"`
 }
 
 // HandoffPane is one pane's live half, written down.
@@ -323,7 +328,7 @@ func NewFromHandoff(cfg Config, m HandoffManifest, files []*os.File, ready func(
 		if !size.Valid() {
 			size = s.cfg.DefaultSize
 		}
-		rt := newPaneRuntime(id, term, size, manifest, s.cfg.Scrollback, p.Command, p.Explicit)
+		rt := newPaneRuntime(id, term, size, manifest, s.cfg.Scrollback, p.Command, p.Explicit, s.knownAgent)
 		rt.write(p.Resume)
 		s.runtimes[id] = rt
 		s.titles[id] = ""

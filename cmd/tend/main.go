@@ -32,6 +32,7 @@ commands:
   follow            print a session's events, for diagnosis
   serve             run a session server in the foreground
   config            show or create the settings file
+  integration       install or remove agent hooks
 
 commands that need no server:
   agents            list the agents tend can detect
@@ -86,6 +87,8 @@ func main() {
 		err = runFollow(args[1:])
 	case "config":
 		err = runConfig(args[1:])
+	case "integration":
+		err = runIntegration(args[1:])
 	case "bridge":
 		err = runBridge(args[1:])
 	case "completion":

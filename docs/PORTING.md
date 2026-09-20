@@ -101,17 +101,23 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   mid-session: the new server reported the pane's mouse modes (any-event, SGR)
   exactly as the old one had, which only `RenderResume` could have told it.
 - **Settings file** with validation, `tend config`.
+- **Agent hooks**: `tend integration install|uninstall|status`, the automation
+  socket methods `integration.*` and `pane.report_*`, and Unix assets for every
+  herdr target. An installed hook reports over `$TEND_SOCKET_PATH` so the
+  arbiter can prefer the agent's own account over screen detection.
 
 ## Different from herdr on purpose
 
 | | herdr | tend | why |
 |---|---|---|---|
 | Terminal core | libghostty-vt via FFI | pure Go | owner's decision; no cgo |
-| Agent state | screen detection **and** hooks installed into each agent | screen detection only | hooks not ported yet — see queue item 2 |
+| Agent state | screen detection **and** hooks installed into each agent | screen detection **and** hooks (`tend integration install`); arbitration + automation socket | — |
 | Forced selection | none inside a mouse-holding program | alt+drag selects a block anywhere | fallback for programs that hold the mouse and do nothing with a drag |
 | Clipboard | OSC 52 only | local tool (`wl-copy`/`xclip`/`xsel`/`pbcopy`) when not over ssh, plus OSC 52 always | the owner's terminal refuses OSC 52 |
 | Handoff transport | pty descriptors sent as `SCM_RIGHTS` over a socket; the new server binds the socket afresh | descriptors inherited by the child (`exec.Cmd.ExtraFiles`) at fixed numbers, the **listening socket included** | inheritance needs no protocol, and handing the listener over means the socket file is never removed and recreated — there is no instant with nobody listening |
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
+| Claude / JSONC settings | `jsonc_parser` preserves comments and compact layout | `encoding/json`; comments lost and **keys re-sorted alphabetically** on rewrite (content otherwise identical — checked against the owner's real 44 KB `settings.json`: install adds one `SessionStart` entry, a second install adds nothing, uninstall restores it exactly) | avoid a new dependency; invalid JSON is an error, not silently stripped |
+| Integration assets | `.sh` and `.ps1` | Unix `.sh` / `.js` / `.ts` / Hermes plugin only | Windows PowerShell assets not ported yet; platform code is compile-gated when they are |
 
 ---
 
@@ -136,22 +142,50 @@ top of it is not:
   replacement taking over keeps the old size until the client next sends one,
   which it does on reconnect.
 
-### 2. Agent integrations (hooks) — large
+### 2. Agent integrations (hooks) — mostly done
 
 herdr installs hooks into each agent so the agent reports its own state, which
 is more reliable than reading the screen.
 
-- herdr: `integration/` (10.9k) with assets for 19 agents under
-  `integration/assets/`; API `integration.install|list|uninstall`,
-  `pane.report_agent`, `pane.report_agent_session`, `pane.release_agent`,
-  `pane.clear_agent_authority`; user docs `integrations.mdx`.
+**Ported in tend:**
+- Arbitration (`internal/agent` Arbiter) and server report methods
+- JSON automation socket (`internal/api`) at `$TEND_RUNTIME_DIR/api/<session>.sock`
+- Pane env (`TEND_ENV`, `TEND_SOCKET_PATH`, `TEND_PANE_ID`, `TEND_BIN_PATH`)
+- Handing that socket across `tend handoff`
+- `tend integration install|uninstall|status` and API
+  `integration.list|install|uninstall`
+- Unix assets and installers for every herdr target (claude, codex, cursor,
+  copilot, devin, droid, kimi, pi, omp, opencode, kilo, hermes, qodercli,
+  qwen, letta, mastracode, antigravity-cli, grok)
+
+**Verified, and how:** every asset is herdr's with the name translated (diffed
+file by file; three differ only in the capital T). The Claude hook script was
+run in a pane of a live server with a `SessionStart` payload in Claude's format
+and the session came back over `pane.list` as `agent_session`. **Not verified:**
+any hook fired by a real agent — that needs the integration installed in the
+owner's real agent config, which is theirs to do (`tend integration install
+claude`). Session references follow herdr's rule: only the official source for
+an agent may name one, by id, except pi and omp which resume from a path.
+
+**Still not ported:**
+- The arbiter leaves out herdr's bookkeeping for suppressed and stale
+  full-lifecycle sessions, its window after an observed process exit, agent
+  names, and `pane.report_metadata` (`terminal/state.rs`, `terminal/metadata.rs`)
+- The session reference is held in memory only: it is not in the state file or
+  the handoff manifest yet, which queue item 12 needs
+- Windows `.ps1` assets and Windows path branches
+- Comment-preserving JSONC rewrites (see divergence table)
+- herdr's kimi min-version gate (`enforce_agent_version`) and a few
+  opencode/hermes edge cases around validity checks for "outdated"
 - Note the versioning rule in `../herdr/CLAUDE.md` ("Integration asset
-  versions") before porting the assets.
+  versions") when bumping `TEND_INTEGRATION_VERSION` markers
 
 ### 3. Automation API and CLI — large, and a prerequisite
 
 The half of herdr built for scripts and for other agents. **Plugins depend on
-it**: in herdr "the entire CLI is the plugin API".
+it**: in herdr "the entire CLI is the plugin API". The integration methods and
+pane report methods above are a slice of this; the rest (agent.list, pane.read,
+events.wait, layout.export, …) is still open.
 
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,
   `cli/workspace.rs`, `cli/api.rs`; methods such as `agent.list|get|read|

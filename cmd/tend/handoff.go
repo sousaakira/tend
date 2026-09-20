@@ -30,6 +30,9 @@ const (
 	inheritReadyFD    = 4 // where the replacement says it has everything
 	inheritListenerFD = 5 // the session's listening socket
 	inheritPaneFD     = 6 // the first pane's terminal; the rest follow in order
+	// After the last pane, when the manifest says so: the automation socket.
+	// At the end rather than at a number of its own because the numbers above
+	// are what a server from before that socket existed already sends.
 )
 
 // readyWord is what the replacement writes once it holds every pane. Anything
@@ -43,11 +46,22 @@ const replacementPatience = 15 * time.Second
 
 // replaceWith returns what a server calls to start its replacement: argv, run
 // with the listener and the panes' terminals.
-func replaceWith(ln net.Listener, argv []string) func(*server.Handoff) error {
+func replaceWith(ln, apiLn net.Listener, argv []string) func(*server.Handoff) error {
 	return func(h *server.Handoff) error {
 		unix, ok := ln.(*net.UnixListener)
 		if !ok {
 			return errors.New("the session's socket cannot be handed to another process")
+		}
+		var apiFile *os.File
+		apiUnix, _ := apiLn.(*net.UnixListener)
+		if apiUnix != nil {
+			f, err := apiUnix.File()
+			if err != nil {
+				return fmt.Errorf("duplicating the automation socket: %w", err)
+			}
+			apiFile = f
+			defer apiFile.Close()
+			h.Manifest.APIListener = true
 		}
 		lnFile, err := unix.File()
 		if err != nil {
@@ -74,6 +88,9 @@ func replaceWith(ln net.Listener, argv []string) func(*server.Handoff) error {
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
 		cmd.ExtraFiles = append([]*os.File{manifestR, readyW, lnFile}, h.Files...)
+		if apiFile != nil {
+			cmd.ExtraFiles = append(cmd.ExtraFiles, apiFile)
+		}
 		detach(cmd)
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("starting %s: %w", argv[0], err)
@@ -120,36 +137,62 @@ func replaceWith(ln net.Listener, argv []string) func(*server.Handoff) error {
 		// the file it made, which here would cut off a server that is already
 		// accepting on it.
 		unix.SetUnlinkOnClose(false)
+		if apiUnix != nil {
+			apiUnix.SetUnlinkOnClose(false)
+		}
 		return nil
 	}
 }
 
 // inherit builds a server out of what a parent left open for it.
-func inherit(cfg server.Config) (*server.Server, net.Listener, error) {
+//
+// The automation listener comes back nil when the old server had none to give.
+func inherit(cfg server.Config) (srv *server.Server, ln, apiLn net.Listener, err error) {
 	manifestFile := os.NewFile(inheritManifestFD, "handoff-manifest")
 	readyFile := os.NewFile(inheritReadyFD, "handoff-ready")
 	lnFile := os.NewFile(inheritListenerFD, "handoff-listener")
 	if manifestFile == nil || readyFile == nil || lnFile == nil {
-		return nil, nil, errors.New("serve -inherit is started by a running server, not by hand")
+		return nil, nil, nil, errors.New("serve -inherit is started by a running server, not by hand")
 	}
 	defer readyFile.Close()
 
 	var m server.HandoffManifest
-	err := json.NewDecoder(manifestFile).Decode(&m)
+	err = json.NewDecoder(manifestFile).Decode(&m)
 	_ = manifestFile.Close()
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading the handoff manifest: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading the handoff manifest: %w", err)
 	}
 
-	ln, err := net.FileListener(lnFile)
-	_ = lnFile.Close() // FileListener works on its own duplicate
-	if err != nil {
-		return nil, nil, fmt.Errorf("taking over the socket: %w", err)
+	// An inherited listener does not remove its file when closed, since it did
+	// not make it. These are the files' last owners, so they should.
+	own := func(f *os.File, what string) (net.Listener, error) {
+		l, err := net.FileListener(f)
+		_ = f.Close() // FileListener works on its own duplicate
+		if err != nil {
+			return nil, fmt.Errorf("taking over %s: %w", what, err)
+		}
+		if unix, ok := l.(*net.UnixListener); ok {
+			unix.SetUnlinkOnClose(true)
+		}
+		return l, nil
 	}
-	if unix, ok := ln.(*net.UnixListener); ok {
-		// An inherited listener does not remove its file when closed, since it
-		// did not make it. This one is the file's last owner, so it should.
-		unix.SetUnlinkOnClose(true)
+	disown := func(l net.Listener) {
+		if unix, ok := l.(*net.UnixListener); ok {
+			unix.SetUnlinkOnClose(false) // still the old server's
+		}
+		if l != nil {
+			_ = l.Close()
+		}
+	}
+	if ln, err = own(lnFile, "the socket"); err != nil {
+		return nil, nil, nil, err
+	}
+	if m.APIListener {
+		apiFile := os.NewFile(uintptr(inheritPaneFD+len(m.Panes)), "handoff-api-listener")
+		if apiLn, err = own(apiFile, "the automation socket"); err != nil {
+			disown(ln)
+			return nil, nil, nil, err
+		}
 	}
 
 	files := make([]*os.File, len(m.Panes))
@@ -157,16 +200,14 @@ func inherit(cfg server.Config) (*server.Server, net.Listener, error) {
 		files[i] = os.NewFile(uintptr(inheritPaneFD+i), fmt.Sprintf("pane-%d", m.Panes[i].ID))
 	}
 
-	srv, err := server.NewFromHandoff(cfg, m, files, func() error {
+	srv, err = server.NewFromHandoff(cfg, m, files, func() error {
 		_, err := fmt.Fprintln(readyFile, readyWord)
 		return err
 	})
 	if err != nil {
-		if unix, ok := ln.(*net.UnixListener); ok {
-			unix.SetUnlinkOnClose(false) // still the old server's
-		}
-		_ = ln.Close()
-		return nil, nil, err
+		disown(ln)
+		disown(apiLn)
+		return nil, nil, nil, err
 	}
-	return srv, ln, nil
+	return srv, ln, apiLn, nil
 }

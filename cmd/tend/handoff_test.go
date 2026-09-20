@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"io"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/sousaakira/tend/internal/pty"
+	"github.com/sousaakira/tend/internal/transport"
 	"github.com/sousaakira/tend/internal/vt"
 )
 
@@ -77,6 +79,20 @@ func TestHandoffReplacesTheServerUnderARunningShell(t *testing.T) {
 	// What the old server had on the screen came across with the pane.
 	if !strings.Contains(a.text(), "first-"+pid) {
 		t.Errorf("the screen lost what was on it before the handoff:\n%s", a.text())
+	}
+
+	// The automation socket is handed over with the session one. A replacement
+	// that forgot it would leave every hook talking to a dead file until the
+	// next pane spawn reinvented the env — and existing agents would stay dark.
+	apiPath, err := transport.APISocketPath("relay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn := dialAPI(t, apiPath)
+	defer conn.Close()
+	r := bufio.NewReader(conn)
+	if reply := callAPI(t, conn, r, `{"id":"h","method":"ping"}`); reply["error"] != nil {
+		t.Errorf("automation socket after handoff: %v", reply)
 	}
 }
 

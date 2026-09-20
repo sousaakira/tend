@@ -20,6 +20,7 @@ var commands = []struct{ name, help string }{
 	{"serve", "run a session server in the foreground"},
 	{"bridge", "carry a session over stdin and stdout, for ssh"},
 	{"config", "show or write the settings file"},
+	{"integration", "install or remove agent hooks"},
 	{"agents", "list the agents tend can recognise"},
 	{"detect", "classify a screen capture"},
 	{"explain", "classify a screen capture and say why"},
