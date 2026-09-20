@@ -97,8 +97,9 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   start or to answer is killed and the old server reads on, having lost
   nothing, since nobody read the terminals in between. Verified with the real
   Claude Code in a pane: same pid, same screen, detection still reporting its
-  state afterwards. Not verified with a real agent: that mouse modes carry over
-  (covered only by `TestRenderResumeCarriesTheStateNotJustThePicture`).
+  state afterwards. Also run on the owner's live session with Claude Code
+  mid-session: the new server reported the pane's mouse modes (any-event, SGR)
+  exactly as the old one had, which only `RenderResume` could have told it.
 - **Settings file** with validation, `tend config`.
 
 ## Different from herdr on purpose
