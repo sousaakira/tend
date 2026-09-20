@@ -4,6 +4,8 @@ package server
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +23,7 @@ func newServer(t *testing.T) *Server {
 	t.Helper()
 	s, err := New(Config{
 		DetectInterval: 10 * time.Millisecond,
+		AdoptInterval:  20 * time.Millisecond,
 		DefaultSize:    pty.Size{Cols: 80, Rows: 24},
 	})
 	if err != nil {
@@ -614,4 +617,100 @@ func TestConcurrentUse(t *testing.T) {
 			t.Errorf("invariants after concurrent use: %v", err)
 		}
 	})
+}
+
+// --- adopting an agent -----------------------------------------------------
+
+// fakeAgent writes an executable with the given name and returns its path. A
+// shell script is enough: Linux takes a process's name from the file that was
+// executed, script or not.
+func fakeAgent(t *testing.T, name, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestAdoptsAnAgentStartedInAShell is the case that matters most, and the one
+// that was missing: almost nobody opens a pane by naming an agent. They open a
+// shell and type its name, which leaves the pane's command as the shell while
+// the thing on screen is an agent.
+func TestAdoptsAnAgentStartedInAShell(t *testing.T) {
+	s := newServer(t)
+	claude := fakeAgent(t, "claude", "printf '\\033]0;\\342\\240\\201 Thinking\\007'; sleep 10")
+
+	_, pane := openTab(t, s, "exec sh -i")
+	waitFor(t, "the shell to start", func() bool {
+		st, err := s.PaneStatus(pane)
+		return err == nil && st.Running
+	})
+	if st, _ := s.PaneStatus(pane); st.Agent != "" {
+		t.Fatalf("a shell was identified as %q", st.Agent)
+	}
+
+	if err := s.Write(pane, []byte(claude+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the agent to be adopted", func() bool {
+		st, err := s.PaneStatus(pane)
+		return err == nil && st.Agent == "claude"
+	})
+
+	// And it is being watched, not merely labelled.
+	waitFor(t, "its state to be detected", func() bool {
+		st, err := s.PaneStatus(pane)
+		return err == nil && st.State == detect.StateWorking
+	})
+}
+
+// TestReleasesTheAgentWhenItExits: a stale state left on screen is worse than
+// none, because it looks live.
+func TestReleasesTheAgentWhenItExits(t *testing.T) {
+	s := newServer(t)
+	claude := fakeAgent(t, "claude", "sleep 0.4")
+
+	_, pane := openTab(t, s, "exec sh -i")
+	waitFor(t, "the shell", func() bool {
+		st, err := s.PaneStatus(pane)
+		return err == nil && st.Running
+	})
+	if err := s.Write(pane, []byte(claude+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the agent to be adopted", func() bool {
+		st, _ := s.PaneStatus(pane)
+		return st.Agent == "claude"
+	})
+	waitFor(t, "the agent to be released", func() bool {
+		st, _ := s.PaneStatus(pane)
+		return st.Agent == ""
+	})
+}
+
+// TestKeepsAnExplicitAgentWhileItWorks: a pane opened as an agent must not
+// lose it the moment that agent runs a command of its own.
+func TestKeepsAnExplicitAgentWhileItWorks(t *testing.T) {
+	s := newServer(t)
+	ws, err := s.NewWorkspace("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, pane, err := s.NewTab(ws, "agent", PaneSpec{
+		Command: []string{"/bin/sh", "-c", "sleep 10"},
+		Agent:   "claude",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the pane to settle", func() bool {
+		st, err := s.PaneStatus(pane)
+		return err == nil && st.Running
+	})
+	time.Sleep(300 * time.Millisecond) // several chances to get it wrong
+
+	if st, _ := s.PaneStatus(pane); st.Agent != "claude" {
+		t.Errorf("agent = %q, want it kept as claude", st.Agent)
+	}
 }

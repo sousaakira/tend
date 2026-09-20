@@ -45,6 +45,11 @@ const (
 	// it is killed. A process that ignores SIGHUP must not be able to hold
 	// shutdown open indefinitely.
 	defaultShutdownGrace = 2 * time.Second
+	// defaultAdoptInterval is how often a pane is asked what is running in it.
+	// Slower than detection because it costs a syscall and a file read per
+	// pane, and because starting an agent is something a person does, not
+	// something that happens many times a second.
+	defaultAdoptInterval = time.Second
 )
 
 // ErrClosed is returned once the server has shut down.
@@ -65,6 +70,9 @@ type Config struct {
 	// Scrollback is how many lines of history each pane keeps. Zero picks a
 	// default.
 	Scrollback int
+	// AdoptInterval is how often a pane is checked for the program now in
+	// charge of its terminal. Zero picks a default.
+	AdoptInterval time.Duration
 }
 
 // PaneSpec describes a pane to open.
@@ -138,6 +146,9 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.Scrollback <= 0 {
 		cfg.Scrollback = defaultScrollback
+	}
+	if cfg.AdoptInterval <= 0 {
+		cfg.AdoptInterval = defaultAdoptInterval
 	}
 
 	s := &Server{
@@ -361,7 +372,7 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 		return fmt.Errorf("server: starting %s: %w", spec.Command[0], err)
 	}
 
-	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback)
+	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback, spec.Command[0], spec.Agent)
 	s.runtimes[id] = rt
 	s.titles[id] = ""
 	if manifest != nil {
@@ -576,13 +587,80 @@ func (s *Server) detectLoop() {
 	t := time.NewTicker(s.cfg.DetectInterval)
 	defer t.Stop()
 
+	adopt := time.NewTicker(s.cfg.AdoptInterval)
+	defer adopt.Stop()
+
 	for {
 		select {
 		case <-s.done:
 			return
 		case <-t.C:
 			s.detectOnce()
+		case <-adopt.C:
+			s.adoptOnce()
 		}
+	}
+}
+
+// adoptOnce points each pane at whichever agent is now running in it.
+//
+// A pane opened as a shell and then used to start an agent is the normal case,
+// not the exception, so which agent a pane is watching cannot be settled once
+// when it opens. It follows the terminal's foreground process instead, which
+// also means quitting the agent puts the pane back to reporting nothing rather
+// than leaving a stale state on screen.
+func (s *Server) adoptOnce() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	runtimes := make([]*paneRuntime, 0, len(s.runtimes))
+	for _, rt := range s.runtimes {
+		runtimes = append(runtimes, rt)
+	}
+	catalog := s.catalog
+	s.mu.Unlock()
+
+	for _, rt := range runtimes {
+		name, changed := rt.foregroundChanged()
+		if !changed {
+			continue
+		}
+
+		manifest, err := agent.ResolveManifest(catalog, "", name)
+		if err != nil {
+			continue
+		}
+		if manifest == nil {
+			// The foreground is something with no rules — a shell, a pager, a
+			// build. Fall back to what the pane was opened as, so a pane
+			// started as an agent does not lose it the moment that agent runs
+			// a command of its own. The caller's explicit choice is tried
+			// first, since it outranks tend failing to recognise something.
+			if rt.explicit != "" {
+				manifest, _ = agent.ResolveManifest(catalog, rt.explicit, "")
+			}
+			if manifest == nil {
+				manifest, _ = agent.ResolveManifest(catalog, "", rt.command)
+			}
+		}
+		swapped, agentID := rt.adoptAgent(manifest)
+		if !swapped {
+			continue
+		}
+
+		s.mu.Lock()
+		if _, live := s.runtimes[rt.id]; live {
+			_ = s.session.SetPaneState(rt.id, agentID, detect.StateUnknown)
+		}
+		s.mu.Unlock()
+
+		s.events.publish(Event{
+			Kind:  EventPaneState,
+			Pane:  rt.id,
+			State: detect.StateUnknown,
+		})
 	}
 }
 

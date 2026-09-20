@@ -23,6 +23,15 @@ type paneRuntime struct {
 	id      session.PaneID
 	agentID string
 
+	// command is what the pane was opened with and explicit is the agent the
+	// caller named, if any. Which agent a pane is watching is not settled when
+	// it opens — the foreground program decides — and these are what that
+	// falls back to when the foreground matches no manifest. An explicit
+	// choice is never overridden by one: the user saying "this pane is claude"
+	// outranks tend failing to recognise what is in front of it.
+	command  string
+	explicit string
+
 	pty *pty.Pty
 
 	mu       sync.Mutex
@@ -30,17 +39,30 @@ type paneRuntime struct {
 	detector *agent.Detector
 	dirty    bool
 	title    string
-	running  bool
-	closing  bool
-	exitErr  string
+	// foreground is the program last seen in charge of the terminal, so the
+	// costly part — resolving and swapping the detector — happens only when
+	// it actually changes.
+	foreground string
+	running    bool
+	closing    bool
+	exitErr    string
 }
 
-func newPaneRuntime(id session.PaneID, p *pty.Pty, size pty.Size, manifest *detect.Manifest, scrollback int) *paneRuntime {
+func newPaneRuntime(
+	id session.PaneID,
+	p *pty.Pty,
+	size pty.Size,
+	manifest *detect.Manifest,
+	scrollback int,
+	command, explicit string,
+) *paneRuntime {
 	rt := &paneRuntime{
-		id:      id,
-		pty:     p,
-		screen:  vt.NewScreen(int(size.Cols), int(size.Rows), scrollback),
-		running: true,
+		id:       id,
+		command:  command,
+		explicit: explicit,
+		pty:      p,
+		screen:   vt.NewScreen(int(size.Cols), int(size.Rows), scrollback),
+		running:  true,
 	}
 	if manifest != nil {
 		rt.agentID = manifest.ID
@@ -107,6 +129,47 @@ func (rt *paneRuntime) resize(size pty.Size) error {
 	// the process may write its redraw before the call returns, and that write
 	// needs the lock we would otherwise still be holding.
 	return rt.pty.Resize(size)
+}
+
+// adoptAgent points the pane at a different manifest, or at none.
+//
+// The detector is rebuilt rather than reused: its memory of the last state
+// belongs to the agent it was watching, and carrying that across would report
+// the new one as already being in a state it has never been in.
+func (rt *paneRuntime) adoptAgent(m *detect.Manifest) (changed bool, agentID string) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	next := ""
+	if m != nil {
+		next = m.ID
+	}
+	if next == rt.agentID {
+		return false, rt.agentID
+	}
+	rt.agentID = next
+	if m == nil {
+		rt.detector = nil
+	} else {
+		rt.detector = agent.NewDetector(m)
+	}
+	// The screen has not changed, but what is being looked for has.
+	rt.dirty = true
+	return true, rt.agentID
+}
+
+// foregroundChanged reports the program in charge of the terminal, and whether
+// it differs from the last look.
+func (rt *paneRuntime) foregroundChanged() (string, bool) {
+	name := rt.pty.Foreground()
+
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if name == rt.foreground {
+		return name, false
+	}
+	rt.foreground = name
+	return name, true
 }
 
 // setClosing records that tend is stopping this pane on purpose, so that the
