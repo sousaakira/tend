@@ -234,6 +234,14 @@ func runServe(args []string) error {
 	if selfErr == nil {
 		bin = self
 	}
+	// Plugins get the same door a hook does: the automation socket, and the
+	// marker that says a program is running inside tend.
+	pluginEnv := []string{api.EnvMarker + "=1", api.EnvSocketPath + "=" + apiPath}
+	if selfErr == nil {
+		pluginEnv = append(pluginEnv, api.EnvBinPath+"="+self)
+	}
+	srvCfg.Plugins = pluginHost(pluginEnv)
+
 	srvCfg.PaneEnv = func(id session.PaneID) []string {
 		return api.PaneEnv(apiPath, id, bin)
 	}
@@ -286,6 +294,10 @@ func runServe(args []string) error {
 	}
 	defer ln.Close()
 	defer apiLn.Close()
+
+	// Started once the server is up and answering: a startup command that
+	// calls back into the session must find it there.
+	srv.RunStartupPlugins()
 
 	fmt.Fprintf(os.Stderr, "%s session %q listening on %s\n", tag(), *name, path)
 	fmt.Fprintf(os.Stderr, "%s automation on %s\n", tag(), apiPath)

@@ -217,6 +217,10 @@ type Config struct {
 	// where the session's automation socket is and which pane this is, which
 	// is all a hook inside an agent has to go on. Nil adds nothing.
 	PaneEnv func(session.PaneID) []string
+	// Plugins is the host that runs installed plugins' hooks. Nil means this
+	// server runs none, which is what a test that does not care about them
+	// gets.
+	Plugins *Plugins
 }
 
 // PaneSpec describes a pane to open.
@@ -529,7 +533,7 @@ func (s *Server) ClosePane(id session.PaneID) error {
 
 	rt.setClosing()
 	_ = rt.pty.Close()
-	s.events.publish(Event{Kind: EventPaneClosed, Pane: id})
+	s.publish(Event{Kind: EventPaneClosed, Pane: id})
 	return nil
 }
 
@@ -558,7 +562,7 @@ func (s *Server) CloseTab(id session.TabID) error {
 	for _, rt := range stopped {
 		rt.setClosing()
 		_ = rt.pty.Close()
-		s.events.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
+		s.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
 	}
 	return nil
 }
@@ -606,7 +610,7 @@ func (s *Server) CloseWorkspace(id session.WorkspaceID) error {
 	for _, rt := range stopped {
 		rt.setClosing()
 		_ = rt.pty.Close()
-		s.events.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
+		s.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
 	}
 	return nil
 }
@@ -665,7 +669,7 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	s.wg.Add(1)
 	go s.readPane(rt)
 
-	s.events.publish(Event{Kind: EventPaneOpened, Pane: id})
+	s.publish(Event{Kind: EventPaneOpened, Pane: id})
 	return nil
 }
 
@@ -839,9 +843,9 @@ func (s *Server) readPane(rt *paneRuntime) {
 		n, err := rt.pty.Read(buf)
 		if n > 0 {
 			for _, text := range rt.write(buf[:n]) {
-				s.events.publish(Event{Kind: EventPaneClipboard, Pane: rt.id, Data: text})
+				s.publish(Event{Kind: EventPaneClipboard, Pane: rt.id, Data: text})
 			}
-			s.events.publish(Event{Kind: EventPaneOutput, Pane: rt.id})
+			s.publish(Event{Kind: EventPaneOutput, Pane: rt.id})
 		}
 		if errors.Is(err, pty.ErrPaused) {
 			// A handoff stopped this reader. It waits to hear how that went:
@@ -870,7 +874,7 @@ func (s *Server) readPane(rt *paneRuntime) {
 	if waitErr != nil {
 		ev.Err = waitErr.Error()
 	}
-	s.events.publish(ev)
+	s.publish(ev)
 }
 
 // detectLoop re-examines panes on a tick.
@@ -927,7 +931,7 @@ func (s *Server) trackOnce() {
 	}
 	// Clients read this from the session, so they are told to look again the
 	// same way a change of agent state tells them.
-	s.events.publish(Event{Kind: EventPaneState})
+	s.publish(Event{Kind: EventPaneState})
 }
 
 // adoptOnce points each pane at whichever agent is now running in it.
@@ -985,7 +989,7 @@ func (s *Server) adoptOnce() {
 		}
 		s.mu.Unlock()
 
-		s.events.publish(Event{
+		s.publish(Event{
 			Kind:  EventPaneState,
 			Pane:  rt.id,
 			State: st.State,
@@ -1040,7 +1044,7 @@ func (s *Server) detectOnce() {
 		s.mu.Unlock()
 
 		if obs.stateChanged || obs.mouseChanged {
-			s.events.publish(Event{
+			s.publish(Event{
 				Kind:  EventPaneState,
 				Pane:  w.rt.id,
 				State: obs.state,

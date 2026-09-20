@@ -133,6 +133,9 @@ func (a *API) locate(id session.PaneID) (where, bool) {
 // callMore answers the automation half. It is reached when the first half has
 // not recognised the method.
 func (a *API) callMore(req Request, pend *pending) (any, error) {
+	if result, mine, err := a.callPlugins(req); mine {
+		return result, err
+	}
 	switch req.Method {
 	case MethodSessionSnapshot:
 		return a.sessionSnapshot(), nil

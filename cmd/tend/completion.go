@@ -19,6 +19,7 @@ var commands = []struct{ name, help string }{
 	{"agent", "drive an agent: read, prompt, wait"},
 	{"pane", "drive a pane: read, type, wait"},
 	{"api", "call the automation socket directly"},
+	{"plugin", "install and run plugins"},
 	{"follow", "stream a session's events"},
 	{"serve", "run a session server in the foreground"},
 	{"bridge", "carry a session over stdin and stdout, for ssh"},

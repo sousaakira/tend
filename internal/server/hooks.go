@@ -83,6 +83,6 @@ func (s *Server) hooked(id session.PaneID, fn func(*agent.Arbiter) bool) (bool, 
 		_ = s.session.SetPaneState(id, eff.Agent, eff.State)
 	}
 	s.mu.Unlock()
-	s.events.publish(Event{Kind: EventPaneState, Pane: id, State: eff.State, Rule: rule})
+	s.publish(Event{Kind: EventPaneState, Pane: id, State: eff.State, Rule: rule})
 	return accepted, nil
 }

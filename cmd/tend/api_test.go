@@ -198,3 +198,100 @@ func TestTheCommandsScriptsUse(t *testing.T) {
 		t.Fatalf("tend api = %q, %v", out, err)
 	}
 }
+
+// TestAPluginExtendsTheSession is the plugin host end to end with the real
+// binary: a directory with a manifest is linked, its hook runs when a pane
+// opens, its action runs when invoked, and the pane it offers really runs its
+// own command. If it regresses, nothing installed beside tend can extend it.
+func TestAPluginExtendsTheSession(t *testing.T) {
+	runtimeDir := t.TempDir()
+	configDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	t.Setenv("TEND_CONFIG", filepath.Join(configDir, "tend.toml"))
+	bin := buildBinary(t)
+	env := append(os.Environ(),
+		"TEND_RUNTIME_DIR="+runtimeDir,
+		"TEND_CONFIG="+filepath.Join(configDir, "tend.toml"),
+		"SHELL=/bin/sh",
+	)
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	root := t.TempDir()
+	manifest := `
+id = "demo"
+name = "Demo"
+version = "0.1.0"
+
+[[events]]
+on = "pane.opened"
+command = ["./record.sh", "opened"]
+
+[[actions]]
+id = "greet"
+title = "Greet"
+command = ["./record.sh", "greet"]
+
+[[panes]]
+id = "side"
+title = "Demo pane"
+command = ["/bin/sh", "-c", "printf i-am-the-plugin-pane\\n; sleep 30"]
+`
+	if err := os.WriteFile(filepath.Join(root, "tend-plugin.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	record := "#!/bin/sh\nprintf '%s %s\\n' \"$1\" \"$TEND_PLUGIN_CONTEXT_JSON\" >>\"$TEND_PLUGIN_ROOT/ran.log\"\nif [ \"$1\" = greet ]; then printf 'the-action-ran\\n'; fi\n"
+	if err := os.WriteFile(filepath.Join(root, "record.sh"), []byte(record), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := run("plugin", "link", root); err != nil {
+		t.Fatalf("plugin link: %v\n%s", err, out)
+	}
+	if out, err := run("plugin", "list"); err != nil || !strings.Contains(out, "demo") {
+		t.Fatalf("plugin list = %q, %v", out, err)
+	}
+
+	if out, err := run("new", "-s", "plug", "--", "/bin/sh"); err != nil {
+		t.Fatalf("tend new: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { stopSession(t, "plug") })
+
+	// The hook ran when the pane opened, and was told where.
+	log := filepath.Join(root, "ran.log")
+	deadline := time.Now().Add(10 * time.Second)
+	var text string
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(log); err == nil && strings.Contains(string(b), "opened") {
+			text = string(b)
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !strings.Contains(text, `"pane_id":"p_1"`) {
+		t.Fatalf("the pane.opened hook did not run with a pane in its context; the log holds:\n%s", text)
+	}
+
+	// An action's output comes back to whoever invoked it.
+	out, err := run("plugin", "run", "-s", "plug", "greet")
+	if err != nil || !strings.Contains(out, "the-action-ran") {
+		t.Fatalf("plugin run = %q, %v", out, err)
+	}
+
+	// And a pane the plugin offers runs the plugin's own command.
+	if out, err := run("plugin", "open", "-s", "plug", "side"); err != nil {
+		t.Fatalf("plugin open: %v\n%s", err, out)
+	}
+	for time.Now().Before(deadline.Add(10 * time.Second)) {
+		out, _ := run("pane", "read", "-s", "plug", "p_2")
+		if strings.Contains(out, "i-am-the-plugin-pane") {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Error("the pane the plugin opened never ran its command")
+}

@@ -112,6 +112,17 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a prompt's text and its Enter are sent 300ms apart as herdr does. Verified
   against the real Claude Code with no client attached: prompted it, waited for
   it to come back idle, and read its answer out of the pane.
+- **Plugin host** (the core of herdr's item 4): a plugin is a directory with a
+  `tend-plugin.toml` — herdr's manifest with the name changed — declaring
+  `build`, `startup`, `actions`, `events` and `panes`. `tend plugin
+  list|link|unlink|enable|disable|reload|actions|run|open`, and over the socket
+  `plugin.list|link|unlink|enable|disable|reload|action.list|action.invoke|
+  pane.open`. The registry is `plugins.json` beside the settings file; linking
+  records the directory rather than copying it, as herdr does. Commands run
+  from the plugin's root with `TEND_PLUGIN_*` and the socket in their
+  environment, in a process group of their own, killed after 30s. Verified end
+  to end with a plugin written for the test (hook, action, pane); **not**
+  verified with the owner's `herdr-sidebar`, which needs more than the host.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -210,16 +221,27 @@ What a script needs is ported (see "Ported, and checked"). What is left:
   `cli/workspace.rs`, `cli/api.rs`; user docs `socket-api.mdx`,
   `cli-reference.mdx`, `agent-automation.mdx`.
 
-### 4. Plugins — large; needs item 3 first
+### 4. Plugins — the host is done; what the sidebar plugin needs is not
 
+The host is ported (see "Ported, and checked"). Left:
+
+- **Events herdr has and tend does not**: `pane.focused`, `tab.focused`,
+  `tab.created`, `workspace.created`, `workspace.focused`. Focus is client
+  state in tend, so the focus events need the client to report it; the
+  `created` ones are a server change. A manifest naming them links with a
+  warning and those hooks never run.
+- **The owner's `herdr-sidebar`** (`~/.config/herdr/plugins/github/`) calls
+  `pane.focus`, `pane.swap`, the focus events above and herdr's CLI by name.
+  Running it needs those, plus its manifest renamed to `tend-plugin.toml` and
+  its `herdr` calls pointed at `tend`. It is a separate piece of work.
+- `build` steps are parsed and not run: nothing yet decides when to build.
+  herdr builds on install.
+- Installing from a URL or GitHub (`plugin install`), the marketplace, popups
+  as a placement, `link_handlers`, `plugin.log.list`, `min_herdr_version`
+  enforcement (tend's builds have no ordering to compare against).
 - herdr: `plugin_command.rs`, `plugin_paths.rs`, `cli/plugin.rs`,
   `persist/plugin_registry.rs`, `app/api/plugins/`, `api/schema/plugins.rs`;
-  manifest file `herdr-plugin.toml`; API `plugin.list|enable|disable|link|
-  unlink`; user docs `plugins.mdx`, `marketplace.mdx`.
-- **The right-hand file explorer panel in the owner's herdr is a plugin**, not
-  part of herdr: `herdr-sidebar`, installed under
-  `~/.config/herdr/plugins/github/`. It is not in `../herdr/src`. Porting the
-  plugin host is what makes that panel possible; the panel itself is separate.
+  user docs `plugins.mdx`, `marketplace.mdx`.
 
 ### 5. Copy mode and scrollback tools — medium
 
