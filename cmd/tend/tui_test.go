@@ -1572,6 +1572,13 @@ func TestAttachWarnsAboutAnOlderServer(t *testing.T) {
 	a.waitForScreen(t, "the warning", func(s string) bool {
 		return strings.Contains(s, "0.0.1-ancient") && strings.Contains(s, "tend kill -s")
 	})
+	// The command it names has to be the one that stops the server, and it has
+	// to survive the status line. Without -server, "tend kill -s <name>"
+	// closes panes by number and leaves the server where it was; truncated
+	// away, it says the same thing. Either sends the user in a circle.
+	if !strings.Contains(a.text(), "tend kill -s tui -server") {
+		t.Errorf("the warning must show the whole command:\n%s", a.text())
+	}
 }
 
 // TestAttachSurvivesAnOlderServer: the warning does not stop the session from

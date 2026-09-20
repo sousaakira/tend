@@ -470,6 +470,20 @@ func (t *tui) subscribe(rects []proto.PaneRect) error {
 	return t.client.SubscribePanes(panes)
 }
 
+// restartCommand is what stops the server so the next attach starts a new one.
+//
+// Spelled out in one place because it is the whole point of the message it
+// goes in: a notice that names a command which does not do what it says is
+// worse than no notice, and "tend kill -s <name>" without -server closes panes
+// by number and leaves the server exactly where it was.
+//
+// The messages carrying it are kept short for the same reason. They go on the
+// status line, which truncates, and the command is at the end — so a sentence
+// explaining the situation costs exactly the part the user needs to type.
+func restartCommand(session string) string {
+	return "tend kill -s " + session + " -server"
+}
+
 // warnIfServerIsOlder says so when the session is being run by a binary older
 // than this one.
 //
@@ -482,7 +496,7 @@ func (t *tui) warnIfServerIsOlder() {
 	if build == "" || build == version {
 		return
 	}
-	t.setMessage("this session is run by tend "+build+"; restart it with: tend kill -s "+t.session, true)
+	t.setMessage("old server ("+build+"): "+restartCommand(t.session), true)
 }
 
 // reportStaleServer turns "the server has never heard of that" into something
@@ -495,7 +509,7 @@ func (t *tui) reportStaleServer(err error) bool {
 	if !errors.Is(err, proto.ErrUnknownMethod) {
 		return false
 	}
-	t.setMessage("the server for this session is older than tend; restart it with: tend kill -s "+t.session, true)
+	t.setMessage("server too old for that: "+restartCommand(t.session), true)
 	return true
 }
 
