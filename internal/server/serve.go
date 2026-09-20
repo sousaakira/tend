@@ -316,7 +316,12 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		if p.Version != proto.Version {
 			return nil, fmt.Errorf("protocol version %d, this server speaks %d", p.Version, proto.Version)
 		}
-		return proto.HelloResult{Version: proto.Version, Server: "tend", Methods: Methods}, nil
+		return proto.HelloResult{
+			Version: proto.Version,
+			Server:  "tend",
+			Build:   c.srv.cfg.Build,
+			Methods: Methods,
+		}, nil
 
 	case proto.MethodSessionSnapshot:
 		return c.srv.snapshot(), nil
@@ -449,7 +454,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		return nil, nil
 	}
 
-	return nil, fmt.Errorf("unknown method %q", req.Method)
+	return nil, fmt.Errorf("%s: %w", req.Method, proto.ErrUnknownMethod)
 }
 
 // subscribe replaces the set of panes this client receives output for.

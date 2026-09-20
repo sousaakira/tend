@@ -91,6 +91,13 @@ func (a *attached) waitForScreen(t *testing.T, what string, cond func(string) bo
 // it over a pty.
 func startSession(t *testing.T, cols, rows int) *attached {
 	t.Helper()
+	return startSessionBuilt(t, cols, rows, "")
+}
+
+// startSessionBuilt runs the session's server as a given build, so a client
+// meeting a server older than itself can be tested.
+func startSessionBuilt(t *testing.T, cols, rows int, build string) *attached {
+	t.Helper()
 
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
@@ -108,6 +115,7 @@ func startSession(t *testing.T, cols, rows int) *attached {
 		t.Fatal(err)
 	}
 	srv, err := server.New(server.Config{
+		Build:          build,
 		DetectInterval: 20 * time.Millisecond,
 		DefaultSize:    pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
 		ShutdownGrace:  time.Second,
@@ -1553,4 +1561,32 @@ func TestAttachWheelReachesAProgramThatAskedForIt(t *testing.T) {
 	if strings.Contains(a.text(), "scroll ") {
 		t.Errorf("tend should not have entered its own scroll view:\n%s", a.text())
 	}
+}
+
+// TestAttachWarnsAboutAnOlderServer: the server outlives the client, so
+// upgrading tend and reattaching leaves the old one running. Everything works
+// until the first thing the new client knows about and the old server does
+// not, and then it fails with a protocol error nobody can act on.
+func TestAttachWarnsAboutAnOlderServer(t *testing.T) {
+	a := startSessionBuilt(t, 100, 16, "0.0.1-ancient")
+	a.waitForScreen(t, "the warning", func(s string) bool {
+		return strings.Contains(s, "0.0.1-ancient") && strings.Contains(s, "tend kill -s")
+	})
+}
+
+// TestAttachSurvivesAnOlderServer: the warning does not stop the session from
+// being used, and the client does not exit over it.
+func TestAttachSurvivesAnOlderServer(t *testing.T) {
+	a := startSessionBuilt(t, 100, 16, "0.0.1-ancient")
+	a.waitForScreen(t, "the warning", func(s string) bool {
+		return strings.Contains(s, "0.0.1-ancient")
+	})
+	a.sendUntil(t, "printf STILL-HERE\n", "the pane to work", func(s string) bool {
+		return strings.Contains(s, "STILL-HERE")
+	})
+	// And splitting, which this server can do, is not refused along with it.
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool {
+		return strings.Count(s, "┌") == 2
+	})
 }

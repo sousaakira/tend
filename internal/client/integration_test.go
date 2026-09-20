@@ -199,8 +199,19 @@ func TestUnknownMethodIsAnErrorNotADisconnect(t *testing.T) {
 	if err == nil {
 		t.Fatal("an unknown method should fail")
 	}
-	if !strings.Contains(err.Error(), "unknown method") {
-		t.Errorf("err = %v", err)
+	// Recognisable as a kind rather than as a sentence: a caller needs to
+	// tell "this cannot be done" apart from "the server on the other end is
+	// older than you are", and those read the same in a raw error.
+	if !errors.Is(err, proto.ErrUnknownMethod) {
+		t.Errorf("err = %v, want it to wrap ErrUnknownMethod", err)
+	}
+	if !strings.Contains(err.Error(), "pane.teleport") {
+		t.Errorf("err = %v, want it to name the method", err)
+	}
+
+	// A method the server does know is not mistaken for one it does not.
+	if _, err := h.client.SplitPane(999, "columns", proto.PaneSpec{}); errors.Is(err, proto.ErrUnknownMethod) {
+		t.Errorf("a failing known method should not look unsupported: %v", err)
 	}
 
 	// The connection must still work.

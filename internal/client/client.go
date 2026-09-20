@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -146,6 +147,11 @@ func (c *Client) Call(method string, params, result any) error {
 	select {
 	case resp := <-reply:
 		if resp.Error != "" {
+			if strings.Contains(resp.Error, proto.ErrUnknownMethod.Error()) {
+				// Carried across the wire as text and recognised here, so a
+				// caller can say what it means rather than repeating it.
+				return fmt.Errorf("%s: %w", method, proto.ErrUnknownMethod)
+			}
 			return fmt.Errorf("%s: %s", method, resp.Error)
 		}
 		if result == nil || len(resp.Result) == 0 {

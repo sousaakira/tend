@@ -1,6 +1,9 @@
 package proto
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+)
 
 // Method names are permanent. Renaming one is a protocol break; adding one is
 // not, because an unknown method is answered with an error rather than a
@@ -63,9 +66,19 @@ type HelloParams struct {
 // Methods lists what this server actually implements, so a client can disable
 // an action it cannot perform rather than discovering the gap when a user
 // tries it.
+// ErrUnknownMethod is what a server answers when it has never heard of a
+// method. A client recognises it to tell "this cannot be done" apart from
+// "the server on the other end is older than you are", which are the same
+// failure to anyone reading a raw protocol error.
+var ErrUnknownMethod = errors.New("unknown method")
+
 type HelloResult struct {
-	Version int      `json:"version"`
-	Server  string   `json:"server,omitempty"`
+	Version int    `json:"version"`
+	Server  string `json:"server,omitempty"`
+	// Build is the server binary's version. The protocol version says the two
+	// sides can talk; this says whether they are the same age, which is what
+	// a client needs to explain a method the server has never heard of.
+	Build   string   `json:"build,omitempty"`
 	Methods []string `json:"methods,omitempty"`
 }
 

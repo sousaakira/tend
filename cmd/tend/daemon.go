@@ -176,6 +176,7 @@ func runServe(args []string) error {
 	defer ln.Close()
 
 	srv, err := server.New(server.Config{
+		Build:          version,
 		DetectInterval: detect,
 		Scrollback:     cfg.Scrollback(),
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},

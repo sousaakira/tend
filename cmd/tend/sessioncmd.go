@@ -49,6 +49,7 @@ func runSession(args []string) error {
 	}
 
 	srv, err := server.New(server.Config{
+		Build:          version,
 		DetectInterval: *interval,
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},
 	})

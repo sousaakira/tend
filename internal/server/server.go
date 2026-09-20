@@ -123,6 +123,10 @@ type Config struct {
 	// AdoptInterval is how often a pane is checked for the program now in
 	// charge of its terminal. Zero picks a default.
 	AdoptInterval time.Duration
+	// Build is this binary's version, reported in the handshake so a client
+	// can tell a server older than itself from one that simply cannot do
+	// what was asked.
+	Build string
 	// Dir is where a workspace created without one is rooted. Empty uses the
 	// server's own working directory, which is where its panes start anyway.
 	Dir string

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -178,6 +179,7 @@ func (t *tui) run() error {
 	defer restore()
 
 	t.cols, t.rows = terminalCells()
+	t.warnIfServerIsOlder()
 	if err := t.ensureSession(); err != nil {
 		return err
 	}
@@ -201,7 +203,9 @@ func (t *tui) run() error {
 				return nil
 			}
 			if err := t.handleInput(data); err != nil {
-				return err
+				if !t.reportStaleServer(err) {
+					return err
+				}
 			}
 			if t.detach {
 				return nil
@@ -464,6 +468,35 @@ func (t *tui) subscribe(rects []proto.PaneRect) error {
 		panes = append(panes, r.Pane)
 	}
 	return t.client.SubscribePanes(panes)
+}
+
+// warnIfServerIsOlder says so when the session is being run by a binary older
+// than this one.
+//
+// The server outlives the client, so upgrading tend and reattaching leaves the
+// old one still running: everything works until the first thing this client
+// knows about and that one does not, and then it fails with a protocol error
+// nobody can act on.
+func (t *tui) warnIfServerIsOlder() {
+	build := t.client.Server().Build
+	if build == "" || build == version {
+		return
+	}
+	t.setMessage("this session is run by tend "+build+"; restart it with: tend kill -s "+t.session, true)
+}
+
+// reportStaleServer turns "the server has never heard of that" into something
+// the user can act on, and reports whether it handled the error.
+//
+// It is not fatal. The action did not happen, but everything else about the
+// session still works, and closing the client over it would lose the user's
+// place for a reason that had nothing to do with them.
+func (t *tui) reportStaleServer(err error) bool {
+	if !errors.Is(err, proto.ErrUnknownMethod) {
+		return false
+	}
+	t.setMessage("the server for this session is older than tend; restart it with: tend kill -s "+t.session, true)
+	return true
 }
 
 // --- server push -----------------------------------------------------------
