@@ -421,6 +421,12 @@ func (t *tui) autoScrollSelection() error {
 	}
 	t.sel.AnchorY += moved
 	t.sel.Scroll = t.selectionScrollLocked(pane)
+	// This move has been accounted for, so the picture the repaint detector
+	// compares against is replaced with the one it produced. Otherwise it
+	// sees tend's own scrolling as the program having moved its text, and
+	// shifts the selection a second time for the same line.
+	t.lastPicture = ui.ScreenLines(t.screenFor(pane))
+	t.prevPicture = t.lastPicture
 	t.dirty = true
 	return nil
 }

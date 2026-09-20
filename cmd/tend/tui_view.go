@@ -105,6 +105,17 @@ func (t *tui) scrollBy(lines int) error {
 		return err
 	}
 
+	if view.Offset <= 0 {
+		// The pane had nothing to scroll back to, so the server answered with
+		// the present. Staying in the view at an offset of zero is the state
+		// the check above exists to prevent, reached by another door: the
+		// pane looks live and is a still picture, and everything done to it
+		// afterwards — a selection above all — is aimed at text that is no
+		// longer where the picture shows it.
+		t.leaveScroll()
+		return nil
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.scrollPane != pane {

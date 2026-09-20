@@ -2496,3 +2496,73 @@ done
 		t.Errorf("copied nothing: %q", status)
 	}
 }
+
+// TestAttachDoesNotFreezeAPaneWithNoHistory is the bug behind "nothing to copy
+// there": dragging to the edge of a pane with nothing to scroll back to left
+// the client in the scroll view at an offset of zero. The pane looked live and
+// was a still picture, so every selection after it was aimed at text that was
+// no longer where the picture showed it, and the rows asked for held whatever
+// the program had drawn there since — often nothing.
+func TestAttachDoesNotFreezeAPaneWithNoHistory(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Like an agent: main screen, holds the mouse, wipes its scrollback and
+	// redraws on its own.
+	prog := fakeAgentBin(t, "redraws", `
+printf '\033[?1002h\033[?1006h'
+n=0
+while true; do
+  printf '\033[H\033[2J\033[3J'
+  i=1
+  while [ $i -lt 9 ]; do printf ' FRAME-%03d line %d\n' $n $i; i=$((i+1)); done
+  n=$((n+1))
+  sleep 0.4
+done
+`)
+	a.send(t, prog+"\n")
+	a.waitForScreen(t, "the program", func(s string) bool { return strings.Contains(s, "FRAME-") })
+	time.Sleep(300 * time.Millisecond)
+
+	border := -1
+	for i, line := range a.lines() {
+		if strings.Contains(line, "┌") {
+			border = i
+			break
+		}
+	}
+	row := a.lineContaining(t, "line 8")
+
+	// Drag to the top edge, hold, release.
+	a.send(t, "\x1b[<0;40;"+itoa(row)+"M")
+	time.Sleep(100 * time.Millisecond)
+	a.send(t, "\x1b[<32;40;"+itoa(border+2)+"M")
+	time.Sleep(700 * time.Millisecond)
+	a.send(t, "\x1b[<0;40;"+itoa(border+2)+"m")
+	time.Sleep(300 * time.Millisecond)
+
+	// The pane must still be showing the program as it runs.
+	before := a.text()
+	a.waitForScreen(t, "the pane to keep updating", func(s string) bool {
+		return frameNumber(s) > frameNumber(before)
+	})
+	if strings.Contains(a.text(), "scroll ") {
+		t.Errorf("a pane with no history should not be left in the scroll view:\n%s", a.text())
+	}
+}
+
+// frameNumber reads the counter the redrawing fixture prints.
+func frameNumber(screen string) int {
+	at := strings.Index(screen, "FRAME-")
+	if at < 0 {
+		return -1
+	}
+	n := 0
+	for _, r := range screen[at+len("FRAME-"):] {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
+}
