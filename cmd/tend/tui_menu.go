@@ -13,12 +13,47 @@ import (
 // to what was under the pointer when it opened.
 
 // openMenu shows a menu, replacing any already open.
+//
+// Opening one turns on motion reporting, so the item under the pointer can be
+// marked before it is clicked. Nothing else follows the pointer, and the
+// reports cost a message per cell crossed, so they are asked for here and
+// given back in closeMenu rather than left on.
 func (t *tui) openMenu(m ui.Menu) {
+	// No item starts marked: the pointer is on the thing the menu was opened
+	// on, not on a choice, and pre-selecting one invites a stray Enter.
+	m.Selected = -1
+
 	t.mu.Lock()
 	t.menu = &m
 	t.dirty = true
 	t.mu.Unlock()
+	t.trackPointer(true)
 	t.wakeUp()
+}
+
+// hoverMenu marks the item under the pointer, and reports whether a menu is
+// open to do it in.
+func (t *tui) hoverMenu(x, y int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.menu == nil {
+		return false
+	}
+
+	at := -1
+	if item, onItem, _ := ui.MenuItemAt(*t.menu, t.cols, t.rows, x, y); onItem {
+		for i, candidate := range t.menu.Items {
+			if candidate == item {
+				at = i
+				break
+			}
+		}
+	}
+	if at != t.menu.Selected {
+		t.menu.Selected = at
+		t.dirty = true
+	}
+	return true
 }
 
 func (t *tui) closeMenu() {
@@ -27,9 +62,11 @@ func (t *tui) closeMenu() {
 	t.menu = nil
 	t.dirty = true
 	t.mu.Unlock()
-	if had {
-		t.wakeUp()
+	if !had {
+		return
 	}
+	t.trackPointer(false)
+	t.wakeUp()
 }
 
 func (t *tui) menuOpen() bool {
@@ -111,7 +148,14 @@ func (t *tui) menuKeys(data []byte) (bool, error) {
 			if menu == nil {
 				return true, nil
 			}
-			item := menu.Items[min(max(menu.Selected, 0), len(menu.Items)-1)]
+			if menu.Selected < 0 || menu.Selected >= len(menu.Items) {
+				// Nothing is marked, so there is nothing to choose. Closing is
+				// the honest answer rather than running whichever item happens
+				// to be first.
+				t.closeMenu()
+				return true, nil
+			}
+			item := menu.Items[menu.Selected]
 			t.closeMenu()
 			return true, t.runMenu(*menu, item)
 		default:
@@ -128,7 +172,17 @@ func (t *tui) moveMenu(delta int) {
 	t.mu.Lock()
 	if t.menu != nil && len(t.menu.Items) > 0 {
 		n := len(t.menu.Items)
-		t.menu.Selected = (t.menu.Selected + delta + n) % n
+		at := t.menu.Selected
+		if at < 0 {
+			// Nothing marked yet: down lands on the first item and up on the
+			// last, rather than both landing next to an arbitrary starting
+			// point the user never saw.
+			at = -1
+			if delta < 0 {
+				at = 0
+			}
+		}
+		t.menu.Selected = (at + delta + n) % n
 		t.dirty = true
 	}
 	t.mu.Unlock()

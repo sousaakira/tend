@@ -250,6 +250,12 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		t.focusPane(pane)
 		return nil
 
+	case ui.MouseMove:
+		// Nothing but an open menu follows the pointer, and motion reporting
+		// is only on while one is.
+		t.hoverMenu(ev.X, ev.Y)
+		return nil
+
 	case ui.MouseDrag:
 		if t.dragSidebarDivider(ev.Y) {
 			return nil

@@ -103,17 +103,11 @@ func drawMenu(dst *vt.Grid, m Menu, theme Theme) {
 	r := m.Rect(dst.Cols(), dst.Rows())
 
 	for y := r.Y; y < r.Y+r.Rows; y++ {
-		row := dst.Line(y)
-		if row == nil {
-			continue
-		}
-		for x := r.X; x < r.X+r.Cols; x++ {
-			row.SetCell(x, vt.Cell{R: ' ', Style: theme.Overlay, Width: 1})
-		}
+		fill(dst, y, r.X, r.X+r.Cols, theme.Menu)
 	}
-	drawBox(dst, r, theme.OverlayTitle)
+	drawBox(dst, r, theme.MenuTitle)
 	if m.Title != "" {
-		writeString(dst, r.X+menuPadding, r.Y, " "+truncate(m.Title, r.Cols-4)+" ", theme.OverlayTitle, r.X+r.Cols)
+		writeString(dst, r.X+menuPadding, r.Y, " "+truncate(m.Title, r.Cols-4)+" ", theme.MenuTitle, r.X+r.Cols)
 	}
 
 	limit := r.X + r.Cols - 1
@@ -122,16 +116,13 @@ func drawMenu(dst *vt.Grid, m Menu, theme Theme) {
 		if y >= r.Y+r.Rows-1 {
 			break
 		}
-		style := theme.Overlay
+		style := theme.Menu
 		if i == m.Selected {
-			style = theme.OverlayTitle
-		}
-		// The whole row takes the cursor's styling, so the selection reads as
-		// a band rather than as a word that changed weight.
-		for x := r.X + 1; x < limit; x++ {
-			if row := dst.Line(y); row != nil {
-				row.SetCell(x, vt.Cell{R: ' ', Style: style, Width: 1})
-			}
+			// The whole row takes the mark, so it reads as a band rather than
+			// as a word that changed weight. What the pointer is on has to be
+			// obvious before the click, not after it.
+			style = theme.MenuSelected
+			fill(dst, y, r.X+1, limit, style)
 		}
 		writeString(dst, r.X+menuPadding, y, truncate(item.Label, r.Cols-2*menuPadding), style, limit)
 	}

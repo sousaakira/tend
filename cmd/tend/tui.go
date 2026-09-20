@@ -647,6 +647,22 @@ func (t *tui) toggleSidebar() error {
 	return t.refresh()
 }
 
+// trackPointer turns motion reporting on or off.
+//
+// Written straight to the terminal rather than through the painter: it is a
+// request to the terminal about what to send, not part of the frame, and the
+// painter only knows how to describe cells.
+func (t *tui) trackPointer(on bool) {
+	if !t.config.UI.Mouse {
+		return
+	}
+	seq := ui.DisableMotion
+	if on {
+		seq = ui.EnableMotion
+	}
+	_, _ = io.WriteString(os.Stdout, seq)
+}
+
 // markSelected puts the navigation cursor on whichever row it points at.
 func markSelected(rows []ui.SidebarRow, nav navTarget) {
 	for i := range rows {
@@ -1193,7 +1209,7 @@ func enterFullScreen(mouse bool) (func(), error) {
 			// Mouse reporting is always turned off, even if it was never
 			// turned on: a terminal left reporting makes every later click in
 			// that window emit gibberish.
-			io.WriteString(os.Stdout, ui.DisableMouse+"\x1b[0m\x1b[?25h\x1b[?1049l")
+			io.WriteString(os.Stdout, ui.DisableMotion+ui.DisableMouse+"\x1b[0m\x1b[?25h\x1b[?1049l")
 			_ = term.Restore(fd, state)
 		})
 	}, nil

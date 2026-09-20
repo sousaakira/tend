@@ -1882,3 +1882,78 @@ func TestAttachShowsHowFarASpaceHasDrifted(t *testing.T) {
 		return strings.Contains(a.sidebarText(), "↑1")
 	})
 }
+
+// moveTo sends a pointer movement with no button held, which arrives only
+// while motion reporting is on.
+func (a *attached) moveTo(t *testing.T, col, row int) {
+	t.Helper()
+	a.send(t, "\x1b[<35;"+itoa(col)+";"+itoa(row)+"M")
+	time.Sleep(150 * time.Millisecond)
+}
+
+// reversedOn returns the text drawn reversed on a screen row, which is how a
+// marked menu item shows.
+func (a *attached) reversedOn(row int) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	line := a.screen.Grid().Line(row)
+	if line == nil {
+		return ""
+	}
+	var b strings.Builder
+	for x := 0; x < line.Len(); x++ {
+		if c := line.Cell(x); c.Style.Has(vt.AttrReverse) && c.Width > 0 {
+			r := c.R
+			if r == 0 {
+				r = ' '
+			}
+			b.WriteRune(r)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// TestAttachMarksTheMenuItemUnderThePointer: what the pointer is on has to be
+// obvious before the click, not after it.
+func TestAttachMarksTheMenuItemUnderThePointer(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.rightClickAt(t, 50, 6)
+	a.waitForScreen(t, "the menu", func(s string) bool {
+		return strings.Contains(s, "split right") && strings.Contains(s, "zoom")
+	})
+
+	// Nothing is marked to begin with: the pointer is on the thing the menu
+	// was opened on, not on a choice.
+	zoom := a.lineContaining(t, "zoom")
+	if got := a.reversedOn(zoom - 1); got != "" {
+		t.Errorf("nothing should be marked before the pointer moves, got %q", got)
+	}
+
+	a.moveTo(t, 52, zoom)
+	a.waitForScreen(t, "zoom to be marked", func(string) bool {
+		return a.reversedOn(zoom-1) == "zoom"
+	})
+
+	down := a.lineContaining(t, "split down")
+	a.moveTo(t, 52, down)
+	a.waitForScreen(t, "the mark to follow", func(string) bool {
+		return a.reversedOn(down-1) == "split down" && a.reversedOn(zoom-1) == ""
+	})
+
+	// Off the menu, nothing is marked: there is nothing there to click.
+	a.moveTo(t, 90, 3)
+	a.waitForScreen(t, "the mark to go", func(string) bool {
+		return a.reversedOn(down-1) == ""
+	})
+
+	// And with nothing marked, choosing closes rather than running whichever
+	// item happens to be first.
+	a.send(t, "\r")
+	a.waitForScreen(t, "the menu to close", func(s string) bool {
+		return !strings.Contains(s, "split right")
+	})
+	if strings.Count(a.text(), "┌") != 1 {
+		t.Errorf("no item was marked, so nothing should have run:\n%s", a.text())
+	}
+}

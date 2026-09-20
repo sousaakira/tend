@@ -33,6 +33,14 @@ type Theme struct {
 	Overlay      vt.Style
 	OverlayTitle vt.Style
 
+	// A menu is drawn plainly and marks its selection by reversing it, which
+	// is the other way round from the overlay. Reversing the whole panel and
+	// then reversing the selected row inside it leaves nothing to reverse:
+	// the mark has to be the thing the panel is not.
+	Menu         vt.Style
+	MenuTitle    vt.Style
+	MenuSelected vt.Style
+
 	Sidebar            vt.Style
 	SidebarActive      vt.Style
 	SidebarSelected    vt.Style
@@ -63,6 +71,10 @@ func DefaultTheme() Theme {
 
 		Overlay:      vt.Style{Attrs: vt.AttrReverse},
 		OverlayTitle: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
+
+		Menu:         vt.Style{},
+		MenuTitle:    vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
+		MenuSelected: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
 
 		Sidebar:            vt.Style{},
 		SidebarActive:      vt.Style{Attrs: vt.AttrBold},
@@ -232,6 +244,9 @@ type Frame struct {
 	// Menu is a context menu, opened on the thing it acts on. Nil when none
 	// is open.
 	Menu *Menu
+
+	// Selection is a range of text being marked in a pane, or nil.
+	Selection *Selection
 }
 
 // StatusRows is how many rows at the bottom the status bar occupies. Panes are
@@ -325,6 +340,10 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 		drawPane(dst, p, theme)
 	}
 	drawStatus(dst, f, theme)
+
+	// Over the panes but under everything that floats: the selection marks
+	// text that is already drawn.
+	drawSelection(dst, f)
 
 	// Last, so they sit over the panes rather than under them. The menu is
 	// last of all: it is opened on top of whatever is already showing.

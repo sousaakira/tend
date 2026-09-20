@@ -1351,3 +1351,92 @@ func TestSidebarKeepsRoomForAgentsThatHaveNotArrived(t *testing.T) {
 			spacesOf.Rows, many.Rows)
 	}
 }
+
+// reversedRuns returns the text of the cells drawn reversed on a row, which is
+// how a selection or a marked item shows.
+func reversedRuns(g *vt.Grid, y int) string {
+	row := g.Line(y)
+	if row == nil {
+		return ""
+	}
+	var b strings.Builder
+	for x := 0; x < row.Len(); x++ {
+		if c := row.Cell(x); c.Style.Has(vt.AttrReverse) && c.Width > 0 {
+			r := c.R
+			if r == 0 {
+				r = ' '
+			}
+			b.WriteRune(r)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// TestMenuMarksTheSelectedItem: reversing the whole panel and then reversing
+// the selected row inside it leaves nothing to reverse, so the mark has to be
+// the thing the panel is not.
+func TestMenuMarksTheSelectedItem(t *testing.T) {
+	m := PaneMenu(1, 10, 4, true)
+	m.Selected = 2
+	r := m.Rect(80, 24)
+
+	g := vt.NewGrid(80, 24, 0)
+	Draw(g, Frame{Menu: &m}, DefaultTheme())
+
+	// Only the selected row is marked, and it is marked whole.
+	if got := reversedRuns(g, r.Y+1+m.Selected); got != m.Items[m.Selected].Label {
+		t.Errorf("marked row = %q, want %q", got, m.Items[m.Selected].Label)
+	}
+	for i := range m.Items {
+		if i == m.Selected {
+			continue
+		}
+		if got := reversedRuns(g, r.Y+1+i); got != "" {
+			t.Errorf("row %d should not be marked, got %q", i, got)
+		}
+	}
+
+	// With nothing selected, nothing is marked: the pointer is on the thing
+	// the menu was opened on, not on a choice.
+	none := PaneMenu(1, 10, 4, true)
+	none.Selected = -1
+	g = vt.NewGrid(80, 24, 0)
+	Draw(g, Frame{Menu: &none}, DefaultTheme())
+	for i := range none.Items {
+		if got := reversedRuns(g, r.Y+1+i); got != "" {
+			t.Errorf("nothing should be marked, row %d = %q", i, got)
+		}
+	}
+}
+
+// TestParseMouseReadsMotionAndModifiers: the terminal packs both into the
+// button number rather than reporting them separately.
+func TestParseMouseReadsMotionAndModifiers(t *testing.T) {
+	ev, n, incomplete := parseMouse([]byte("\x1b[<35;10;5M"))
+	if incomplete || n == 0 {
+		t.Fatalf("motion report not read: n=%d incomplete=%v", n, incomplete)
+	}
+	if ev.Kind != MouseMove {
+		t.Errorf("kind = %v, want MouseMove", ev.Kind)
+	}
+	if ev.X != 9 || ev.Y != 4 {
+		t.Errorf("at %d,%d, want 9,4", ev.X, ev.Y)
+	}
+
+	// A drag says motion too, but names a button with it.
+	if ev, _, _ := parseMouse([]byte("\x1b[<32;10;5M")); ev.Kind != MouseDrag {
+		t.Errorf("button held = %v, want MouseDrag", ev.Kind)
+	}
+
+	// Modifiers ride in the same number and must not be read as buttons.
+	ev, _, _ = parseMouse([]byte("\x1b[<8;10;5M"))
+	if ev.Kind != MousePress || ev.Button != 0 {
+		t.Errorf("alt+left = kind %v button %d, want a left press", ev.Kind, ev.Button)
+	}
+	if !ev.Mods.Has(ModAlt) || ev.Mods.Has(ModCtrl) {
+		t.Errorf("mods = %b, want alt alone", ev.Mods)
+	}
+	if ev, _, _ := parseMouse([]byte("\x1b[<20;10;5M")); !ev.Mods.Has(ModCtrl | ModShift) {
+		t.Errorf("ctrl+shift = %b", ev.Mods)
+	}
+}

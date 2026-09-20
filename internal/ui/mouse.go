@@ -20,15 +20,38 @@ const (
 	MousePress
 	MouseRelease
 	MouseDrag
+	// MouseMove is the pointer moving with no button held. It arrives only
+	// while motion reporting is on, which costs a report per cell crossed and
+	// so is asked for only while something is tracking the pointer.
+	MouseMove
 	MouseWheelUp
 	MouseWheelDown
 )
+
+// MouseMod is a modifier key held during a mouse report.
+//
+// The terminal packs these into the button number rather than reporting them
+// separately, which is why they are read here and not in the key decoder.
+type MouseMod uint8
+
+const (
+	// ModShift, ModAlt and ModCtrl are the three the SGR encoding carries.
+	ModShift MouseMod = 1 << iota
+	ModAlt
+	ModCtrl
+)
+
+// Has reports whether every modifier in m is held.
+func (m MouseMod) Has(want MouseMod) bool { return m&want == want }
 
 // MouseEvent is one report, in cells counted from zero.
 type MouseEvent struct {
 	Kind   MouseKind
 	X, Y   int
 	Button int
+	// Mods are the modifier keys held, which decide whether a drag belongs to
+	// the pane's own program or to the selection.
+	Mods MouseMod
 	// Raw is the sequence exactly as it arrived, for forwarding to a pane
 	// whose own program asked for the mouse.
 	Raw []byte
@@ -41,6 +64,33 @@ const EnableMouse = "\x1b[?1002h\x1b[?1006h"
 // DisableMouse undoes it. Leaving a terminal in mouse-reporting mode makes
 // every later click in that window emit gibberish, so it is always undone.
 const DisableMouse = "\x1b[?1002l\x1b[?1006l"
+
+// EnableMotion asks for a report every time the pointer moves, not only while
+// a button is held. DisableMotion goes back to the quieter mode.
+//
+// It is asked for only while something is following the pointer, because it
+// costs a report per cell crossed: a pointer swept across a wide terminal is
+// two hundred messages, parsed and acted on, for a menu that may not even be
+// open.
+const (
+	EnableMotion  = "\x1b[?1003h"
+	DisableMotion = "\x1b[?1003l\x1b[?1002h"
+)
+
+// mouseMods reads the modifier bits out of a button number.
+func mouseMods(button int) MouseMod {
+	var mods MouseMod
+	if button&4 != 0 {
+		mods |= ModShift
+	}
+	if button&8 != 0 {
+		mods |= ModAlt
+	}
+	if button&16 != 0 {
+		mods |= ModCtrl
+	}
+	return mods
+}
 
 // parseMouse reads an SGR mouse report from the start of data.
 //
@@ -86,6 +136,7 @@ func parseMouse(data []byte) (ev MouseEvent, n int, incomplete bool) {
 		X:      col - 1, // reports count from one
 		Y:      row - 1,
 		Button: button & 3,
+		Mods:   mouseMods(button),
 		Raw:    data[:end+1],
 	}
 	switch {
@@ -95,6 +146,11 @@ func parseMouse(data []byte) (ev MouseEvent, n int, incomplete bool) {
 		} else {
 			ev.Kind = MouseWheelDown
 		}
+	case button&32 != 0 && button&3 == 3:
+		// Motion with no button held. The encoding says "no button" the same
+		// way it says "button 4", which is why this is checked before the
+		// drag it would otherwise look like.
+		ev.Kind = MouseMove
 	case button&32 != 0: // motion with a button held
 		ev.Kind = MouseDrag
 	case data[end] == 'm':
