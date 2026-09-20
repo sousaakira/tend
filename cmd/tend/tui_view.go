@@ -244,6 +244,14 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if pane == 0 {
 			return nil
 		}
+		// A press anywhere drops the last selection: it marked text the user
+		// has now moved on from, and leaving it lit suggests it is still what
+		// a copy would take.
+		t.clearSelection()
+		if t.beginSelection(ev) {
+			t.focusPane(pane)
+			return nil
+		}
 		if t.forwardsMouse(pane) {
 			return t.client.SendInput(pane, ev.Raw)
 		}
@@ -257,6 +265,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MouseDrag:
+		if t.dragSelection(ev) {
+			return nil
+		}
 		if t.dragSidebarDivider(ev.Y) {
 			return nil
 		}
@@ -266,6 +277,10 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		// paneAt takes the same lock, so the grab is released first and the
 		// lookup happens after. A mutex that is not reentrant turns a nested
 		// call into a frozen client, which is exactly how this was found.
+		if t.endSelection() {
+			return nil
+		}
+
 		t.mu.Lock()
 		dragging := t.dragPane != 0 || t.draggingSidebar
 		t.dragPane, t.dragSide = 0, ""

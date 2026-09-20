@@ -120,6 +120,9 @@ type tui struct {
 	// staleServer marks that the notice about an older server is up and has
 	// the keyboard, because it is asking whether to restart it.
 	staleServer bool
+	// sel is text being marked in a pane, or nil. It belongs to this client:
+	// what one person has selected is not part of the session.
+	sel *ui.Selection
 	// spacesScroll and agentsScroll are how far each list is scrolled, in
 	// entries. Separate because the lists are: one filling up must not push
 	// the other out of sight, which is the whole reason they are divided.
@@ -674,15 +677,16 @@ func markSelected(rows []ui.SidebarRow, nav navTarget) {
 // buildFrame assembles what to draw. The caller holds the lock.
 func (t *tui) buildFrame() ui.Frame {
 	frame := ui.Frame{
-		Session: t.session,
-		Message: t.message,
-		Alert:   t.alert,
-		Prefix:  t.keys.Armed(),
-		Overlay: t.overlay,
-		Menu:    t.menu,
-		Waiting: t.waitingLocked(),
-		Zoomed:  t.zoom,
-		Offline: t.offline,
+		Session:   t.session,
+		Message:   t.message,
+		Alert:     t.alert,
+		Prefix:    t.keys.Armed(),
+		Overlay:   t.overlay,
+		Menu:      t.menu,
+		Selection: t.sel,
+		Waiting:   t.waitingLocked(),
+		Zoomed:    t.zoom,
+		Offline:   t.offline,
 	}
 	if t.prompt != promptNone {
 		frame.Prompt = t.promptLabelLocked()

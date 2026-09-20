@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -1438,5 +1439,102 @@ func TestParseMouseReadsMotionAndModifiers(t *testing.T) {
 	}
 	if ev, _, _ := parseMouse([]byte("\x1b[<20;10;5M")); !ev.Mods.Has(ModCtrl | ModShift) {
 		t.Errorf("ctrl+shift = %b", ev.Mods)
+	}
+}
+
+// selScreen is a terminal with lines written into it, for selection tests.
+func selScreen(t *testing.T, cols, rows int, lines ...string) *vt.Screen {
+	t.Helper()
+	s := vt.NewScreen(cols, rows, 100)
+	for i, line := range lines {
+		if i > 0 {
+			_, _ = s.Write([]byte("\r\n"))
+		}
+		_, _ = s.Write([]byte(line))
+	}
+	return s
+}
+
+// TestSelectionTakesARunOfText: a selection spanning three lines takes the end
+// of the first, all of the second and the start of the third, which is what
+// dragging over prose is asking for.
+func TestSelectionTakesARunOfText(t *testing.T) {
+	screen := selScreen(t, 40, 5, "alpha bravo", "charlie delta", "echo foxtrot")
+
+	// Within one line.
+	one := Selection{Pane: 1, AnchorX: 0, AnchorY: 0, CursorX: 4, CursorY: 0}
+	if got := one.Text(screen); got != "alpha" {
+		t.Errorf("one line = %q, want %q", got, "alpha")
+	}
+
+	// Across three, ending mid-word.
+	many := Selection{Pane: 1, AnchorX: 6, AnchorY: 0, CursorX: 3, CursorY: 2}
+	want := "bravo\ncharlie delta\necho"
+	if got := many.Text(screen); got != want {
+		t.Errorf("three lines = %q, want %q", got, want)
+	}
+
+	// Dragged backwards, the same text comes out: which end moved is not
+	// something the clipboard should know about.
+	back := Selection{Pane: 1, AnchorX: 3, AnchorY: 2, CursorX: 6, CursorY: 0}
+	if got := back.Text(screen); got != want {
+		t.Errorf("dragged backwards = %q, want %q", got, want)
+	}
+
+	// A terminal pads its rows to the full width, and pasting that padding
+	// turns one line of code into one line and seventy spaces.
+	whole := Selection{Pane: 1, AnchorX: 0, AnchorY: 0, CursorX: 39, CursorY: 1}
+	if got := whole.Text(screen); got != "alpha bravo\ncharlie delta" {
+		t.Errorf("padded rows = %q", got)
+	}
+
+	// Nothing selected is nothing copied.
+	if got := (Selection{Pane: 1}).Text(screen); got != "" {
+		t.Errorf("empty selection = %q", got)
+	}
+	if got := many.Text(nil); got != "" {
+		t.Errorf("no screen = %q", got)
+	}
+}
+
+// TestSelectionMarksWhatItCovers: the mark reverses what is there rather than
+// painting over it, so styled text stays readable in any theme.
+func TestSelectionMarksWhatItCovers(t *testing.T) {
+	screen := selScreen(t, 20, 3, "alpha bravo")
+	f := Frame{
+		Panes: []Pane{{
+			ID: 1, Rect: Rect{X: 0, Y: 0, Cols: 20, Rows: 5},
+			Screen: screen, Running: true,
+		}},
+		Selection: &Selection{Pane: 1, AnchorX: 0, AnchorY: 0, CursorX: 4, CursorY: 0},
+	}
+
+	g := vt.NewGrid(20, 6, 0)
+	Draw(g, f, DefaultTheme())
+	if got := reversedRuns(g, 1); got != "alpha" {
+		t.Errorf("marked = %q, want %q", got, "alpha")
+	}
+
+	// A selection in another pane marks nothing here.
+	f.Selection = &Selection{Pane: 9, AnchorX: 0, AnchorY: 0, CursorX: 4, CursorY: 0}
+	g = vt.NewGrid(20, 6, 0)
+	Draw(g, f, DefaultTheme())
+	if got := reversedRuns(g, 1); got != "" {
+		t.Errorf("another pane's selection marked %q", got)
+	}
+}
+
+// TestSetClipboardIsTheTerminalsJob: through the terminal rather than a
+// platform tool, because that is the only route that works over ssh.
+func TestSetClipboardIsTheTerminalsJob(t *testing.T) {
+	got := SetClipboard("hi")
+	if !strings.HasPrefix(got, "\x1b]52;c;") || !strings.HasSuffix(got, "\a") {
+		t.Errorf("clipboard sequence = %q", got)
+	}
+	if !strings.Contains(got, base64.StdEncoding.EncodeToString([]byte("hi"))) {
+		t.Errorf("sequence should carry the text encoded: %q", got)
+	}
+	if SetClipboard("") != "" {
+		t.Error("nothing to copy should send nothing")
 	}
 }

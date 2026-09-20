@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -103,11 +104,18 @@ func Listen(path string) (net.Listener, error) {
 	}
 
 	if _, err := os.Stat(path); err == nil {
-		if alive(path) {
+		switch state := probe(path); state {
+		case socketLive:
 			return nil, fmt.Errorf("%w at %s", ErrAlreadyRunning, path)
-		}
-		if err := os.Remove(path); err != nil {
-			return nil, fmt.Errorf("transport: removing stale socket: %w", err)
+		case socketStale:
+			if err := os.Remove(path); err != nil {
+				return nil, fmt.Errorf("transport: removing stale socket: %w", err)
+			}
+		default:
+			// Neither answer. Taking the socket on a maybe is how one loaded
+			// machine ends up with two servers on one session and the first
+			// one's clients talking to a file nobody is reading.
+			return nil, fmt.Errorf("transport: cannot tell whether a server holds %s", path)
 		}
 	}
 
@@ -133,14 +141,41 @@ func Dial(path string) (net.Conn, error) {
 	return conn, nil
 }
 
-// alive reports whether something is accepting on the socket.
-func alive(path string) bool {
-	conn, err := net.DialTimeout("unix", path, 250*time.Millisecond)
-	if err != nil {
-		return false
+// socketState is what a probe of an existing socket file found.
+type socketState uint8
+
+const (
+	// socketUnknown is the answer when the probe failed for a reason that is
+	// not "nobody is listening" — a timeout, a permission, an interruption.
+	socketUnknown socketState = iota
+	// socketLive means something accepted the connection.
+	socketLive
+	// socketStale means the file is there and nothing is behind it.
+	socketStale
+)
+
+// probeTimeout bounds the connect. It is generous because it is not what
+// decides the answer: a refused connection comes back at once whatever the
+// timeout, and a timeout means the probe failed, not that the socket is dead.
+const probeTimeout = 3 * time.Second
+
+// probe asks whether a server holds the socket.
+//
+// The distinction it draws is the whole point. Connecting to a Unix socket
+// with no listener is refused immediately by the kernel, which is a definite
+// answer; anything else — a slow machine, a denied permission — is not an
+// answer at all. Reading "I did not hear back in time" as "nothing is there"
+// is what lets a busy machine delete a running server's socket.
+func probe(path string) socketState {
+	conn, err := net.DialTimeout("unix", path, probeTimeout)
+	if err == nil {
+		_ = conn.Close()
+		return socketLive
 	}
-	_ = conn.Close()
-	return true
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ENOENT) {
+		return socketStale
+	}
+	return socketUnknown
 }
 
 // Sessions lists the sessions that currently have a socket, whether or not a

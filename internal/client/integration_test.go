@@ -664,3 +664,33 @@ func TestDisconnectIsReported(t *testing.T) {
 		return h.rec.wasDisconnected()
 	})
 }
+
+// TestListenTellsARefusalFromATimeout is the bug this was found by: the probe
+// gave a live server 250ms to answer and read anything slower as "nothing is
+// there", so a loaded machine would delete a running server's socket and bind
+// its own. Two servers on one session, and the first one's clients left
+// talking to a file nobody reads.
+func TestListenTellsARefusalFromATimeout(t *testing.T) {
+	t.Setenv("TEND_RUNTIME_DIR", t.TempDir())
+	path, err := transport.SocketPath("probe")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A listener that never accepts is exactly what a busy server looks like.
+	// The connection still completes, because the kernel queues it, so this
+	// must read as live rather than as stale.
+	ln, err := transport.Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	if _, err := transport.Listen(path); !errors.Is(err, transport.ErrAlreadyRunning) {
+		t.Errorf("err = %v, want ErrAlreadyRunning", err)
+	}
+	// And the socket it refused is still there for the server that holds it.
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the live socket should have been left alone: %v", err)
+	}
+}

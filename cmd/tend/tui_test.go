@@ -1961,3 +1961,92 @@ func TestAttachMarksTheMenuItemUnderThePointer(t *testing.T) {
 		t.Errorf("no item was marked, so nothing should have run:\n%s", a.text())
 	}
 }
+
+// dragFromTo presses at one point, drags to another and releases, with the
+// given modifier bits folded into the button number.
+func (a *attached) dragFromTo(t *testing.T, mods, fromCol, fromRow, toCol, toRow int) {
+	t.Helper()
+	a.send(t, "\x1b[<"+itoa(mods)+";"+itoa(fromCol)+";"+itoa(fromRow)+"M")
+	time.Sleep(120 * time.Millisecond)
+	a.send(t, "\x1b[<"+itoa(32+mods)+";"+itoa(toCol)+";"+itoa(toRow)+"M")
+	time.Sleep(150 * time.Millisecond)
+	a.send(t, "\x1b[<"+itoa(mods)+";"+itoa(toCol)+";"+itoa(toRow)+"m")
+	time.Sleep(200 * time.Millisecond)
+}
+
+// writeLines puts known text in the focused pane and returns the screen row
+// and column its first line starts at, counted from one.
+func (a *attached) writeLines(t *testing.T, first, second string) (row, col int) {
+	t.Helper()
+	a.sendUntil(t, "printf '"+first+"\\n"+second+"\\n'\n", "the text", func(s string) bool {
+		return strings.Contains(s, second)
+	})
+	time.Sleep(250 * time.Millisecond)
+	row = a.lineContaining(t, first)
+	return row, columnOfString(a.lines()[row-1], first) + 1
+}
+
+// TestAttachSelectsTextWithTheMouse is the thing a multiplexer takes away:
+// asking the terminal for mouse reporting is what makes panes clickable and
+// what stops the terminal doing its own selection.
+func TestAttachSelectsTextWithTheMouse(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	row, col := a.writeLines(t, "alpha bravo charlie", "delta echo foxtrot")
+
+	a.dragFromTo(t, 0, col, row, col+10, row)
+	a.waitForScreen(t, "the mark", func(string) bool {
+		return strings.Contains(a.reversedOn(row-1), "alpha bravo")
+	})
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied 11 characters")
+	})
+
+	// Across two lines it counts lines, not characters.
+	a.dragFromTo(t, 0, col, row, col+11, row+1)
+	a.waitForScreen(t, "two lines copied", func(s string) bool {
+		return strings.Contains(s, "copied 2 lines")
+	})
+
+	// A click is not a selection: a stray one must not leave a mark behind.
+	a.clickAt(t, col+3, row)
+	a.waitForScreen(t, "the mark to go", func(string) bool {
+		return !strings.Contains(a.reversedOn(row-1), "alpha")
+	})
+}
+
+// TestAttachSelectsInsideAProgramThatWantsTheMouse: an agent asks for the
+// mouse, which is most of the panes worth copying out of. The plain drag still
+// belongs to the program, because that is what it asked for.
+func TestAttachSelectsInsideAProgramThatWantsTheMouse(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// A program that asks for the mouse and prints what it is sent.
+	mouser := fakeAgentBin(t, "mouser", "printf '\\033[?1002h\\033[?1006h'; printf 'alpha bravo charlie\\n'; cat")
+	a.sendUntil(t, mouser+"\n", "the program", func(s string) bool {
+		return strings.Contains(s, "alpha bravo charlie")
+	})
+	time.Sleep(500 * time.Millisecond)
+	row := a.lineContaining(t, "alpha bravo charlie")
+	col := columnOfString(a.lines()[row-1], "alpha") + 1
+
+	// A plain drag goes to the program, which echoes the report back.
+	a.dragFromTo(t, 0, col, row, col+10, row)
+	a.waitForScreen(t, "the program to get the drag", func(s string) bool {
+		return strings.Contains(s, "[<0;")
+	})
+	if got := a.reversedOn(row - 1); strings.Contains(got, "alpha") {
+		t.Errorf("a plain drag should not select here, marked %q", got)
+	}
+
+	// With the modifier it is tend's selection instead.
+	const alt = 8
+	a.dragFromTo(t, alt, col, row, col+10, row)
+	a.waitForScreen(t, "the mark", func(string) bool {
+		return strings.Contains(a.reversedOn(row-1), "alpha bravo")
+	})
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied ")
+	})
+}
