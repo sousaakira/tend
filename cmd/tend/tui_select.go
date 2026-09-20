@@ -42,6 +42,11 @@ type pendingPress struct {
 	x, y   int
 	sent   bool
 	native bool
+	// picture is the pane as it looked when the press landed. The anchor is
+	// these coordinates on this screen, and a program that repaints before
+	// the first drag would otherwise move the text once between the two with
+	// nothing to compare against.
+	picture []string
 }
 
 // beginSelection starts marking text, or remembers the press until the
@@ -59,7 +64,10 @@ func (t *tui) beginSelection(ev ui.MouseEvent) bool {
 		t.mu.Unlock()
 		return false
 	}
-	t.press = &pendingPress{pane: pane, x: x, y: y, native: native}
+	t.press = &pendingPress{
+		pane: pane, x: x, y: y, native: native,
+		picture: ui.ScreenLines(t.screenFor(pane)),
+	}
 	if !native {
 		// Nothing is waiting on the answer, so the selection starts at once
 		// and the mark follows the pointer from the first cell.
@@ -91,6 +99,12 @@ func (t *tui) startSelectionLocked(pane uint64, x, y int) {
 		Native:   t.forwardsMouseLocked(pane),
 		Dragging: true,
 	}
+	// The picture to compare against is taken with the anchor, not on the
+	// next frame. A program that repaints between the press and that frame
+	// would otherwise move the text once without anyone noticing, and the
+	// selection would be a line or two adrift for the rest of the drag.
+	t.lastPicture = ui.ScreenLines(t.screenFor(pane))
+	t.prevPicture = t.lastPicture
 	t.dirty = true
 }
 
@@ -116,6 +130,9 @@ func (t *tui) dragSelection(ev ui.MouseEvent) bool {
 	if t.sel == nil && t.press != nil {
 		press := *t.press
 		t.startSelectionLocked(press.pane, press.x, press.y)
+		// The anchor was placed on the screen as it was at the press, so
+		// that is what the first comparison must be against.
+		t.lastPicture, t.prevPicture = press.picture, press.picture
 		t.press = nil
 		t.mu.Unlock()
 		if press.sent {
@@ -199,6 +216,58 @@ func (t *tui) wheelTo(pane uint64, dir int) error {
 	}
 	seq := "\x1b[<" + itoaInt(button) + ";" + itoaInt(mid.X+1) + ";" + itoaInt(mid.Y+1) + "M"
 	return t.client.SendInput(pane, []byte(seq))
+}
+
+// followRepaint keeps a selection on the text when the pane's own program
+// moves it.
+//
+// A program that scrolls its own view does not say so: it repaints, and the
+// only sign is that the same lines are somewhere else. Comparing the two
+// pictures gives the distance, and the whole selection moves by it — both
+// ends this time, because nothing here is pinned to the pointer: the text the
+// drag began on and the text under the pointer have both slid together.
+func (t *tui) followRepaint() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.sel == nil || !t.sel.Dragging || !t.sel.Native {
+		t.lastPicture, t.prevPicture = nil, nil
+		return
+	}
+
+	now := ui.ScreenLines(t.screenFor(t.sel.Pane))
+	settled := sameLines(now, t.prevPicture)
+	t.prevPicture = now
+
+	if shift, ok := ui.DetectShift(t.lastPicture, now); ok {
+		t.sel.AnchorY += shift
+		t.sel.CursorY += shift
+		t.lastPicture = now
+		t.dirty = true
+		return
+	}
+
+	// Not recognisable as a move. A repaint arrives in pieces — several
+	// frames can catch it half drawn, matching nothing at any offset — so the
+	// picture to compare against is kept until the screen stops changing.
+	// Replacing it every frame means comparing the end of one repaint with
+	// the middle of it, which is how a scroll gets counted once instead of
+	// twice.
+	if settled {
+		t.lastPicture = now
+	}
+}
+
+// sameLines reports whether two pictures of a screen are identical.
+func sameLines(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // wheelInterval is how often a held drag hands a notch to the pane's program.

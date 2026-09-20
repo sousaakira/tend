@@ -135,6 +135,13 @@ type tui struct {
 	// lastWheel paces the notches handed to a pane that keeps its own
 	// scrollback, which would otherwise get one per frame.
 	lastWheel time.Time
+	// lastPicture is the pane's visible text as it was on the previous frame,
+	// kept only while a selection is being dragged in a pane that repaints
+	// itself. Comparing it with the next frame is how far the text moved.
+	lastPicture []string
+	// prevPicture is the frame before that, used only to tell a screen that
+	// has stopped changing from one caught mid-repaint.
+	prevPicture []string
 	// spacesScroll and agentsScroll are how far each list is scrolled, in
 	// entries. Separate because the lists are: one filling up must not push
 	// the other out of sight, which is the whole reason they are divided.
@@ -255,6 +262,7 @@ func (t *tui) run() error {
 			// A push arrived; the ticker decides when it becomes a frame.
 
 		case <-ticker.C:
+			t.followRepaint()
 			if err := t.autoScrollSelection(); err != nil {
 				t.setMessage(err.Error(), true)
 			}

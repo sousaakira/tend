@@ -1531,3 +1531,77 @@ func TestSelectionBlockTakesOnlyTheColumns(t *testing.T) {
 		}
 	}
 }
+
+// lines makes a screenful from a starting number, which is what a transcript
+// scrolling past looks like.
+func numbered(from, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = "line " + itoa(uint64(from+i)) + " of the transcript"
+	}
+	return out
+}
+
+// TestDetectShiftFindsHowFarTheTextMoved: a program that scrolls its own view
+// does not say so. It repaints, and the only evidence is that the same lines
+// are somewhere else.
+func TestDetectShiftFindsHowFarTheTextMoved(t *testing.T) {
+	before := numbered(10, 12)
+
+	// Scrolled up by three: what was at the top has moved down.
+	if shift, ok := DetectShift(before, numbered(7, 12)); !ok || shift != 3 {
+		t.Errorf("scrolled up = %d, %v; want 3", shift, ok)
+	}
+	// And down by two.
+	if shift, ok := DetectShift(before, numbered(12, 12)); !ok || shift != -2 {
+		t.Errorf("scrolled down = %d, %v; want -2", shift, ok)
+	}
+	// Unmoved is not a shift.
+	if shift, ok := DetectShift(before, before); ok || shift != 0 {
+		t.Errorf("unmoved = %d, %v; want no shift", shift, ok)
+	}
+}
+
+// TestDetectShiftRefusesWhatItCannotTell: reading a repaint as a scroll would
+// drag the selection somewhere the text never went, which is worse than
+// leaving it where it is.
+func TestDetectShiftRefusesWhatItCannotTell(t *testing.T) {
+	before := numbered(10, 12)
+
+	// A different view altogether.
+	other := make([]string, 12)
+	for i := range other {
+		other[i] = "something else entirely " + itoa(uint64(i))
+	}
+	if shift, ok := DetectShift(before, other); ok {
+		t.Errorf("a new view read as a shift of %d", shift)
+	}
+
+	// Blank screens match themselves at every offset.
+	blank := make([]string, 12)
+	if _, ok := DetectShift(blank, blank); ok {
+		t.Error("blank screens should say nothing")
+	}
+
+	// So do screens of one repeated line.
+	same := make([]string, 12)
+	for i := range same {
+		same[i] = "the same line over and over"
+	}
+	if shift, ok := DetectShift(same, same); ok {
+		t.Errorf("a repeated line read as a shift of %d", shift)
+	}
+
+	// Further than a wheel notch reaches is a repaint, not a scroll.
+	if shift, ok := DetectShift(before, numbered(10+ShiftRows+4, 12)); ok {
+		t.Errorf("a jump read as a shift of %d", shift)
+	}
+
+	// Mismatched sizes say nothing rather than guessing.
+	if _, ok := DetectShift(before, before[:5]); ok {
+		t.Error("a resized screen should say nothing")
+	}
+	if _, ok := DetectShift(nil, nil); ok {
+		t.Error("nothing should say nothing")
+	}
+}

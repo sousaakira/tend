@@ -2318,3 +2318,56 @@ func TestAttachHandsTheWheelToAProgramWithItsOwnHistory(t *testing.T) {
 		t.Errorf("a pane with no scrollback should not show a scroll offset:\n%s", a.text())
 	}
 }
+
+// TestAttachKeepsTheSelectionOnTheTextWhenAProgramRepaints: a program that
+// scrolls its own view does not say so — it repaints, and the only evidence
+// is that the same lines are somewhere else. A selection that ignores that
+// marks whatever lands under it, which is not what was dragged over.
+func TestAttachKeepsTheSelectionOnTheTextWhenAProgramRepaints(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// A full-screen program that scrolls itself, so the repaint is the only
+	// thing under test and no input path is involved.
+	prog := fakeAgentBin(t, "ticker", `
+printf '\033[?1049h\033[?1002h\033[?1006h'
+top=60
+while [ $top -gt 2 ]; do
+  printf '\033[H'
+  i=$top
+  while [ $i -lt $((top+11)) ]; do printf '\033[K TEXT-%03d\n' $i; i=$((i+1)); done
+  sleep 0.4
+  top=$((top-2))
+done
+sleep 30
+`)
+	a.send(t, prog+"\n")
+	a.waitForScreen(t, "the program", func(s string) bool {
+		return strings.Contains(s, "TEXT-06")
+	})
+	time.Sleep(300 * time.Millisecond)
+
+	// Anchor on a named line, drag sideways only, and hold while it scrolls.
+	anchor := a.lineContaining(t, "TEXT-0")
+	parts := strings.Split(a.lines()[anchor-1], "│")
+	want := strings.TrimSpace(parts[len(parts)-2])
+	col := columnOfString(a.lines()[anchor-1], "TEXT") + 1
+
+	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(anchor)+"M")
+	time.Sleep(100 * time.Millisecond)
+	a.send(t, "\x1b[<32;"+itoa(col+7)+";"+itoa(anchor)+"M")
+	time.Sleep(700 * time.Millisecond) // long enough to repaint, short enough
+	a.send(t, "\x1b[<0;"+itoa(col+7)+";"+itoa(anchor)+"m")
+
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied ")
+	})
+	// The text has moved down the screen by now; the selection should have
+	// moved with it rather than staying on the row.
+	if !strings.Contains(a.text(), want) {
+		t.Skipf("%q scrolled out of the window before the copy", want)
+	}
+	if got := a.reversedOn(anchor - 1); strings.Contains(got, want) {
+		t.Errorf("the mark stayed on row %d: it should have followed the text", anchor)
+	}
+}

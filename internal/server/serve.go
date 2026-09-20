@@ -677,8 +677,20 @@ func (s *Server) PaneText(id session.PaneID, p proto.PaneTextParams) (proto.Pane
 // history first, then the live screen — so a row above the view is three lines
 // into the history and the arithmetic is the same either side of that line.
 func paneText(screen *vt.Screen, p proto.PaneTextParams) string {
-	grid := screen.MainGrid()
-	history := grid.HistoryLen()
+	// The visible rows come from whichever grid is showing. A full-screen
+	// program is on the alternate one, and reading the main grid there
+	// returns the shell it was started from — text the user is not looking
+	// at and did not select.
+	grid := screen.Grid()
+	main := screen.MainGrid()
+
+	// Only the main screen has a history. The alternate screen not having one
+	// is what it is for: a program that takes the whole terminal is expected
+	// to put it back as it found it.
+	history := 0
+	if grid == main {
+		history = main.HistoryLen()
+	}
 	total := history + grid.Rows()
 	if total == 0 {
 		return ""
@@ -693,7 +705,7 @@ func paneText(screen *vt.Screen, p proto.PaneTextParams) string {
 	for at := first; at <= last; at++ {
 		row := grid.Line(at - history)
 		if at < history {
-			row = grid.HistoryLine(at)
+			row = main.HistoryLine(at)
 		}
 		if at > first {
 			out = append(out, '\n')

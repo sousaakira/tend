@@ -122,3 +122,41 @@ func TestPaneTextReachesIntoTheScrollback(t *testing.T) {
 		t.Errorf("a single cell = %q, want %q", got, line[2:3])
 	}
 }
+
+// TestPaneTextReadsTheScreenThatIsShowing is a bug this had: a full-screen
+// program is on the alternate screen, and reading the main grid there returns
+// the shell it was started from — text the user is not looking at and did not
+// select.
+func TestPaneTextReadsTheScreenThatIsShowing(t *testing.T) {
+	screen := textScreen(t, 20, 4, "SHELL-A", "SHELL-B")
+
+	// Switch to the alternate screen and put different text on it.
+	if _, err := screen.Write([]byte("\x1b[?1049h")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := screen.Write([]byte("ALT-ONE\r\nALT-TWO\r\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := paneText(screen, proto.PaneTextParams{FromRow: 0, FromCol: 0, ToRow: 1, ToCol: 19})
+	if !strings.Contains(got, "ALT-ONE") || strings.Contains(got, "SHELL-") {
+		t.Errorf("read %q, want the alternate screen", got)
+	}
+
+	// And it has no history to reach into: that is what the alternate screen
+	// is for. A row above it clamps to the top rather than returning the
+	// main screen's scrollback.
+	above := paneText(screen, proto.PaneTextParams{FromRow: -5, FromCol: 0, ToRow: -5, ToCol: 19})
+	if strings.Contains(above, "SHELL-") {
+		t.Errorf("above the alternate screen = %q, want nothing from the main one", above)
+	}
+
+	// Back on the main screen, the history is there again.
+	if _, err := screen.Write([]byte("\x1b[?1049l")); err != nil {
+		t.Fatal(err)
+	}
+	back := paneText(screen, proto.PaneTextParams{FromRow: 0, FromCol: 0, ToRow: 1, ToCol: 19})
+	if strings.Contains(back, "ALT-") {
+		t.Errorf("back on the main screen = %q, want the shell", back)
+	}
+}
