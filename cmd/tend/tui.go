@@ -405,10 +405,10 @@ func (t *tui) layoutArea() ui.Rect {
 // tab bar above, the status bar below, and the agent list to the left.
 func (t *tui) layoutAreaLocked() ui.Rect {
 	top := ui.TabRows(len(t.tabsLocked()))
-	left := 0
-	if t.sidebar {
-		left = min(ui.SidebarWidth, t.cols)
-	}
+	// The gutter is the sidebar's width, or the two columns kept for the
+	// handle that brings it back. One helper answers for both, so the panes
+	// cannot be laid out over something that is drawn.
+	left := ui.SidebarGutter(ui.Frame{Sidebar: t.sidebar}, t.cols)
 	return ui.Rect{
 		X:    left,
 		Y:    top,
@@ -633,6 +633,20 @@ func (t *tui) paint() error {
 	return err
 }
 
+// toggleSidebar shows or hides the column, from either the key or the handle.
+func (t *tui) toggleSidebar() error {
+	t.mu.Lock()
+	t.sidebar = !t.sidebar
+	if !t.sidebar {
+		t.navigating = false
+	}
+	t.mu.Unlock()
+	// The panes change shape, so the screen is redrawn whole rather than
+	// patched: every column to the right of the gutter has moved.
+	t.painter.Invalidate()
+	return t.refresh()
+}
+
 // markSelected puts the navigation cursor on whichever row it points at.
 func markSelected(rows []ui.SidebarRow, nav navTarget) {
 	for i := range rows {
@@ -650,6 +664,7 @@ func (t *tui) buildFrame() ui.Frame {
 		Prefix:  t.keys.Armed(),
 		Overlay: t.overlay,
 		Menu:    t.menu,
+		Waiting: t.waitingLocked(),
 		Zoomed:  t.zoom,
 		Offline: t.offline,
 	}
@@ -914,14 +929,7 @@ func (t *tui) command(action ui.Action) error {
 		return t.newWorkspace()
 
 	case ui.CommandToggleAgents:
-		t.mu.Lock()
-		t.sidebar = !t.sidebar
-		if !t.sidebar {
-			t.navigating = false
-		}
-		t.mu.Unlock()
-		t.painter.Invalidate()
-		return t.refresh()
+		return t.toggleSidebar()
 
 	case ui.CommandMenu:
 		if t.menuOpen() {

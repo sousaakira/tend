@@ -46,6 +46,8 @@ const (
 	ActionToggleGrouped = "toggle-grouped"
 	// ActionToggleGroup folds or unfolds the group named by the row.
 	ActionToggleGroup = "toggle-group"
+	// ActionHideSidebar puts the whole sidebar away.
+	ActionHideSidebar = "hide-sidebar"
 )
 
 // SidebarRow is one entry. A two-line entry is one row: the detail is drawn
@@ -278,6 +280,57 @@ func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 		drawSidebarDivider(dst, divider, width, theme)
 		drawSection(dst, f.Agents, agents, width, theme)
 	}
+
+	// The handle that puts the column away, in the corner it would leave
+	// behind. A keystroke does the same thing, but somebody who found the
+	// sidebar with the mouse should be able to dismiss it the same way.
+	if at := hideHandleRow(f, dst.Rows()); at >= 0 {
+		writeString(dst, width-2, at, "«", theme.SidebarGroup, width)
+	}
+}
+
+// hideHandleRow is the line the collapse handle sits on: the last line of the
+// sidebar, when there is one to spare.
+func hideHandleRow(f Frame, rows int) int {
+	height := SidebarHeight(rows)
+	if height <= 0 {
+		return -1
+	}
+	return height - 1
+}
+
+// ShowHandleWidth is the gutter kept for the handle that brings the sidebar
+// back once it has been put away.
+//
+// Two columns, always there when the sidebar is hidden: a way out that is only
+// a keystroke is one that somebody who arrived by mouse cannot find again.
+const ShowHandleWidth = 2
+
+// SidebarGutter is the column everything to the right of the sidebar starts
+// at, whether that is the sidebar itself or the handle that brings it back.
+func SidebarGutter(f Frame, cols int) int {
+	if f.Sidebar {
+		return SidebarColumns(f, cols)
+	}
+	return min(ShowHandleWidth, cols)
+}
+
+// drawShowHandle puts the handle in the gutter while the sidebar is away.
+func drawShowHandle(dst *vt.Grid, f Frame, theme Theme) {
+	if f.Sidebar {
+		return
+	}
+	writeString(dst, 0, 0, "»", theme.SidebarGroup, dst.Cols())
+}
+
+// SidebarHandleAt reports whether a point is on the handle that shows or hides
+// the sidebar, which is the same affordance in its two states.
+func SidebarHandleAt(f Frame, x, y, rows int) bool {
+	if !f.Sidebar {
+		return y == 0 && x < ShowHandleWidth
+	}
+	width := SidebarColumns(f, SidebarWidth)
+	return y == hideHandleRow(f, rows) && x >= width-2 && x < width
 }
 
 // drawSidebarDivider draws the line between the lists.

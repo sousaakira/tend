@@ -151,8 +151,10 @@ func TestDrawSkipsPanesTooSmallForABorder(t *testing.T) {
 		{ID: 1, Rect: Rect{X: 0, Y: 0, Cols: 1, Rows: 4}, Running: true},
 	}}, DefaultTheme())
 
-	if got := dst.Line(0).Text(); got != "" {
-		t.Errorf("row 0 = %q, want nothing drawn", got)
+	// Nothing of the pane, that is. The handle that brings the sidebar back
+	// is always in the corner, or a sidebar put away could not be recovered.
+	if got := dst.Line(0).Text(); got != "»" {
+		t.Errorf("row 0 = %q, want only the sidebar handle", got)
 	}
 }
 
@@ -1182,9 +1184,70 @@ func TestTabBarStartsWhereThePanesDo(t *testing.T) {
 		t.Error("the first tab should be clickable where it is drawn")
 	}
 
-	// With no sidebar the bar starts at the edge, as it always did.
+	// With no sidebar the bar starts after the gutter kept for the handle
+	// that brings it back, and not before it.
 	plain := Frame{Tabs: f.Tabs}
-	if segs := TabSegments(plain, 60); len(segs) == 0 || segs[0].Start != 0 {
-		t.Errorf("without a sidebar the bar should start at column zero: %+v", segs)
+	if segs := TabSegments(plain, 60); len(segs) == 0 || segs[0].Start != ShowHandleWidth {
+		t.Errorf("without a sidebar the bar should start past the handle: %+v", segs)
+	}
+}
+
+// TestStatusSaysHowManyAreWaiting: the whole reason to run tend is that the
+// agent needing you is usually not the one on screen, and the list can be
+// folded, scrolled, or turned off.
+func TestStatusSaysHowManyAreWaiting(t *testing.T) {
+	g := vt.NewGrid(60, 6, 0)
+	Draw(g, Frame{Session: "work", Waiting: 2}, DefaultTheme())
+	last := gridText(g)[5]
+	if !strings.Contains(last, "2 waiting") {
+		t.Errorf("the status bar should say what is waiting:\n%q", last)
+	}
+
+	g = vt.NewGrid(60, 6, 0)
+	Draw(g, Frame{Session: "work"}, DefaultTheme())
+	if last := gridText(g)[5]; strings.Contains(last, "waiting") {
+		t.Errorf("with nothing waiting it should say nothing:\n%q", last)
+	}
+}
+
+// TestSidebarHandleTogglesFromEitherSide: a way out that is only a keystroke
+// is one that somebody who arrived by mouse cannot find again.
+func TestSidebarHandleTogglesFromEitherSide(t *testing.T) {
+	const rows = 20
+	shown := sidebarFrame(spaceRows(2), []SidebarRow{{Kind: SidebarHeading, Label: "agents"}})
+
+	g := vt.NewGrid(60, rows, 0)
+	Draw(g, shown, DefaultTheme())
+	text := strings.Join(gridText(g), "\n")
+	if !strings.Contains(text, "«") {
+		t.Errorf("a shown sidebar offers to hide itself:\n%s", text)
+	}
+	if !SidebarHandleAt(shown, SidebarWidth-2, SidebarHeight(rows)-1, rows) {
+		t.Error("the handle should be where it is drawn")
+	}
+	if SidebarHandleAt(shown, 2, 2, rows) {
+		t.Error("the rest of the list is not the handle")
+	}
+
+	hidden := Frame{Tabs: []Tab{{ID: 1, Name: "tab 1"}}}
+	g = vt.NewGrid(60, rows, 0)
+	Draw(g, hidden, DefaultTheme())
+	lines := gridText(g)
+	if !strings.Contains(lines[0], "»") {
+		t.Errorf("a hidden sidebar offers to come back:\n%q", lines[0])
+	}
+	if !SidebarHandleAt(hidden, 0, 0, rows) {
+		t.Error("the handle should answer where it is drawn")
+	}
+
+	// The gutter is kept for it, so the tab bar does not run over it.
+	if got := SidebarGutter(hidden, 60); got != ShowHandleWidth {
+		t.Errorf("hidden gutter = %d, want room for the handle", got)
+	}
+	if _, _, ok := TabAt(hidden, 0, 0, 60); ok {
+		t.Error("the handle's columns are not the tab bar's")
+	}
+	if at := strings.Index(lines[0], "tab 1"); at < ShowHandleWidth {
+		t.Errorf("the tabs should start past the handle:\n%q", lines[0])
 	}
 }

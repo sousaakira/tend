@@ -413,13 +413,15 @@ func (t *tui) clickTabBar(x, y int) (bool, error) {
 // clickSidebar goes wherever the clicked row points.
 func (t *tui) clickSidebar(x, y int) (bool, error) {
 	t.mu.Lock()
-	if !t.sidebar {
-		t.mu.Unlock()
-		return false, nil
-	}
 	frame := t.buildFrame()
 	rows := t.rows
 	t.mu.Unlock()
+
+	// The handle answers first: it is drawn over the corner of a list, and a
+	// click there means the handle, not whatever row is underneath.
+	if ui.SidebarHandleAt(frame, x, y, rows) {
+		return true, t.toggleSidebar()
+	}
 
 	row, ok := ui.SidebarRowAt(frame, x, y, rows)
 	if !ok {

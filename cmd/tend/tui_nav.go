@@ -694,3 +694,19 @@ func (t *tui) navigateKey(key string) (bool, error) {
 	t.leaveNavigate()
 	return false, nil
 }
+
+// waitingLocked counts the agents anywhere in the session that are blocked on
+// an answer.
+//
+// Anywhere, not here: the reason to run tend is that the one needing you is
+// usually not the one on screen. Panes with no agent are not counted — a shell
+// sitting at a prompt is not waiting for anybody.
+func (t *tui) waitingLocked() int {
+	n := 0
+	for _, p := range t.snap.Panes {
+		if p.Agent != "" && p.Running && p.State == "blocked" {
+			n++
+		}
+	}
+	return n
+}

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/server"
 	"github.com/sousaakira/tend/internal/transport"
@@ -939,15 +940,21 @@ func TestAttachAgentListGroupsEverything(t *testing.T) {
 	})
 }
 
-// paneStartsAtLeftEdge reports whether a pane border occupies column zero,
-// which it does only when the agent list is not taking those columns.
+// paneStartsAtLeftEdge reports whether the panes have the left of the screen,
+// which they do only when the sidebar is not taking those columns.
 func (a *attached) paneStartsAtLeftEdge() bool {
-	// The tab bar is skipped: it always spans the full width.
+	// The tab bar is skipped: it is drawn on its own row.
 	lines := a.lines()
 	if len(lines) < 2 {
 		return false
 	}
-	for _, r := range lines[1] {
+	// "The edge" is the gutter, not column zero. Two columns stay behind for
+	// the handle that brings the sidebar back, or a sidebar put away with the
+	// mouse could not be recovered with it.
+	for _, r := range []rune(lines[1]) {
+		if r == ' ' {
+			continue
+		}
 		return r == '┌' || r == '│' || r == '└'
 	}
 	return false
@@ -1719,5 +1726,66 @@ func TestAttachRenamesInAModal(t *testing.T) {
 	a.send(t, "backend\r")
 	a.waitForScreen(t, "the new name", func(s string) bool {
 		return strings.Contains(s, "backend") && !strings.Contains(s, "enter · esc")
+	})
+}
+
+// TestWaitingCountsBlockedAgentsAnywhere: anywhere, not here — the reason to
+// run tend is that the one needing you is usually not the one on screen.
+func TestWaitingCountsBlockedAgentsAnywhere(t *testing.T) {
+	tt := &tui{}
+	tt.snap = proto.SessionSnapshot{Panes: []proto.PaneInfo{
+		{ID: 1, Agent: "claude", Running: true, State: "blocked"},
+		{ID: 2, Agent: "codex", Running: true, State: "working"},
+		{ID: 3, Agent: "claude", Running: true, State: "blocked"},
+		// A shell at a prompt is not waiting for anybody.
+		{ID: 4, Running: true, State: "blocked"},
+		// Nor is an agent whose process has ended.
+		{ID: 5, Agent: "claude", Running: false, State: "blocked"},
+	}}
+	if got := tt.waitingLocked(); got != 2 {
+		t.Errorf("waiting = %d, want 2", got)
+	}
+
+	tt.snap = proto.SessionSnapshot{}
+	if got := tt.waitingLocked(); got != 0 {
+		t.Errorf("an empty session has nothing waiting, got %d", got)
+	}
+}
+
+// TestAttachHidesTheSidebarFromItsHandle: found the sidebar with the mouse,
+// dismiss it with the mouse.
+func TestAttachHidesTheSidebarFromItsHandle(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "the sidebar", func(s string) bool {
+		return strings.Contains(s, "spaces") && strings.Contains(s, "«")
+	})
+
+	handle := -1
+	for i, line := range a.lines() {
+		if strings.Contains(line, "«") {
+			handle = i
+		}
+	}
+	if handle < 0 {
+		t.Fatalf("no handle:\n%s", a.text())
+	}
+	a.clickAt(t, ui.SidebarWidth-1, handle+1)
+
+	a.waitForScreen(t, "the sidebar to go", func(s string) bool {
+		return !strings.Contains(s, "spaces") && strings.Contains(s, "»")
+	})
+	// The panes get the columns back, bar the gutter the handle needs.
+	a.waitForScreen(t, "the panes to widen", func(string) bool {
+		for _, line := range a.lines() {
+			if at := columnOf(line, '┌'); at >= 0 && at < ui.SidebarWidth/2 {
+				return true
+			}
+		}
+		return false
+	})
+
+	a.clickAt(t, 1, 1)
+	a.waitForScreen(t, "the sidebar to come back", func(s string) bool {
+		return strings.Contains(s, "spaces")
 	})
 }

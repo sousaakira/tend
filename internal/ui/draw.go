@@ -191,6 +191,14 @@ type Frame struct {
 	// Prefix marks that the prefix key is armed and the next key is a command.
 	Prefix bool
 
+	// Waiting is how many agents anywhere in the session are blocked on an
+	// answer, including ones in spaces this client is not looking at.
+	//
+	// It is on the status bar rather than only in the list, because the whole
+	// reason to run tend is that the agent needing you is usually not the one
+	// on screen — and the list can be folded, scrolled, or turned off.
+	Waiting int
+
 	// Sidebar shows the spaces and agents down the left edge, and SidebarRows
 	// is what it holds.
 	Sidebar bool
@@ -265,7 +273,7 @@ type TabSegment struct {
 // belonged to the whole session.
 func TabSegments(f Frame, cols int) []TabSegment {
 	var out []TabSegment
-	x := SidebarColumns(f, cols)
+	x := SidebarGutter(f, cols)
 	for _, tab := range f.Tabs {
 		label := tabLabel(tab)
 		width := runewidth.StringWidth(label)
@@ -291,7 +299,7 @@ func tabLabel(tab Tab) string {
 
 // TabAt reports what a click on the bar landed on.
 func TabAt(f Frame, x, y, cols int) (tab uint64, newTab bool, ok bool) {
-	if TabRows(len(f.Tabs)) == 0 || y != 0 || x < SidebarColumns(f, cols) {
+	if TabRows(len(f.Tabs)) == 0 || y != 0 || x < SidebarGutter(f, cols) {
 		return 0, false, false
 	}
 	for _, seg := range TabSegments(f, cols) {
@@ -312,6 +320,7 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 
 	drawTabs(dst, f, theme)
 	drawSidebar(dst, f, theme)
+	drawShowHandle(dst, f, theme)
 	for _, p := range f.Panes {
 		drawPane(dst, p, theme)
 	}
@@ -338,7 +347,7 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 	if row == nil {
 		return
 	}
-	for x := SidebarColumns(f, dst.Cols()); x < dst.Cols(); x++ {
+	for x := SidebarGutter(f, dst.Cols()); x < dst.Cols(); x++ {
 		row.SetCell(x, vt.Cell{R: ' ', Style: theme.Status, Width: 1})
 	}
 
@@ -619,6 +628,9 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.Navigating {
 		x = writeString(dst, x, y, " NAVIGATE ", theme.StatusKey, limit)
+	}
+	if f.Waiting > 0 {
+		x = writeString(dst, x, y, " "+itoa(uint64(f.Waiting))+" waiting ", theme.StatusAlert, limit)
 	}
 
 	left := " " + f.Session
