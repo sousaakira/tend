@@ -170,6 +170,16 @@ func startSessionWith(t *testing.T, cols, rows int, build, dir string) *attached
 		_ = srv.Close()
 		_ = ln.Close()
 		<-served
+
+		// A test that makes the client replace the server leaves one behind
+		// that this harness never started and so would never stop: its binary
+		// is in a temporary directory that is about to be deleted, and the
+		// process outlives the run. Whatever is answering on the socket gets
+		// shut down, which is nothing at all in the ordinary case.
+		if c, err := connect("tui", nil); err == nil {
+			_ = c.Shutdown()
+			_ = c.Close()
+		}
 	})
 	return a
 }
