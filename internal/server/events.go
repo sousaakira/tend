@@ -17,7 +17,10 @@ const (
 	// data: a subscriber redraws from the current screen rather than
 	// replaying a stream, so a missed one costs nothing.
 	EventPaneOutput
-	// EventPaneState reports a change in detected agent state.
+	// EventPaneState reports that a pane's record changed: the agent state
+	// detected in it, or whether its program has asked for the mouse. Both
+	// are things a client can only learn by re-reading the session, so one
+	// event saying "look again" serves them.
 	EventPaneState
 	// EventPaneExited reports that a pane's process ended. The pane record
 	// remains until it is closed.

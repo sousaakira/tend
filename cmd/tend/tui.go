@@ -117,6 +117,8 @@ type tui struct {
 	nav        navTarget
 	// menu is the context menu, open on the thing it acts on. Nil when none.
 	menu *ui.Menu
+	// sidebarScroll is how far the list is scrolled, in entries.
+	sidebarScroll int
 	// folded names the groups shut in this client's sidebar. Which groups a
 	// space belongs to is a session fact; which of them this person has
 	// folded away is not, so it is never sent upstream.
@@ -325,6 +327,7 @@ func (t *tui) refresh() error {
 	t.mu.Lock()
 	t.snap = snap
 	t.resolveViewLocked()
+	t.revealSidebarLocked()
 	tab := t.tab
 	t.mu.Unlock()
 
@@ -521,6 +524,7 @@ func (t *tui) refreshSnapshot() error {
 	before := t.tab
 	t.snap = snap
 	t.resolveViewLocked()
+	t.revealSidebarLocked()
 	changed := t.tab != before
 	t.dirty = true
 	t.mu.Unlock()
@@ -656,6 +660,7 @@ func (t *tui) buildFrame() ui.Frame {
 
 	if t.sidebar {
 		frame.Sidebar = true
+		frame.SidebarScroll = t.sidebarScroll
 		frame.Navigating = t.navigating
 		frame.SidebarRows = t.sidebarRowsLocked()
 		if t.navigating {

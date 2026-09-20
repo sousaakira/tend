@@ -43,9 +43,13 @@ type paneRuntime struct {
 	// costly part — resolving and swapping the detector — happens only when
 	// it actually changes.
 	foreground string
-	running    bool
-	closing    bool
-	exitErr    string
+	// mouse is the last reported state of the pane program's mouse reporting.
+	// Whether a click belongs to the pane or to the client turns on it, so a
+	// client holding a stale answer sends the wheel to the wrong place.
+	mouse   bool
+	running bool
+	closing bool
+	exitErr string
 }
 
 func newPaneRuntime(
@@ -91,6 +95,9 @@ type observation struct {
 	state        detect.State
 	rule         string
 	stateChanged bool
+
+	// mouseChanged reports that the pane turned mouse reporting on or off.
+	mouseChanged bool
 }
 
 // poll runs detection if the screen changed since the last look.
@@ -105,6 +112,13 @@ func (rt *paneRuntime) poll(lastTitle string) observation {
 	if rt.title != lastTitle {
 		obs.title = rt.title
 		obs.titleChanged = true
+	}
+	// Checked before the early exit below, and for every pane rather than
+	// only the ones with a detector: a plain shell running an editor asks for
+	// the mouse too, and nothing else tells a client about it.
+	if mouse := rt.screen.Modes().Mouse != vt.MouseOff; mouse != rt.mouse {
+		rt.mouse = mouse
+		obs.mouseChanged = true
 	}
 	if !rt.dirty || rt.detector == nil {
 		return obs

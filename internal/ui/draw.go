@@ -195,6 +195,9 @@ type Frame struct {
 	// is what it holds.
 	Sidebar     bool
 	SidebarRows []SidebarRow
+	// SidebarScroll is how many entries are scrolled off the top of the list.
+	// It is clamped when drawn, so a client need not track what fits.
+	SidebarScroll int
 	// Navigating marks that the list has the keyboard.
 	Navigating bool
 

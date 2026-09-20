@@ -36,6 +36,25 @@ func (t *tui) tabsLocked() []proto.TabInfo {
 	return w.Tabs
 }
 
+// revealSidebarLocked scrolls the list so that what is current can be seen.
+//
+// Without it, creating the tenth space or jumping to one below the fold would
+// leave the list showing the nine you are not in. The caller holds the lock.
+func (t *tui) revealSidebarLocked() {
+	if !t.sidebar {
+		return
+	}
+	frame := t.buildFrame()
+	at := ui.SidebarActiveRow(frame)
+	if at < 0 {
+		return
+	}
+	if next := ui.SidebarRevealScroll(frame, t.rows, at); next != t.sidebarScroll {
+		t.sidebarScroll = next
+		t.dirty = true
+	}
+}
+
 // resolveView settles which workspace and tab to show, given what exists.
 //
 // It is called after every refresh because the session can change underneath:
@@ -571,6 +590,7 @@ func (t *tui) navigate(delta int) {
 		}
 	}
 	t.nav = targets[(at+delta+len(targets))%len(targets)]
+	t.revealSidebarLocked()
 	t.dirty = true
 }
 
@@ -590,6 +610,7 @@ func (t *tui) enterNavigate() {
 	t.sidebar = true
 	t.navigating = true
 	t.nav = t.startTargetLocked()
+	t.revealSidebarLocked()
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()

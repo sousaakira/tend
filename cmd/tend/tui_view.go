@@ -175,18 +175,35 @@ func (t *tui) scrollKey(key string) (bool, error) {
 func (t *tui) handleMouse(ev ui.MouseEvent) error {
 	switch ev.Kind {
 	case ui.MouseWheelUp:
+		if t.scrollSidebar(ev.X, -sidebarScrollStep) {
+			return nil
+		}
 		if pane := t.paneAt(ev.X, ev.Y); pane != 0 {
+			// A program that asked for the mouse gets the wheel. It has its
+			// own idea of what is above the screen — an agent's transcript, a
+			// pager, an editor — and showing tend's scrollback instead means
+			// the wheel does nothing the user recognises.
+			if t.forwardsMouse(pane) {
+				t.focusPane(pane)
+				return t.client.SendInput(pane, ev.Raw)
+			}
 			t.focusPane(pane)
 			if !t.scrolling() {
 				return t.enterScroll()
 			}
-			return t.scrollBy(3)
+			return t.scrollBy(wheelLines)
 		}
 		return nil
 
 	case ui.MouseWheelDown:
+		if t.scrollSidebar(ev.X, sidebarScrollStep) {
+			return nil
+		}
+		if pane := t.paneAt(ev.X, ev.Y); pane != 0 && t.forwardsMouse(pane) {
+			return t.client.SendInput(pane, ev.Raw)
+		}
 		if t.scrolling() {
-			return t.scrollBy(-3)
+			return t.scrollBy(-wheelLines)
 		}
 		return nil
 
@@ -281,6 +298,38 @@ func (t *tui) dragDivider(ev ui.MouseEvent) error {
 	return t.refresh()
 }
 
+// sidebarScrollStep is how far one notch of the wheel moves the list. Two
+// entries, because most of them are two lines and moving by one would read as
+// half a step.
+const sidebarScrollStep = 2
+
+// wheelLines is how far one notch moves a pane's view.
+const wheelLines = 3
+
+// scrollSidebar moves the list when the pointer is over it, and reports
+// whether it took the event.
+//
+// The sidebar takes the wheel before the panes do: the pointer is over the
+// list, and scrolling the pane under a pointer that is not on it is the kind
+// of thing that makes people stop trusting the mouse.
+func (t *tui) scrollSidebar(x, delta int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.sidebar || x >= ui.SidebarWidth {
+		return false
+	}
+	frame := t.buildFrame()
+	limit := ui.SidebarMaxScroll(frame, t.rows)
+	next := min(max(t.sidebarScroll+delta, 0), limit)
+	if next != t.sidebarScroll {
+		t.sidebarScroll = next
+		t.dirty = true
+	}
+	// Taken either way: at the end of the list the wheel has nowhere to go,
+	// and falling through to the pane behind would be a surprise.
+	return true
+}
+
 // mouseRight is the button number a right-click reports, which is what opens
 // a menu here as it does everywhere else.
 const mouseRight = 2
@@ -310,9 +359,10 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		return false, nil
 	}
 	frame := t.buildFrame()
+	rows := t.rows
 	t.mu.Unlock()
 
-	row, ok := ui.SidebarRowAt(frame, x, y)
+	row, ok := ui.SidebarRowAt(frame, x, y, rows)
 	if !ok {
 		return false, nil
 	}

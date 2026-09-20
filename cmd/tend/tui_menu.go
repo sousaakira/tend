@@ -43,11 +43,11 @@ func (t *tui) menuOpen() bool {
 func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 	t.mu.Lock()
 	frame := t.buildFrame()
-	cols := t.cols
+	cols, rows := t.cols, t.rows
 	panes := len(t.rects)
 	t.mu.Unlock()
 
-	if row, ok := ui.SidebarRowAt(frame, x, y); ok {
+	if row, ok := ui.SidebarRowAt(frame, x, y, rows); ok {
 		switch row.Kind {
 		case ui.SidebarSpace:
 			return ui.SpaceMenu(row.Workspace, x, y), true
@@ -279,10 +279,9 @@ func (t *tui) closeFor(m ui.Menu) error {
 	default:
 		return nil
 	}
-	// A session with nothing left in it gets a shell back, the same way
-	// attaching to an empty server does.
-	if err := t.ensureSession(); err != nil {
-		return err
-	}
+	// Nothing is created to replace what was just closed. Closing the last
+	// space used to hand back a fresh one immediately, which from the outside
+	// is indistinguishable from the close having failed. An empty session is
+	// a real state, and the "new" button is sitting in the list.
 	return t.refresh()
 }

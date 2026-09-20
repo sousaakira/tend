@@ -796,7 +796,7 @@ func (s *Server) detectOnce() {
 		// Each pane is examined under its own lock, so a slow one delays only
 		// itself.
 		obs := w.rt.poll(w.lastTitle)
-		if !obs.titleChanged && !obs.stateChanged {
+		if !obs.titleChanged && !obs.stateChanged && !obs.mouseChanged {
 			continue
 		}
 
@@ -821,7 +821,7 @@ func (s *Server) detectOnce() {
 		}
 		s.mu.Unlock()
 
-		if obs.stateChanged {
+		if obs.stateChanged || obs.mouseChanged {
 			s.events.publish(Event{
 				Kind:  EventPaneState,
 				Pane:  w.rt.id,

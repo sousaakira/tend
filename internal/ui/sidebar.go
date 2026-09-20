@@ -124,6 +124,44 @@ func TrailingStart(r SidebarRow) int {
 	return at
 }
 
+// SidebarHeight is how many lines the list has to work with.
+func SidebarHeight(rows int) int { return max(rows-StatusRows, 0) }
+
+// SidebarMaxScroll is the furthest the list can be scrolled and still fill the
+// space: scrolling past that would leave a gap at the bottom and nothing new
+// at the top.
+//
+// It counts in entries rather than lines. A two-line entry is one thing, and
+// scrolling half of one off the top would put a branch under a heading it does
+// not belong to.
+func SidebarMaxScroll(f Frame, rows int) int {
+	height := SidebarHeight(rows)
+	total := 0
+	for _, r := range f.SidebarRows {
+		total += r.height()
+	}
+	if total <= height {
+		return 0
+	}
+	at := len(f.SidebarRows)
+	fits := 0
+	for at > 0 {
+		next := fits + f.SidebarRows[at-1].height()
+		if next > height {
+			break
+		}
+		fits = next
+		at--
+	}
+	return at
+}
+
+// sidebarScroll is the offset actually used, which is the one asked for
+// clamped to what there is to scroll.
+func sidebarScroll(f Frame, rows int) int {
+	return min(max(f.SidebarScroll, 0), SidebarMaxScroll(f, rows))
+}
+
 // drawSidebar draws the lists down the left edge.
 func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 	if !f.Sidebar {
@@ -132,7 +170,7 @@ func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 	// The sidebar runs from the very top: it is not inside the tab bar's
 	// space, the tab bar is inside its own.
 	top := 0
-	bottom := dst.Rows() - StatusRows
+	bottom := SidebarHeight(dst.Rows())
 	width := SidebarColumns(f, dst.Cols())
 
 	for y := top; y < bottom; y++ {
@@ -149,13 +187,26 @@ func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 	}
 
 	limit := width - 1
+	from := sidebarScroll(f, dst.Rows())
 	y := top
-	for _, r := range f.SidebarRows {
+	last := from
+	for _, r := range f.SidebarRows[min(from, len(f.SidebarRows)):] {
 		if y+r.height() > bottom {
 			break
 		}
 		drawSidebarRow(dst, r, y, limit, theme)
 		y += r.height()
+		last++
+	}
+
+	// Say which way there is more. A list that silently ends is one the user
+	// believes they have seen all of, which is how a waiting agent goes
+	// unnoticed below the fold.
+	if from > 0 {
+		writeString(dst, limit-1, top, "↑", theme.SidebarGroup, width)
+	}
+	if last < len(f.SidebarRows) {
+		writeString(dst, limit-1, bottom-1, "↓", theme.SidebarGroup, width)
 	}
 }
 
@@ -272,12 +323,13 @@ func stateCircle(r SidebarRow) string {
 // Rows are found by walking the same heights the drawing uses, so a two-line
 // entry is one target: clicking a branch selects the space it belongs to,
 // which is what it looks like it should do.
-func SidebarRowAt(f Frame, x, y int) (SidebarRow, bool) {
+func SidebarRowAt(f Frame, x, y, rows int) (SidebarRow, bool) {
 	if x >= SidebarColumns(f, SidebarWidth) {
 		return SidebarRow{}, false
 	}
 	at := 0
-	for _, r := range f.SidebarRows {
+	from := sidebarScroll(f, rows)
+	for _, r := range f.SidebarRows[min(from, len(f.SidebarRows)):] {
 		height := r.height()
 		if y >= at && y < at+height {
 			// A trailing button is its own target. Without this the "menu"
@@ -291,4 +343,47 @@ func SidebarRowAt(f Frame, x, y int) (SidebarRow, bool) {
 		at += height
 	}
 	return SidebarRow{}, false
+}
+
+// SidebarRevealScroll is the smallest offset that brings an entry into view,
+// given where the list is scrolled now.
+//
+// Smallest on purpose: jumping to another space should move the list only as
+// far as it must, so the entries around the one being left stay where the eye
+// last saw them.
+func SidebarRevealScroll(f Frame, rows, index int) int {
+	if index < 0 || index >= len(f.SidebarRows) {
+		return sidebarScroll(f, rows)
+	}
+	at := sidebarScroll(f, rows)
+	if index < at {
+		return index
+	}
+
+	height := SidebarHeight(rows)
+	for {
+		used := 0
+		for i := at; i <= index; i++ {
+			used += f.SidebarRows[i].height()
+		}
+		if used <= height || at >= index {
+			return at
+		}
+		at++
+	}
+}
+
+// SidebarActiveRow is the entry the list should keep in view: the navigation
+// cursor when it is up, and otherwise the space being looked at.
+func SidebarActiveRow(f Frame) int {
+	fallback := -1
+	for i, r := range f.SidebarRows {
+		if r.Selected {
+			return i
+		}
+		if fallback < 0 && r.Kind == SidebarSpace && r.Active {
+			fallback = i
+		}
+	}
+	return fallback
 }

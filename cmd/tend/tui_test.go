@@ -1458,3 +1458,99 @@ func TestAttachNavigatesIntoAFoldedGroup(t *testing.T) {
 		return strings.Contains(a.sidebarText(), "▼ clients")
 	})
 }
+
+// wheelAt sends one notch of the wheel at a point, counted from one.
+func (a *attached) wheelAt(t *testing.T, col, row int, up bool) {
+	t.Helper()
+	button := "65"
+	if up {
+		button = "64"
+	}
+	a.send(t, "\x1b[<"+button+";"+itoa(col)+";"+itoa(row)+"M")
+	time.Sleep(120 * time.Millisecond)
+}
+
+// TestAttachScrollsTheSidebar is the bug this was found by: with enough
+// spaces the list filled the column and everything under it — the button that
+// makes a space, the whole agents section — was simply gone.
+func TestAttachScrollsTheSidebar(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	for i := 0; i < 8; i++ {
+		a.send(t, "\x02s")
+		time.Sleep(150 * time.Millisecond)
+	}
+	a.waitForScreen(t, "a long list", func(string) bool {
+		return strings.Contains(a.sidebarText(), "space 9")
+	})
+	if strings.Contains(a.sidebarText(), "agents") {
+		t.Skipf("the window is tall enough to show everything:\n%s", a.sidebarText())
+	}
+
+	for i := 0; i < 15; i++ {
+		a.wheelAt(t, 5, 6, false)
+		if strings.Contains(a.sidebarText(), "agents") {
+			break
+		}
+	}
+	if !strings.Contains(a.sidebarText(), "agents") {
+		t.Fatalf("scrolling down should reach the agents section:\n%s", a.sidebarText())
+	}
+
+	for i := 0; i < 20; i++ {
+		a.wheelAt(t, 5, 6, true)
+		if strings.Contains(a.sidebarText(), "spaces") {
+			break
+		}
+	}
+	if !strings.Contains(a.sidebarText(), "spaces") {
+		t.Errorf("scrolling back up should reach the top:\n%s", a.sidebarText())
+	}
+}
+
+// TestAttachClosingTheLastSpaceLeavesAnEmptySession: closing the last space
+// used to hand back a fresh one immediately, which from the outside is
+// indistinguishable from the close having failed.
+func TestAttachClosingTheLastSpaceLeavesAnEmptySession(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.rightClickAt(t, 6, a.lineContaining(t, "main"))
+	a.waitForScreen(t, "the space menu", func(s string) bool {
+		return strings.Contains(s, "close space")
+	})
+	a.clickAt(t, 8, a.lineContaining(t, "close space"))
+
+	a.waitForScreen(t, "the session to empty", func(s string) bool {
+		return !strings.Contains(s, "┌") && !strings.Contains(a.sidebarText(), "main")
+	})
+	// And it is not a dead end: the button that makes one is still there.
+	a.clickAt(t, 2, a.lineContaining(t, "new"))
+	a.waitForScreen(t, "a space again", func(s string) bool {
+		return strings.Contains(s, "┌")
+	})
+}
+
+// TestAttachWheelReachesAProgramThatAskedForIt: an agent has its own idea of
+// what is above the screen, and showing tend's scrollback instead means the
+// wheel does nothing the user recognises.
+func TestAttachWheelReachesAProgramThatAskedForIt(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// A program that asks for mouse reporting and prints what it is sent.
+	mouser := fakeAgentBin(t, "mouser", "printf '\\033[?1002h\\033[?1006h'; cat")
+	a.sendUntil(t, mouser+"\n", "the program to start", func(s string) bool {
+		return strings.Contains(s, "mouser")
+	})
+	time.Sleep(400 * time.Millisecond)
+
+	a.wheelAt(t, 50, 6, true)
+	a.waitForScreen(t, "the wheel to reach the program", func(s string) bool {
+		return strings.Contains(s, "[<64;")
+	})
+	// And tend did not take it for itself.
+	if strings.Contains(a.text(), "scroll ") {
+		t.Errorf("tend should not have entered its own scroll view:\n%s", a.text())
+	}
+}

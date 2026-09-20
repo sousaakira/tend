@@ -754,7 +754,7 @@ func TestSidebarTwoLineEntryIsOneTarget(t *testing.T) {
 
 	cases := map[int]uint64{0: 0, 1: 1, 2: 1, 3: 2, 4: 2}
 	for y, want := range cases {
-		row, ok := SidebarRowAt(f, 2, y)
+		row, ok := SidebarRowAt(f, 2, y, 40)
 		if !ok {
 			t.Errorf("row %d: nothing there", y)
 			continue
@@ -764,10 +764,10 @@ func TestSidebarTwoLineEntryIsOneTarget(t *testing.T) {
 		}
 	}
 
-	if _, ok := SidebarRowAt(f, 2, 9); ok {
+	if _, ok := SidebarRowAt(f, 2, 9, 40); ok {
 		t.Error("below the last entry should select nothing")
 	}
-	if _, ok := SidebarRowAt(f, SidebarWidth, 1); ok {
+	if _, ok := SidebarRowAt(f, SidebarWidth, 1, 40); ok {
 		t.Error("past the sidebar belongs to the pane")
 	}
 }
@@ -778,7 +778,7 @@ func TestSidebarHeadingCarriesItsToggle(t *testing.T) {
 	f := sidebarFrame([]SidebarRow{
 		{Kind: SidebarHeading, Label: "agents", Trailing: "grouped", Action: ActionToggleGrouped},
 	})
-	row, ok := SidebarRowAt(f, SidebarWidth-4, 0)
+	row, ok := SidebarRowAt(f, SidebarWidth-4, 0, 40)
 	if !ok || row.Action != ActionToggleGrouped {
 		t.Errorf("the toggle should be clickable, got %+v ok=%v", row, ok)
 	}
@@ -799,7 +799,7 @@ func TestSidebarHiddenTakesNoColumns(t *testing.T) {
 	if text := strings.Join(gridText(g), "\n"); strings.Contains(text, "spaces") {
 		t.Errorf("a hidden sidebar should draw nothing:\n%s", text)
 	}
-	if _, ok := SidebarRowAt(Frame{}, 0, 0); ok {
+	if _, ok := SidebarRowAt(Frame{}, 0, 0, 40); ok {
 		t.Error("a hidden sidebar should have no targets")
 	}
 }
@@ -907,14 +907,14 @@ func TestSidebarTrailingIsItsOwnTarget(t *testing.T) {
 		Trailing: "menu", TrailingAction: ActionOpenMenu,
 	}})
 
-	if row, _ := SidebarRowAt(f, 2, 0); row.Action != ActionNewSpace {
+	if row, _ := SidebarRowAt(f, 2, 0, 40); row.Action != ActionNewSpace {
 		t.Errorf("the left of the row should create a space, got %q", row.Action)
 	}
 	at := TrailingStart(f.SidebarRows[0])
 	if at < 0 {
 		t.Fatal("the trailing button should have a column")
 	}
-	if row, _ := SidebarRowAt(f, at, 0); row.Action != ActionOpenMenu {
+	if row, _ := SidebarRowAt(f, at, 0, 40); row.Action != ActionOpenMenu {
 		t.Errorf("the button should open the menu, got %q", row.Action)
 	}
 
@@ -960,7 +960,7 @@ func TestSidebarDrawsAFoldedGroup(t *testing.T) {
 	}
 
 	// The heading is one click target, and it says which group it is.
-	row, ok := SidebarRowAt(folded, 3, 0)
+	row, ok := SidebarRowAt(folded, 3, 0, 40)
 	if !ok || row.Action != ActionToggleGroup || row.Group != "clients" {
 		t.Errorf("heading target = %+v ok=%v", row, ok)
 	}
@@ -978,5 +978,127 @@ func TestGroupMenuActsOnTheGroup(t *testing.T) {
 	}
 	if shut := GroupMenu("clients", true, 0, 0); shut.Items[0].Label != "unfold" {
 		t.Errorf("a folded group offers to unfold, got %q", shut.Items[0].Label)
+	}
+}
+
+// scrollFrame is a sidebar with n two-line spaces followed by the sections
+// that live under them, which is the shape that overflows.
+func scrollFrame(n int) Frame {
+	rows := []SidebarRow{{Kind: SidebarHeading, Label: "spaces"}}
+	for i := 0; i < n; i++ {
+		rows = append(rows, SidebarRow{
+			Kind: SidebarSpace, Label: "space " + itoa(uint64(i+1)),
+			Detail: "master", Workspace: uint64(i + 1),
+		})
+	}
+	rows = append(rows,
+		SidebarRow{Kind: SidebarAction, Label: "new", Action: ActionNewSpace},
+		SidebarRow{Kind: SidebarHeading, Label: "agents"},
+	)
+	return sidebarFrame(rows)
+}
+
+// TestSidebarScrollsToReachWhatIsBelow is the bug this was found by: a list
+// longer than the window simply ended, so the agents section and the button
+// that makes a space were unreachable.
+func TestSidebarScrollsToReachWhatIsBelow(t *testing.T) {
+	f := scrollFrame(9)
+	const rows = 12 // 11 lines for the list, 19 lines of content
+
+	if SidebarMaxScroll(f, rows) == 0 {
+		t.Fatal("a list this long should be scrollable")
+	}
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	if text := strings.Join(gridText(g), "\n"); strings.Contains(text, "agents") {
+		t.Errorf("the last section should be below the fold to begin with:\n%s", text)
+	}
+
+	// Scrolled to the end, the sections under the spaces are on screen and
+	// the last entry is the last entry.
+	f.SidebarScroll = SidebarMaxScroll(f, rows)
+	g = vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	text := strings.Join(gridText(g), "\n")
+	if !strings.Contains(text, "agents") || !strings.Contains(text, "new") {
+		t.Errorf("scrolled to the end, everything below should be visible:\n%s", text)
+	}
+	if !strings.Contains(text, "↑") {
+		t.Errorf("a list with more above should say so:\n%s", text)
+	}
+
+	// Past the end changes nothing: the offset is clamped where it is drawn.
+	f.SidebarScroll = 500
+	g2 := vt.NewGrid(40, rows, 0)
+	Draw(g2, f, DefaultTheme())
+	if strings.Join(gridText(g2), "\n") != text {
+		t.Error("scrolling past the end should be clamped, not empty the list")
+	}
+}
+
+// TestSidebarHitTestFollowsTheScroll: a click has to land on what is drawn,
+// not on what would have been there unscrolled.
+func TestSidebarHitTestFollowsTheScroll(t *testing.T) {
+	f := scrollFrame(9)
+	const rows = 12
+
+	first, ok := SidebarRowAt(f, 2, 1, rows)
+	if !ok || first.Workspace != 1 {
+		t.Fatalf("unscrolled, the top entry is space 1, got %+v", first)
+	}
+
+	f.SidebarScroll = 2 // past the heading and the first space
+	top, ok := SidebarRowAt(f, 2, 0, rows)
+	if !ok || top.Workspace != 2 {
+		t.Errorf("scrolled by two entries, the top is space 2, got %+v", top)
+	}
+}
+
+// TestSidebarRevealMovesAsLittleAsPossible: jumping to another space should
+// move the list only as far as it must, so what surrounds the entry being
+// left stays where the eye last saw it.
+func TestSidebarRevealMovesAsLittleAsPossible(t *testing.T) {
+	f := scrollFrame(9)
+	const rows = 12
+
+	// An entry already on screen does not move the list.
+	if got := SidebarRevealScroll(f, rows, 2); got != 0 {
+		t.Errorf("reveal of a visible entry = %d, want 0", got)
+	}
+	// One below the fold scrolls just enough to show it.
+	last := len(f.SidebarRows) - 1
+	at := SidebarRevealScroll(f, rows, last)
+	if at == 0 || at > SidebarMaxScroll(f, rows) {
+		t.Errorf("reveal of the last entry = %d, max %d", at, SidebarMaxScroll(f, rows))
+	}
+	f.SidebarScroll = at
+	g := vt.NewGrid(40, rows, 0)
+	Draw(g, f, DefaultTheme())
+	if !strings.Contains(strings.Join(gridText(g), "\n"), "agents") {
+		t.Error("the revealed entry should be on screen")
+	}
+
+	// One above the fold scrolls back to it exactly.
+	if got := SidebarRevealScroll(f, rows, 1); got != 1 {
+		t.Errorf("reveal upwards = %d, want 1", got)
+	}
+}
+
+// TestSidebarActiveRowPrefersTheCursor: while the list has the keyboard, what
+// must stay in view is where the cursor is, not where the user came from.
+func TestSidebarActiveRowPrefersTheCursor(t *testing.T) {
+	f := scrollFrame(3)
+	f.SidebarRows[1].Active = true
+	f.SidebarRows[3].Selected = true
+	if got := SidebarActiveRow(f); got != 3 {
+		t.Errorf("active row = %d, want the selected one", got)
+	}
+
+	f.SidebarRows[3].Selected = false
+	if got := SidebarActiveRow(f); got != 1 {
+		t.Errorf("active row = %d, want the current space", got)
+	}
+	if got := SidebarActiveRow(scrollFrame(3)); got != -1 {
+		t.Errorf("with nothing current the answer is none, got %d", got)
 	}
 }
