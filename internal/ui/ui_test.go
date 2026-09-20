@@ -803,3 +803,36 @@ func TestSidebarHiddenTakesNoColumns(t *testing.T) {
 		t.Error("a hidden sidebar should have no targets")
 	}
 }
+
+// TestTabBarStartsWhereThePanesDo: the tabs belong to one space, so a bar
+// running over the sidebar would read as though they belonged to the session.
+func TestTabBarStartsWhereThePanesDo(t *testing.T) {
+	f := sidebarFrame([]SidebarRow{{Kind: SidebarHeading, Label: "spaces"}})
+	f.Tabs = []Tab{{ID: 1, Name: "tab 1", Active: true}}
+
+	g := vt.NewGrid(60, 8, 0)
+	Draw(g, f, DefaultTheme())
+	lines := gridText(g)
+
+	if at := strings.Index(lines[0], "tab 1"); at < SidebarWidth {
+		t.Errorf("the bar should start past the sidebar, found at %d:\n%q", at, lines[0])
+	}
+	// The sidebar owns its own top row rather than starting below the bar.
+	if !strings.Contains(lines[0], "spaces") {
+		t.Errorf("the sidebar should run from the top:\n%q", lines[0])
+	}
+
+	// A click on the sidebar's top row is not a click on a tab.
+	if _, _, ok := TabAt(f, 2, 0, 60); ok {
+		t.Error("the sidebar's columns should not answer for the tab bar")
+	}
+	if _, _, ok := TabAt(f, SidebarWidth+2, 0, 60); !ok {
+		t.Error("the first tab should be clickable where it is drawn")
+	}
+
+	// With no sidebar the bar starts at the edge, as it always did.
+	plain := Frame{Tabs: f.Tabs}
+	if segs := TabSegments(plain, 60); len(segs) == 0 || segs[0].Start != 0 {
+		t.Errorf("without a sidebar the bar should start at column zero: %+v", segs)
+	}
+}

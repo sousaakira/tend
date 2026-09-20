@@ -245,9 +245,14 @@ type TabSegment struct {
 }
 
 // TabSegments lays out the bar across cols columns.
+//
+// The bar belongs to the panes, so it starts where they do rather than at the
+// edge of the screen. The sidebar lists every space; the tabs list one space's
+// tabs, and a bar running over the sidebar would read as though those tabs
+// belonged to the whole session.
 func TabSegments(f Frame, cols int) []TabSegment {
 	var out []TabSegment
-	x := 0
+	x := SidebarColumns(f, cols)
 	for _, tab := range f.Tabs {
 		label := tabLabel(tab)
 		width := runewidth.StringWidth(label)
@@ -273,7 +278,7 @@ func tabLabel(tab Tab) string {
 
 // TabAt reports what a click on the bar landed on.
 func TabAt(f Frame, x, y, cols int) (tab uint64, newTab bool, ok bool) {
-	if TabRows(len(f.Tabs)) == 0 || y != 0 {
+	if TabRows(len(f.Tabs)) == 0 || y != 0 || x < SidebarColumns(f, cols) {
 		return 0, false, false
 	}
 	for _, seg := range TabSegments(f, cols) {
@@ -314,7 +319,7 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 	if row == nil {
 		return
 	}
-	for x := 0; x < dst.Cols(); x++ {
+	for x := SidebarColumns(f, dst.Cols()); x < dst.Cols(); x++ {
 		row.SetCell(x, vt.Cell{R: ' ', Style: theme.Status, Width: 1})
 	}
 

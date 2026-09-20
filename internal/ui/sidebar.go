@@ -78,14 +78,28 @@ func (r SidebarRow) height() int {
 // repository name and a state marker, narrow enough to cost a pane little.
 const SidebarWidth = 26
 
+// SidebarColumns is how many columns the sidebar occupies in a frame, which is
+// none when it is hidden.
+//
+// It is the left edge of everything else on screen, which is why the tab bar
+// and the sidebar both measure from it rather than each deciding for itself.
+func SidebarColumns(f Frame, cols int) int {
+	if !f.Sidebar {
+		return 0
+	}
+	return min(SidebarWidth, cols)
+}
+
 // drawSidebar draws the lists down the left edge.
 func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 	if !f.Sidebar {
 		return
 	}
-	top := TabRows(len(f.Tabs))
+	// The sidebar runs from the very top: it is not inside the tab bar's
+	// space, the tab bar is inside its own.
+	top := 0
 	bottom := dst.Rows() - StatusRows
-	width := min(SidebarWidth, dst.Cols())
+	width := SidebarColumns(f, dst.Cols())
 
 	for y := top; y < bottom; y++ {
 		row := dst.Line(y)
@@ -182,10 +196,10 @@ func stateCircle(r SidebarRow) string {
 // entry is one target: clicking a branch selects the space it belongs to,
 // which is what it looks like it should do.
 func SidebarRowAt(f Frame, x, y int) (SidebarRow, bool) {
-	if !f.Sidebar || x >= SidebarWidth {
+	if x >= SidebarColumns(f, SidebarWidth) {
 		return SidebarRow{}, false
 	}
-	at := TabRows(len(f.Tabs))
+	at := 0
 	for _, r := range f.SidebarRows {
 		height := r.height()
 		if y >= at && y < at+height {
