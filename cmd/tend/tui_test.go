@@ -1154,8 +1154,12 @@ func TestAttachClickSelectsATab(t *testing.T) {
 		return strings.Contains(s, "TAB-ONE")
 	})
 	a.send(t, "\x02c")
-	a.waitForScreen(t, "a second tab", func(s string) bool {
-		return !strings.Contains(s, "TAB-ONE")
+	// Waiting only for the marker to go is satisfied by a redraw that has
+	// momentarily blanked the screen, and the bar is not there yet. What this
+	// test needs is two tabs drawn, so that is what it waits for.
+	a.waitForScreen(t, "a second tab", func(string) bool {
+		return strings.Count(a.lines()[0], "tab ") == 2 &&
+			!strings.Contains(a.text(), "TAB-ONE")
 	})
 
 	first := columnOf(a.lines()[0], 't')
