@@ -172,6 +172,15 @@ Requires Go 1.27+.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## working on tend
+
+tend is a port of herdr to Go, and the porting is ongoing.
+
+- [AGENTS.md](AGENTS.md) — how to work here: the rules, the gate, the traps.
+  Written for AI agents; it is the right first read for anyone.
+- [docs/PORTING.md](docs/PORTING.md) — what has been ported, what has not, and
+  where each missing piece lives in herdr's source. The work queue.
+
 ## license
 
 Apache-2.0. tend is an independent Go implementation of the architecture of

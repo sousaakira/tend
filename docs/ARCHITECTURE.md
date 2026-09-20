@@ -434,9 +434,14 @@ silently dropped is one the user believes is in effect, which is the most
 confusing way for configuration to fail. Settings are read before anything else
 is checked, so a broken file is reported wherever tend is being run from.
 
-## Non-goals for the core milestone
+## Scope
 
-Plugins, SSH/multi-machine, kitty graphics, worktree management and session
-handoff are all deferred. So is restoring a layout after the server itself
-restarts: panes outlive clients, not the process that owns them. The architecture should not make them hard to add,
-but nothing ships for them until the core is solid.
+tend began as a lean core — server, ptys, panes, detection, a basic TUI — with
+plugins, remote sessions, kitty graphics, worktrees and session handoff set
+aside. That milestone is done, and the goal has since widened to a 1:1 port of
+herdr, those included.
+
+What has crossed over, what has not, and where each missing piece lives in
+herdr's source is tracked in `PORTING.md`, which is the work queue. The largest
+thing still missing is restoring a session after the server itself restarts:
+panes outlive clients, not yet the process that owns them.
