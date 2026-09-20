@@ -37,7 +37,12 @@ const (
 	// retained for one sequence.
 	MaxIntermediates = 2
 	// DefaultMaxStringLen bounds an OSC, DCS or APC payload.
-	DefaultMaxStringLen = 1 << 16
+	//
+	// A megabyte, because the largest legitimate payload is a clipboard write:
+	// a program copying a long answer sends it whole, base64 and all, and a
+	// limit sized for window titles would drop exactly the copies worth
+	// making. It is still a bound — a pane cannot grow this without end.
+	DefaultMaxStringLen = 1 << 20
 
 	// paramMax matches xterm's per-parameter clamp.
 	paramMax = 65535

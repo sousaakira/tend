@@ -160,3 +160,62 @@ func parseMouse(data []byte) (ev MouseEvent, n int, incomplete bool) {
 	}
 	return ev, end + 1, false
 }
+
+// EncodeMouse writes a mouse report for a pane's own program, at a position
+// inside that pane counted from zero.
+//
+// The report that arrived cannot simply be passed on. Its coordinates are
+// places on the whole screen, and the program believes it has a terminal to
+// itself whose top-left cell is 1,1: handed the raw report, it sees every
+// click displaced by the sidebar's width and the pane's border, and acts on
+// text the pointer was never over.
+//
+// sgr says which encoding the program asked for. The older one packs each
+// coordinate into a byte and cannot say anything past column 223, so a report
+// out there is dropped rather than sent somewhere else.
+func EncodeMouse(ev MouseEvent, x, y int, sgr bool) []byte {
+	if x < 0 || y < 0 {
+		return nil
+	}
+	code := ev.Button & 3
+	switch ev.Kind {
+	case MousePress, MouseRelease:
+	case MouseDrag:
+		code |= 32
+	case MouseMove:
+		code = 3 | 32
+	case MouseWheelUp:
+		code = 64
+	case MouseWheelDown:
+		code = 65
+	default:
+		return nil
+	}
+	if ev.Mods.Has(ModShift) {
+		code |= 4
+	}
+	if ev.Mods.Has(ModAlt) {
+		code |= 8
+	}
+	if ev.Mods.Has(ModCtrl) {
+		code |= 16
+	}
+
+	if sgr {
+		final := "M"
+		if ev.Kind == MouseRelease {
+			final = "m"
+		}
+		return []byte("\x1b[<" + strconv.Itoa(code) + ";" + strconv.Itoa(x+1) + ";" + strconv.Itoa(y+1) + final)
+	}
+
+	// The legacy encoding has no release per button: it says "some button
+	// came up" as button 3.
+	if ev.Kind == MouseRelease {
+		code = code&^3 | 3
+	}
+	if x+1 > 223 || y+1 > 223 {
+		return nil
+	}
+	return []byte{0x1b, '[', 'M', byte(32 + code), byte(32 + x + 1), byte(32 + y + 1)}
+}

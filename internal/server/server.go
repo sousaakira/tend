@@ -227,8 +227,14 @@ type PaneStatus struct {
 	Running bool
 	Pid     int
 	ExitErr string
-	// Mouse is the mouse reporting the pane's program asked for.
-	Mouse bool
+	// Mouse is whether the pane's program asked for mouse reports at all.
+	// MouseDrag and MouseMotion say how much it asked for, and MouseSGR how
+	// it wants them written: a client forwarding the mouse has to send what
+	// the program subscribed to, in the encoding it said it reads.
+	Mouse       bool
+	MouseDrag   bool
+	MouseMotion bool
+	MouseSGR    bool
 }
 
 // Server owns a running session.
@@ -739,7 +745,9 @@ func (s *Server) readPane(rt *paneRuntime) {
 	for {
 		n, err := rt.pty.Read(buf)
 		if n > 0 {
-			rt.write(buf[:n])
+			for _, text := range rt.write(buf[:n]) {
+				s.events.publish(Event{Kind: EventPaneClipboard, Pane: rt.id, Data: text})
+			}
 			s.events.publish(Event{Kind: EventPaneOutput, Pane: rt.id})
 		}
 		if err != nil {

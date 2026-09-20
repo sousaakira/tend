@@ -194,9 +194,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 			// own idea of what is above the screen — an agent's transcript, a
 			// pager, an editor — and showing tend's scrollback instead means
 			// the wheel does nothing the user recognises.
-			if t.forwardsMouse(pane) {
+			if took, err := t.forwardMouse(pane, ev, false); took {
 				t.focusPane(pane)
-				return t.client.SendInput(pane, ev.Raw)
+				return err
 			}
 			t.focusPane(pane)
 			if !t.scrolling() {
@@ -210,8 +210,10 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if t.scrollSidebar(ev.X, ev.Y, sidebarScrollStep) {
 			return nil
 		}
-		if pane := t.paneAt(ev.X, ev.Y); pane != 0 && t.forwardsMouse(pane) {
-			return t.client.SendInput(pane, ev.Raw)
+		if pane := t.paneAt(ev.X, ev.Y); pane != 0 {
+			if took, err := t.forwardMouse(pane, ev, false); took {
+				return err
+			}
 		}
 		if t.scrolling() {
 			return t.scrollBy(-wheelLines)
@@ -259,15 +261,14 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		// has now moved on from, and leaving it lit suggests it is still what
 		// a copy would take.
 		t.clearSelection()
+		t.focusPane(pane)
 		if t.beginSelection(ev) {
-			t.focusPane(pane)
 			return nil
 		}
-		if t.forwardsMouse(pane) {
-			return t.client.SendInput(pane, ev.Raw)
-		}
-		t.focusPane(pane)
-		return nil
+		// Not tend's to select in, so the press and everything that follows
+		// it belong to the program.
+		_, err := t.beginGesture(pane, ev)
+		return err
 
 	case ui.MouseMove:
 		// Nothing but an open menu follows the pointer, and motion reporting
@@ -276,6 +277,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MouseDrag:
+		if took, err := t.continueGesture(ev); took {
+			return err
+		}
 		if t.dragSelection(ev) {
 			return nil
 		}
@@ -288,27 +292,18 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		// paneAt takes the same lock, so the grab is released first and the
 		// lookup happens after. A mutex that is not reentrant turns a nested
 		// call into a frozen client, which is exactly how this was found.
+		if took, err := t.continueGesture(ev); took {
+			return err
+		}
 		if t.endSelection() {
 			return nil
 		}
-		if pane, ok := t.takePendingPress(); ok {
-			// Pressed and released without moving: a click, which the pane's
-			// own program is in the middle of and needs the other half of.
-			return t.client.SendInput(pane, ev.Raw)
-		}
 
 		t.mu.Lock()
-		dragging := t.dragPane != 0 || t.draggingSidebar
 		t.dragPane, t.dragSide = 0, ""
 		t.draggingSidebar = false
 		t.mu.Unlock()
 
-		if dragging {
-			return nil
-		}
-		if pane := t.paneAt(ev.X, ev.Y); pane != 0 && t.forwardsMouse(pane) {
-			return t.client.SendInput(pane, ev.Raw)
-		}
 		return nil
 	}
 	return nil

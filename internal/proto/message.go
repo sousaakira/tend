@@ -124,8 +124,13 @@ type PaneInfo struct {
 	Pid     int  `json:"pid,omitempty"`
 	// Mouse is the mouse reporting the pane's own program asked for, so a
 	// client knows whether a click belongs to the application or to tend.
-	Mouse   bool   `json:"mouse,omitempty"`
-	ExitErr string `json:"exit_error,omitempty"`
+	Mouse bool `json:"mouse,omitempty"`
+	// MouseDrag and MouseMotion say how much the program subscribed to, and
+	// MouseSGR how it wants reports written.
+	MouseDrag   bool   `json:"mouse_drag,omitempty"`
+	MouseMotion bool   `json:"mouse_motion,omitempty"`
+	MouseSGR    bool   `json:"mouse_sgr,omitempty"`
+	ExitErr     string `json:"exit_error,omitempty"`
 
 	Command []string `json:"command,omitempty"`
 	Dir     string   `json:"dir,omitempty"`
@@ -376,6 +381,8 @@ const (
 	EventPaneState  = "pane-state"
 	EventPaneExited = "pane-exited"
 	EventPaneClosed = "pane-closed"
+	// EventPaneClipboard carries text a pane's program asked to have copied.
+	EventPaneClipboard = "pane-clipboard"
 )
 
 // Event is something that happened, sent unsolicited.
@@ -386,6 +393,8 @@ type Event struct {
 	State string `json:"state,omitempty"`
 	Rule  string `json:"rule,omitempty"`
 	Err   string `json:"error,omitempty"`
+	// Data is the text of a clipboard event. JSON carries it as base64.
+	Data []byte `json:"data,omitempty"`
 }
 
 // Compare reports which side of a connection knows things the other does not,

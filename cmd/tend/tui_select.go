@@ -5,91 +5,54 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/sousaakira/tend/internal/clipboard"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
 )
 
-// Asking the terminal for mouse reporting is what makes panes clickable, and
-// it is also what takes text selection away: the drag now belongs to tend
-// rather than to the window. Most terminals keep a way out under Shift, but it
-// selects across the whole window — the other panes, the borders, the sidebar
-// — which for one column of a split is not a way out at all.
+// There are two kinds of pane as far as the mouse goes, and they are handled
+// by two different parties.
 //
-// So tend marks the selection itself, over the pane the drag started in, and
-// hands the text to the terminal to put on the clipboard.
-
-// blockModifier switches a drag from a run of text to a rectangle.
+// A program that asked for the mouse gets it, whole: press, drag, release and
+// wheel, in its own coordinates. Such a program does its own selecting, over
+// its own scrollback — which for a full-screen agent is the only scrollback
+// there is, since its earlier output never reaches this terminal — and when
+// it copies it says so with OSC 52, which is passed on to the clipboard.
 //
-// It is the convention every terminal already uses for this, which matters
-// more than any argument for a different key: somebody reaching for block
-// selection reaches for alt without being told.
-const blockModifier = ui.ModAlt
-
-// A press cannot be told from the start of a drag, and in a pane whose own
-// program asked for the mouse the two want opposite things: a click belongs to
-// the program, a drag belongs to the selection.
+// A program that did not ask has no idea the mouse exists, so tend marks the
+// text itself, scrolls its own history under the drag, and cuts the text out
+// of the server's copy of the terminal.
 //
-// So the press is remembered and forwarded, and nothing is decided until the
-// pointer moves. Moving turns it into a selection; releasing without moving
-// leaves it the click the program already saw.
+// An earlier version of this tried to do the first kind's selecting for it:
+// holding the drag back from the program, guessing from repaints how far its
+// view had moved, feeding it wheel events. Every part of that was a heuristic
+// standing in for something the program already does correctly.
 
-// pendingPress is a press in a mouse-reporting pane, waiting to find out
-// whether it was a click or the start of a drag.
-type pendingPress struct {
-	pane   uint64
-	x, y   int
-	sent   bool
-	native bool
-	// picture is the pane as it looked when the press landed. The anchor is
-	// these coordinates on this screen, and a program that repaints before
-	// the first drag would otherwise move the text once between the two with
-	// nothing to compare against.
-	picture []string
-}
+// forceModifier takes the mouse away from a program that asked for it, and
+// selects a rectangle in a pane that did not.
+//
+// One key for both because both mean the same thing to the hand: "tend's
+// selection, the precise kind". It is also the key every terminal already
+// uses for block selection.
+const forceModifier = ui.ModAlt
 
-// beginSelection starts marking text, or remembers the press until the
-// pointer says which it was. It reports whether the press was taken.
+// beginSelection starts marking text, and reports whether the press was taken.
 func (t *tui) beginSelection(ev ui.MouseEvent) bool {
 	pane := t.paneAt(ev.X, ev.Y)
 	if pane == 0 {
 		return false
 	}
-	native := t.forwardsMouse(pane)
-
-	t.mu.Lock()
-	x, y, ok := t.paneCellLocked(pane, ev.X, ev.Y)
-	if !ok {
-		t.mu.Unlock()
+	if t.forwardsMouse(pane) && !ev.Mods.Has(forceModifier) {
 		return false
 	}
-	t.press = &pendingPress{
-		pane: pane, x: x, y: y, native: native,
-		picture: ui.ScreenLines(t.screenFor(pane)),
-	}
-	if !native {
-		// Nothing is waiting on the answer, so the selection starts at once
-		// and the mark follows the pointer from the first cell.
-		t.startSelectionLocked(pane, x, y)
-	}
-	t.mu.Unlock()
 
-	if native {
-		// The program is told about the press either way. If this turns out
-		// to be a click it has already had it, and if it turns out to be a
-		// drag it is told the button came back up.
-		if err := t.client.SendInput(pane, ev.Raw); err != nil {
-			return false
-		}
-		t.press.sent = true
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	x, y, ok := t.paneCellLocked(pane, ev.X, ev.Y)
+	if !ok {
+		return false
 	}
-	return true
-}
-
-// startSelectionLocked anchors a selection. The caller holds the lock.
-func (t *tui) startSelectionLocked(pane uint64, x, y int) {
 	t.sel = &ui.Selection{
 		Pane:     pane,
 		AnchorX:  x,
@@ -97,200 +60,38 @@ func (t *tui) startSelectionLocked(pane uint64, x, y int) {
 		CursorX:  x,
 		CursorY:  y,
 		Scroll:   t.selectionScrollLocked(pane),
-		Native:   t.forwardsMouseLocked(pane),
 		Dragging: true,
 	}
-	// The picture to compare against is taken with the anchor, not on the
-	// next frame. A program that repaints between the press and that frame
-	// would otherwise move the text once without anyone noticing, and the
-	// selection would be a line or two adrift for the rest of the drag.
-	t.lastPicture = ui.ScreenLines(t.screenFor(pane))
-	t.prevPicture = t.lastPicture
 	t.dirty = true
-}
-
-// forwardsMouseLocked is forwardsMouse for a caller that already holds the
-// lock.
-func (t *tui) forwardsMouseLocked(pane uint64) bool {
-	for _, p := range t.snap.Panes {
-		if p.ID == pane {
-			return p.Mouse
-		}
-	}
-	return false
+	return true
 }
 
 // dragSelection moves the far end of the selection, and reports whether one is
 // being dragged.
-//
-// The first drag after a press in a mouse-reporting pane is what turns that
-// press into a selection. The program is sent a release first, so it is not
-// left believing a button is still held down.
 func (t *tui) dragSelection(ev ui.MouseEvent) bool {
 	t.mu.Lock()
-	if t.sel == nil && t.press != nil {
-		press := *t.press
-		t.startSelectionLocked(press.pane, press.x, press.y)
-		// The anchor was placed on the screen as it was at the press, so
-		// that is what the first comparison must be against.
-		t.lastPicture, t.prevPicture = press.picture, press.picture
-		t.press = nil
-		t.mu.Unlock()
-		if press.sent {
-			t.releaseNative(press.pane, ev)
-		}
-		t.mu.Lock()
-	}
-
 	defer t.mu.Unlock()
 	if t.sel == nil || !t.sel.Dragging {
 		return false
 	}
-	// Clamped into the pane rather than ignored outside it: dragging past the
-	// edge to take the rest of a line is the ordinary way to select, and
-	// dropping those reports would make the selection stop short of where the
-	// pointer plainly is.
 	// Dragging past the edge asks for more than the screen is showing, so the
 	// view follows the pointer. The direction is remembered rather than acted
 	// on here: reports arrive only while the pointer moves, and holding still
 	// against the edge is exactly when the scrolling has to keep going.
 	t.autoScroll = t.edgeDirectionLocked(t.sel.Pane, ev.Y)
 
+	// Clamped into the pane rather than ignored outside it: dragging past the
+	// edge to take the rest of a line is the ordinary way to select.
 	x, y := t.clampToPaneLocked(t.sel.Pane, ev.X, ev.Y)
 	// The shape is read on every report rather than fixed at the press, so
-	// the modifier can be taken or let go part way through a drag and the
-	// mark answers at once. Deciding it once would mean starting over to
-	// change your mind.
-	block := ev.Mods.Has(blockModifier)
+	// the modifier can be taken or let go part way through a drag.
+	block := ev.Mods.Has(forceModifier)
 	if x != t.sel.CursorX || y != t.sel.CursorY || block != t.sel.Block {
 		t.sel.CursorX, t.sel.CursorY = x, y
 		t.sel.Block = block
 		t.dirty = true
 	}
 	return true
-}
-
-// takePendingPress returns the pane of a press that never became a drag, and
-// clears it.
-func (t *tui) takePendingPress() (uint64, bool) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.press == nil {
-		return 0, false
-	}
-	press := *t.press
-	t.press = nil
-	return press.pane, press.sent
-}
-
-// wheelTo sends one notch of the wheel to a pane's own program.
-//
-// Coordinates are the middle of the pane rather than the pointer: the pointer
-// is at the edge, and a program that treats the top row as a header would take
-// a wheel event there as meaning something other than "scroll the transcript".
-func (t *tui) wheelTo(pane uint64, dir int) error {
-	t.mu.Lock()
-	// Paced, unlike tend's own scrolling. One line per frame is a steady
-	// creep through a scrollback; one wheel notch per frame is what a mouse
-	// sends when it is spun as hard as it will go, and a program on the other
-	// end would fling its view across the transcript.
-	if time.Since(t.lastWheel) < wheelInterval {
-		t.mu.Unlock()
-		return nil
-	}
-	t.lastWheel = time.Now()
-
-	var mid ui.Rect
-	for _, r := range t.paneRects() {
-		if r.Pane == pane {
-			mid = ui.Rect{X: r.X + r.Cols/2, Y: r.Y + r.Rows/2}
-		}
-	}
-	t.mu.Unlock()
-	if mid.X == 0 && mid.Y == 0 {
-		return nil
-	}
-
-	button := 64 // wheel up
-	if dir > 0 {
-		button = 65
-	}
-	seq := "\x1b[<" + itoaInt(button) + ";" + itoaInt(mid.X+1) + ";" + itoaInt(mid.Y+1) + "M"
-	return t.client.SendInput(pane, []byte(seq))
-}
-
-// followRepaint keeps a selection on the text when the pane's own program
-// moves it.
-//
-// A program that scrolls its own view does not say so: it repaints, and the
-// only sign is that the same lines are somewhere else. Comparing the two
-// pictures gives the distance, and the whole selection moves by it — both
-// ends this time, because nothing here is pinned to the pointer: the text the
-// drag began on and the text under the pointer have both slid together.
-func (t *tui) followRepaint() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.sel == nil || !t.sel.Dragging || !t.sel.Native {
-		t.lastPicture, t.prevPicture = nil, nil
-		return
-	}
-
-	now := ui.ScreenLines(t.screenFor(t.sel.Pane))
-	settled := sameLines(now, t.prevPicture)
-	t.prevPicture = now
-
-	if shift, ok := ui.DetectShift(t.lastPicture, now); ok {
-		// Followed only while both ends stay in the window. A pane like this
-		// has no text outside it — what scrolled away is in the program's
-		// memory and nowhere tend can reach — so following text off the edge
-		// walks the selection onto rows that hold nothing, and clamping it
-		// there collapses both ends onto the same blank line. Leaving the
-		// mark where it is keeps it on the part still showing, which is the
-		// most that can be copied.
-		if fits(t.sel.AnchorY+shift, len(now)) && fits(t.sel.CursorY+shift, len(now)) {
-			t.sel.AnchorY += shift
-			t.sel.CursorY += shift
-			t.dirty = true
-		}
-		t.lastPicture = now
-		return
-	}
-
-	// Not recognisable as a move. A repaint arrives in pieces — several
-	// frames can catch it half drawn, matching nothing at any offset — so the
-	// picture to compare against is kept until the screen stops changing.
-	// Replacing it every frame means comparing the end of one repaint with
-	// the middle of it, which is how a scroll gets counted once instead of
-	// twice.
-	if settled {
-		t.lastPicture = now
-	}
-}
-
-// fits reports whether a row is inside a window of that many rows.
-func fits(y, rows int) bool { return rows > 0 && y >= 0 && y < rows }
-
-// sameLines reports whether two pictures of a screen are identical.
-func sameLines(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// wheelInterval is how often a held drag hands a notch to the pane's program.
-// About what a hand turning a wheel deliberately produces.
-const wheelInterval = 120 * time.Millisecond
-
-// releaseNative tells a pane's program the button came back up, so a drag that
-// became a selection does not leave it holding one.
-func (t *tui) releaseNative(pane uint64, ev ui.MouseEvent) {
-	_ = t.client.SendInput(pane, []byte("\x1b[<0;"+itoaInt(ev.X+1)+";"+itoaInt(ev.Y+1)+"m"))
 }
 
 // endSelection finishes a drag and copies what was marked.
@@ -339,8 +140,118 @@ func (t *tui) endSelection() bool {
 		t.setMessage("nothing to copy there", false)
 		return true
 	}
-	t.copyToClipboard(text, sel.Block)
+	t.copyToClipboard(text, copiedMessage(text, sel.Block))
 	return true
+}
+
+// clearSelection drops the mark, if there is one.
+func (t *tui) clearSelection() {
+	t.mu.Lock()
+	had := t.sel != nil
+	t.sel = nil
+	if had {
+		t.dirty = true
+	}
+	t.mu.Unlock()
+	if had {
+		t.wakeUp()
+	}
+}
+
+// copyToClipboard puts text where the user's paste will find it.
+//
+// Both routes are used, because neither is right everywhere. A local tool owns
+// the clipboard of the desktop tend is running on, which over ssh is not the
+// one the user is looking at. The escape sequence reaches the terminal in
+// front of them wherever it is, but terminals cap its size and many refuse it
+// outright, and there is no reply to say which.
+//
+// So the message reports what is actually known: a tool that took the text can
+// be waited on and believed, and a sequence can only be said to have been sent.
+func (t *tui) copyToClipboard(text, what string) {
+	if seq := ui.SetClipboard(text); seq != "" {
+		_, _ = io.WriteString(os.Stdout, seq)
+	}
+
+	via, err := clipboard.Copy(text)
+	switch {
+	case err == nil && via != "":
+		t.setMessage(what+" · "+via, false)
+	case errors.Is(err, clipboard.ErrNoTool):
+		// Nothing local to hand it to, so the terminal is the only hope and
+		// there is no way to know whether it took it.
+		t.setMessage(what+" · terminal?", false)
+	default:
+		t.setMessage("copy failed: "+err.Error(), true)
+	}
+}
+
+// copiedMessage says how much was taken, since the mark is about to be redrawn
+// and the user has nothing else to go on.
+func copiedMessage(text string, block bool) string {
+	lines := 1
+	for _, r := range text {
+		if r == '\n' {
+			lines++
+		}
+	}
+	what := itoaInt(len([]rune(text))) + " characters"
+	if lines > 1 {
+		what = itoaInt(lines) + " lines"
+	}
+	if block {
+		what += " (block)"
+	}
+	return "copied " + what
+}
+
+// paneCopied handles a pane's own program asking for text to be copied.
+//
+// This is how copying works in a pane that holds the mouse: the program did
+// the selecting and this is it handing over the result. It arrives on the
+// client's reader goroutine, and a clipboard tool is a process that can take
+// a moment, so the work is moved off it.
+func (t *tui) paneCopied(text []byte) {
+	if len(text) == 0 {
+		return
+	}
+	go t.copyToClipboard(string(text), copiedMessage(string(text), false))
+}
+
+// paneCellLocked turns a screen point into a cell of a pane, if it is in one.
+func (t *tui) paneCellLocked(pane uint64, x, y int) (int, int, bool) {
+	for _, r := range t.paneRects() {
+		if r.Pane != pane {
+			continue
+		}
+		cx, cy := x-r.X-1, y-r.Y-1
+		if cx < 0 || cy < 0 || cx >= r.Cols-2 || cy >= r.Rows-2 {
+			return 0, 0, false
+		}
+		return cx, cy, true
+	}
+	return 0, 0, false
+}
+
+// clampToPaneLocked turns a screen point into the nearest cell of a pane.
+func (t *tui) clampToPaneLocked(pane uint64, x, y int) (int, int) {
+	for _, r := range t.paneRects() {
+		if r.Pane != pane {
+			continue
+		}
+		return min(max(x-r.X-1, 0), max(r.Cols-3, 0)),
+			min(max(y-r.Y-1, 0), max(r.Rows-3, 0))
+	}
+	return 0, 0
+}
+
+// selectionScrollLocked is how far back the pane is being read, so a selection
+// made in the scrollback keeps covering the same text.
+func (t *tui) selectionScrollLocked(pane uint64) int {
+	if t.scrollPane == pane {
+		return t.scrollOffset
+	}
+	return 0
 }
 
 // edgeDirectionLocked reports which way the view should move for a pointer at
@@ -350,8 +261,7 @@ func (t *tui) endSelection() bool {
 // The edge is the first and last line of text, not the border around them.
 // Dragging up through the text stops at the topmost line, because that is
 // where the text stops; a trigger one row further out is a single cell of
-// border that nobody aims at, and the first version of this had exactly that
-// and so never fired in ordinary use.
+// border that nobody aims at.
 func (t *tui) edgeDirectionLocked(pane uint64, y int) int {
 	for _, r := range t.paneRects() {
 		if r.Pane != pane {
@@ -393,137 +303,97 @@ func (t *tui) autoScrollSelection() error {
 	}
 
 	t.mu.Lock()
-	moved := t.selectionScrollLocked(pane) - before
-	native := t.sel != nil && t.sel.Native
-	t.mu.Unlock()
-
-	if moved == 0 && native {
-		// Nothing to scroll to, because a full-screen program keeps no
-		// scrollback here: its earlier output never reached this terminal,
-		// and it redraws its window from its own memory. The wheel goes to it
-		// instead, so its view moves even though tend's cannot.
-		return t.wheelTo(pane, dir)
-	}
-
-	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.sel == nil {
 		return nil
 	}
 	// The anchor follows the text and the cursor does not. The anchor marks
 	// where the drag began, which has just moved down the screen; the cursor
-	// marks where the pointer is, and the pointer has not moved. That is the
-	// whole of the behaviour: holding against the edge sweeps the far end
-	// backwards through text the view is only now showing.
+	// marks where the pointer is, and the pointer has not moved. Holding
+	// against the edge sweeps the far end through text the view is only now
+	// showing.
+	moved := t.selectionScrollLocked(pane) - before
 	if moved == 0 {
-		// Nothing left to scroll, so there is nothing more to take.
 		return nil
 	}
 	t.sel.AnchorY += moved
 	t.sel.Scroll = t.selectionScrollLocked(pane)
-	// This move has been accounted for, so the picture the repaint detector
-	// compares against is replaced with the one it produced. Otherwise it
-	// sees tend's own scrolling as the program having moved its text, and
-	// shifts the selection a second time for the same line.
-	t.lastPicture = ui.ScreenLines(t.screenFor(pane))
-	t.prevPicture = t.lastPicture
 	t.dirty = true
 	return nil
 }
 
-// clearSelection drops the mark, if there is one.
-func (t *tui) clearSelection() {
+// --- the mouse, for a program that asked for it ------------------------------
+
+// forwardMouse hands a mouse report to a pane's own program, rewritten into
+// that pane's coordinates. It reports whether the pane wanted it.
+//
+// clamp pulls a point outside the pane to its nearest cell instead of dropping
+// it: a drag that began inside belongs to the program until the button comes
+// up, wherever the pointer wanders in between.
+func (t *tui) forwardMouse(pane uint64, ev ui.MouseEvent, clamp bool) (bool, error) {
 	t.mu.Lock()
-	had := t.sel != nil
-	t.sel = nil
-	if had {
-		t.dirty = true
+	var info proto.PaneInfo
+	for _, p := range t.snap.Panes {
+		if p.ID == pane {
+			info = p
+		}
+	}
+	x, y, inside := t.paneCellLocked(pane, ev.X, ev.Y)
+	if !inside && clamp {
+		x, y = t.clampToPaneLocked(pane, ev.X, ev.Y)
+		inside = true
 	}
 	t.mu.Unlock()
-	if had {
-		t.wakeUp()
+
+	if !info.Mouse || !inside {
+		return false, nil
 	}
+	// Only what it subscribed to. A program that asked for clicks alone has
+	// no code for a drag report, and what it does with one is its own
+	// business and nobody's idea of correct.
+	if ev.Kind == ui.MouseDrag && !info.MouseDrag {
+		return true, nil
+	}
+	if ev.Kind == ui.MouseMove && !info.MouseMotion {
+		return true, nil
+	}
+
+	seq := ui.EncodeMouse(ev, x, y, info.MouseSGR)
+	if seq == nil {
+		return true, nil
+	}
+	return true, t.client.SendInput(pane, seq)
 }
 
-// copyToClipboard puts text where the user's paste will find it.
+// beginGesture gives a press to the pane's program and remembers that the rest
+// of the gesture is its too.
+func (t *tui) beginGesture(pane uint64, ev ui.MouseEvent) (bool, error) {
+	took, err := t.forwardMouse(pane, ev, false)
+	if !took || err != nil {
+		return took, err
+	}
+	t.mu.Lock()
+	t.gesture = pane
+	t.mu.Unlock()
+	return true, nil
+}
+
+// continueGesture passes a drag or a release on to the pane that was given the
+// press, and reports whether there was one.
 //
-// Both routes are used, because neither is right everywhere. A local tool owns
-// the clipboard of the desktop tend is running on, which over ssh is not the
-// one the user is looking at. The escape sequence reaches the terminal in
-// front of them wherever it is, but terminals cap its size and many refuse it
-// outright, and there is no reply to say which.
-//
-// So the message reports what is actually known: a tool that took the text can
-// be waited on and believed, and a sequence can only be said to have been sent.
-func (t *tui) copyToClipboard(text string, block bool) {
-	if seq := ui.SetClipboard(text); seq != "" {
-		_, _ = io.WriteString(os.Stdout, seq)
+// Bound to the pane rather than to wherever the pointer is: a drag that leaves
+// the pane is still that program's drag, and a release it never hears about
+// leaves it believing a button is held for the rest of the session.
+func (t *tui) continueGesture(ev ui.MouseEvent) (bool, error) {
+	t.mu.Lock()
+	pane := t.gesture
+	if ev.Kind == ui.MouseRelease {
+		t.gesture = 0
 	}
-
-	via, err := clipboard.Copy(text)
-	switch {
-	case err == nil && via != "":
-		t.setMessage(copiedMessage(text, via, block), false)
-	case errors.Is(err, clipboard.ErrNoTool):
-		// Nothing local to hand it to, so the terminal is the only hope and
-		// there is no way to know whether it took it.
-		t.setMessage(copiedMessage(text, "terminal", block)+"?", false)
-	default:
-		t.setMessage("copy failed: "+err.Error(), true)
+	t.mu.Unlock()
+	if pane == 0 {
+		return false, nil
 	}
-}
-
-// copiedMessage says how much was taken and where it went, since the mark is
-// about to be redrawn and the user has nothing else to go on.
-func copiedMessage(text, via string, block bool) string {
-	lines := 1
-	for _, r := range text {
-		if r == '\n' {
-			lines++
-		}
-	}
-	what := itoaInt(len([]rune(text))) + " characters"
-	if lines > 1 {
-		what = itoaInt(lines) + " lines"
-	}
-	if block {
-		what += " (block)"
-	}
-	return "copied " + what + " · " + via
-}
-
-// paneCellLocked turns a screen point into a cell of a pane, if it is in one.
-func (t *tui) paneCellLocked(pane uint64, x, y int) (int, int, bool) {
-	for _, r := range t.paneRects() {
-		if r.Pane != pane {
-			continue
-		}
-		cx, cy := x-r.X-1, y-r.Y-1
-		if cx < 0 || cy < 0 || cx >= r.Cols-2 || cy >= r.Rows-2 {
-			return 0, 0, false
-		}
-		return cx, cy, true
-	}
-	return 0, 0, false
-}
-
-// clampToPaneLocked turns a screen point into the nearest cell of a pane.
-func (t *tui) clampToPaneLocked(pane uint64, x, y int) (int, int) {
-	for _, r := range t.paneRects() {
-		if r.Pane != pane {
-			continue
-		}
-		return min(max(x-r.X-1, 0), max(r.Cols-3, 0)),
-			min(max(y-r.Y-1, 0), max(r.Rows-3, 0))
-	}
-	return 0, 0
-}
-
-// selectionScrollLocked is how far back the pane is being read, so a selection
-// made in the scrollback keeps covering the same text.
-func (t *tui) selectionScrollLocked(pane uint64) int {
-	if t.scrollPane == pane {
-		return t.scrollOffset
-	}
-	return 0
+	_, err := t.forwardMouse(pane, ev, true)
+	return true, err
 }

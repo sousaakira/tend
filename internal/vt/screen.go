@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -75,6 +76,11 @@ type Screen struct {
 	OnTitle func(string)
 	// OnProgress is called when the OSC 9 progress report changes.
 	OnProgress func(string)
+	// OnClipboard is called when the program asks for text to be put on the
+	// clipboard. This is how a program that holds the mouse copies: it does
+	// its own selecting, over its own scrollback, and hands over the result.
+	// Dropping the request makes every such copy silently fail.
+	OnClipboard func([]byte)
 
 	cols, rows int
 
@@ -548,7 +554,29 @@ func (s *Screen) OSCDispatch(params [][]byte, _ bool) {
 		s.setTitle(string(params[1]))
 	case "9": // progress
 		s.setProgress(joinParams(params[1:]))
+	case "52": // clipboard
+		s.clipboardWrite(params[1:])
 	}
+}
+
+// clipboardWrite handles OSC 52, "put this on the clipboard".
+//
+// Only writes are honoured. The same sequence with "?" for a payload asks to
+// read the clipboard back, and answering that would let anything running in a
+// pane see whatever the user last copied anywhere.
+func (s *Screen) clipboardWrite(params [][]byte) {
+	if s.OnClipboard == nil || len(params) < 2 {
+		return
+	}
+	payload := params[len(params)-1]
+	if len(payload) == 0 || string(payload) == "?" {
+		return
+	}
+	text, err := base64.StdEncoding.DecodeString(string(payload))
+	if err != nil || len(text) == 0 {
+		return
+	}
+	s.OnClipboard(text)
 }
 
 // joinParams rebuilds an OSC payload minus its command number. Progress is

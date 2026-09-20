@@ -27,6 +27,10 @@ const (
 	EventPaneExited
 	// EventPaneClosed reports that a pane was removed from the session.
 	EventPaneClosed
+	// EventPaneClipboard reports that a pane's program asked for text to be
+	// put on the clipboard. The clipboard belongs to whoever is looking at
+	// the pane, so the request is passed on rather than acted on here.
+	EventPaneClipboard
 )
 
 func (k EventKind) String() string {
@@ -41,6 +45,8 @@ func (k EventKind) String() string {
 		return "pane-exited"
 	case EventPaneClosed:
 		return "pane-closed"
+	case EventPaneClipboard:
+		return "pane-clipboard"
 	default:
 		return "unknown"
 	}
@@ -57,6 +63,9 @@ type Event struct {
 
 	// Err is set on EventPaneExited when the process failed.
 	Err string
+
+	// Data is set on EventPaneClipboard: the text to be copied.
+	Data []byte
 }
 
 // Subscription is a stream of events.

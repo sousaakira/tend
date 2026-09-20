@@ -1532,105 +1532,48 @@ func TestSelectionBlockTakesOnlyTheColumns(t *testing.T) {
 	}
 }
 
-// lines makes a screenful from a starting number, which is what a transcript
-// scrolling past looks like.
-func numbered(from, n int) []string {
-	out := make([]string, n)
-	for i := range out {
-		out[i] = "line " + itoa(uint64(from+i)) + " of the transcript"
+// TestEncodeMouseSpeaksInThePanesCoordinates: the program believes it has a
+// terminal to itself whose top-left cell is 1,1. Handed the report as it
+// arrived, it sees every click displaced by the sidebar and the border.
+func TestEncodeMouseSpeaksInThePanesCoordinates(t *testing.T) {
+	press := MouseEvent{Kind: MousePress, Button: 0}
+	if got := string(EncodeMouse(press, 0, 0, true)); got != "\x1b[<0;1;1M" {
+		t.Errorf("top-left press = %q", got)
 	}
-	return out
-}
-
-// TestDetectShiftFindsHowFarTheTextMoved: a program that scrolls its own view
-// does not say so. It repaints, and the only evidence is that the same lines
-// are somewhere else.
-func TestDetectShiftFindsHowFarTheTextMoved(t *testing.T) {
-	before := numbered(10, 12)
-
-	// Scrolled up by three: what was at the top has moved down.
-	if shift, ok := DetectShift(before, numbered(7, 12)); !ok || shift != 3 {
-		t.Errorf("scrolled up = %d, %v; want 3", shift, ok)
+	release := MouseEvent{Kind: MouseRelease, Button: 0}
+	if got := string(EncodeMouse(release, 4, 2, true)); got != "\x1b[<0;5;3m" {
+		t.Errorf("release = %q", got)
 	}
-	// And down by two.
-	if shift, ok := DetectShift(before, numbered(12, 12)); !ok || shift != -2 {
-		t.Errorf("scrolled down = %d, %v; want -2", shift, ok)
+	drag := MouseEvent{Kind: MouseDrag, Button: 0, Mods: ModShift}
+	if got := string(EncodeMouse(drag, 9, 9, true)); got != "\x1b[<36;10;10M" {
+		t.Errorf("shift+drag = %q", got)
 	}
-	// Unmoved is not a shift.
-	if shift, ok := DetectShift(before, before); ok || shift != 0 {
-		t.Errorf("unmoved = %d, %v; want no shift", shift, ok)
+	if got := string(EncodeMouse(MouseEvent{Kind: MouseWheelUp}, 1, 1, true)); got != "\x1b[<64;2;2M" {
+		t.Errorf("wheel up = %q", got)
 	}
-}
-
-// TestDetectShiftRefusesWhatItCannotTell: reading a repaint as a scroll would
-// drag the selection somewhere the text never went, which is worse than
-// leaving it where it is.
-func TestDetectShiftRefusesWhatItCannotTell(t *testing.T) {
-	before := numbered(10, 12)
-
-	// A different view altogether.
-	other := make([]string, 12)
-	for i := range other {
-		other[i] = "something else entirely " + itoa(uint64(i))
-	}
-	if shift, ok := DetectShift(before, other); ok {
-		t.Errorf("a new view read as a shift of %d", shift)
+	if got := string(EncodeMouse(MouseEvent{Kind: MouseWheelDown}, 1, 1, true)); got != "\x1b[<65;2;2M" {
+		t.Errorf("wheel down = %q", got)
 	}
 
-	// Blank screens match themselves at every offset.
-	blank := make([]string, 12)
-	if _, ok := DetectShift(blank, blank); ok {
-		t.Error("blank screens should say nothing")
+	// What goes out reads back as what went in.
+	back, n, _ := parseMouse(EncodeMouse(drag, 9, 9, true))
+	if n == 0 || back.Kind != MouseDrag || back.X != 9 || back.Y != 9 || !back.Mods.Has(ModShift) {
+		t.Errorf("round trip = %+v", back)
 	}
 
-	// So do screens of one repeated line.
-	same := make([]string, 12)
-	for i := range same {
-		same[i] = "the same line over and over"
+	// The legacy encoding, for a program that never asked for the newer one.
+	if got := EncodeMouse(press, 0, 0, false); string(got) != "\x1b[M\x20\x21\x21" {
+		t.Errorf("legacy press = %q", got)
 	}
-	if shift, ok := DetectShift(same, same); ok {
-		t.Errorf("a repeated line read as a shift of %d", shift)
+	if got := EncodeMouse(release, 0, 0, false); got[3] != 32+3 {
+		t.Errorf("legacy release should say button 3, got %d", got[3]-32)
 	}
-
-	// Further than a wheel notch reaches is a repaint, not a scroll.
-	if shift, ok := DetectShift(before, numbered(10+ShiftRows+4, 12)); ok {
-		t.Errorf("a jump read as a shift of %d", shift)
+	// It cannot describe a cell past 223, and is dropped rather than sent
+	// somewhere else.
+	if got := EncodeMouse(press, 300, 0, false); got != nil {
+		t.Errorf("an unencodable position should be dropped, got %q", got)
 	}
-
-	// Mismatched sizes say nothing rather than guessing.
-	if _, ok := DetectShift(before, before[:5]); ok {
-		t.Error("a resized screen should say nothing")
-	}
-	if _, ok := DetectShift(nil, nil); ok {
-		t.Error("nothing should say nothing")
-	}
-}
-
-// TestDetectShiftPrefersStayingPut is the bug this had: staying put was left
-// out of the candidates, so a screen that had not scrolled still got whichever
-// offset happened to line up best. Three coincidental matches are easy, and a
-// program that animates repaints constantly — the selection walked a little
-// further off with every frame until it marked nothing at all.
-func TestDetectShiftPrefersStayingPut(t *testing.T) {
-	// A screen with a spinner on it: one line changes, the rest do not.
-	before := numbered(10, 12)
-	after := append([]string{}, before...)
-	after[0] = "working ⠋"
-
-	if shift, ok := DetectShift(before, after); ok {
-		t.Errorf("an animated line read as a shift of %d", shift)
-	}
-
-	// Two lines changing is still not a scroll.
-	after[11] = "working ⠙ still"
-	if shift, ok := DetectShift(before, after); ok {
-		t.Errorf("two changed lines read as a shift of %d", shift)
-	}
-
-	// A real scroll under the same animation is still found.
-	scrolled := numbered(7, 12)
-	scrolled[0] = "working ⠹"
-	if shift, ok := DetectShift(before, scrolled); !ok || shift != 3 {
-		t.Errorf("a scroll with a spinner on it = %d, %v; want 3", shift, ok)
+	if got := EncodeMouse(press, -1, 0, true); got != nil {
+		t.Errorf("a position outside the pane should be dropped, got %q", got)
 	}
 }

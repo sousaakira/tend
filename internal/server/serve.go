@@ -228,6 +228,9 @@ func (c *clientConn) forward(ev Event) error {
 		out.Err = ev.Err
 	case EventPaneClosed:
 		out.Kind = proto.EventPaneClosed
+	case EventPaneClipboard:
+		out.Kind = proto.EventPaneClipboard
+		out.Data = ev.Data
 	default:
 		// An event kind this build does not map is dropped rather than sent
 		// half-formed, so a client never sees a message it cannot interpret.
@@ -604,6 +607,9 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Panes[i].ExitErr = st.ExitErr
 		snap.Panes[i].Rule = st.Rule
 		snap.Panes[i].Mouse = st.Mouse
+		snap.Panes[i].MouseDrag = st.MouseDrag
+		snap.Panes[i].MouseMotion = st.MouseMotion
+		snap.Panes[i].MouseSGR = st.MouseSGR
 		if st.Title != "" {
 			snap.Panes[i].Title = st.Title
 		}

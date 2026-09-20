@@ -126,22 +126,12 @@ type tui struct {
 	// sel is text being marked in a pane, or nil. It belongs to this client:
 	// what one person has selected is not part of the session.
 	sel *ui.Selection
-	// press is a press in a mouse-reporting pane that has not yet turned out
-	// to be either a click or the start of a drag.
-	press *pendingPress
+	// gesture is the pane whose program was given a press, and so is owed the
+	// drags and the release that follow it.
+	gesture uint64
 	// autoScroll is which way the view moves while a drag is held against an
 	// edge: -1 back through the history, 1 towards the present.
 	autoScroll int
-	// lastWheel paces the notches handed to a pane that keeps its own
-	// scrollback, which would otherwise get one per frame.
-	lastWheel time.Time
-	// lastPicture is the pane's visible text as it was on the previous frame,
-	// kept only while a selection is being dragged in a pane that repaints
-	// itself. Comparing it with the next frame is how far the text moved.
-	lastPicture []string
-	// prevPicture is the frame before that, used only to tell a screen that
-	// has stopped changing from one caught mid-repaint.
-	prevPicture []string
 	// spacesScroll and agentsScroll are how far each list is scrolled, in
 	// entries. Separate because the lists are: one filling up must not push
 	// the other out of sight, which is the whole reason they are divided.
@@ -262,7 +252,6 @@ func (t *tui) run() error {
 			// A push arrived; the ticker decides when it becomes a frame.
 
 		case <-ticker.C:
-			t.followRepaint()
 			if err := t.autoScrollSelection(); err != nil {
 				t.setMessage(err.Error(), true)
 			}
@@ -537,6 +526,8 @@ func (t *tui) Event(ev proto.Event) {
 				t.setMessage(err.Error(), true)
 			}
 		}()
+	case proto.EventPaneClipboard:
+		t.paneCopied(ev.Data)
 	case proto.EventPaneState:
 		// A pane's agent and its state live in the session, not in the bytes
 		// the pane produced, so redrawing from what the client already has

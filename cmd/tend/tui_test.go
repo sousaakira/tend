@@ -2029,46 +2029,6 @@ func TestAttachSelectsTextWithTheMouse(t *testing.T) {
 	})
 }
 
-// TestAttachSelectsInsideAProgramThatWantsTheMouse: an agent asks for the
-// mouse, which is most of the panes worth copying out of. A press cannot be
-// told from the start of a drag, so nothing is decided until the pointer
-// moves: moving makes it a selection, releasing without moving leaves it the
-// click the program already had.
-func TestAttachSelectsInsideAProgramThatWantsTheMouse(t *testing.T) {
-	a := startSession(t, 100, 16)
-	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-
-	mouser := fakeAgentBin(t, "mouser", "printf '\033[?1002h\033[?1006h'; printf 'alpha bravo charlie\n'; cat")
-	a.sendUntil(t, mouser+"\n", "the program", func(s string) bool {
-		return strings.Contains(s, "alpha bravo charlie")
-	})
-	time.Sleep(500 * time.Millisecond)
-	row := a.lineContaining(t, "alpha bravo charlie")
-	col := columnOfString(a.lines()[row-1], "alpha") + 1
-
-	// A drag selects, with no modifier held.
-	a.dragFromTo(t, 0, col, row, col+10, row)
-	a.waitForScreen(t, "the mark", func(string) bool {
-		return strings.Contains(a.reversedOn(row-1), "alpha bravo")
-	})
-	a.waitForScreen(t, "the copy", func(s string) bool {
-		return strings.Contains(s, "copied 11 characters")
-	})
-
-	// The program is not left holding a button: it saw the press and then a
-	// release, so its own state machine is back where it started.
-	a.waitForScreen(t, "the program to be let go", func(s string) bool {
-		return strings.Contains(s, "[<0;") && strings.Contains(s, "m")
-	})
-
-	// A click still reaches it whole.
-	before := strings.Count(a.text(), "[<0;")
-	a.clickAt(t, col+2, row)
-	a.waitForScreen(t, "the click to arrive", func(string) bool {
-		return strings.Count(a.text(), "[<0;") > before+1
-	})
-}
-
 // TestAttachSelectsARectangle: an agent draws its own panels, so a run
 // spanning three lines takes the whole width of the middle one and everything
 // beside it. Alt takes the columns instead, which is the convention every
@@ -2273,155 +2233,6 @@ func TestAttachScrollsFromTheEdgeOfTheText(t *testing.T) {
 	})
 }
 
-// TestAttachHandsTheWheelToAProgramWithItsOwnHistory: a full-screen program
-// keeps no scrollback here — its earlier output never reached this terminal,
-// and it redraws its window from its own memory. There is nowhere for tend to
-// scroll to, so the wheel goes to the program instead.
-func TestAttachHandsTheWheelToAProgramWithItsOwnHistory(t *testing.T) {
-	a := startSession(t, 100, 14)
-	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-
-	prog := fakeAgentBin(t, "fullscreen",
-		"printf '\\033[?1049h\\033[?1002h\\033[?1006h'; printf 'ALT-TOP\\n'; cat")
-	a.sendUntil(t, prog+"\n", "the program", func(s string) bool {
-		return strings.Contains(s, "ALT-TOP")
-	})
-	time.Sleep(400 * time.Millisecond)
-
-	border := -1
-	for i, line := range a.lines() {
-		if strings.Contains(line, "┌") {
-			border = i
-			break
-		}
-	}
-	row := a.lineContaining(t, "ALT-TOP")
-	col := columnOfString(a.lines()[row-1], "ALT-TOP") + 1
-
-	a.send(t, "\x1b[<0;"+itoa(col+4)+";"+itoa(row+2)+"M")
-	time.Sleep(120 * time.Millisecond)
-	a.send(t, "\x1b[<32;"+itoa(col)+";"+itoa(border+2)+"M")
-
-	a.waitForScreen(t, "the program to be handed the wheel", func(s string) bool {
-		return strings.Contains(s, "[<64;")
-	})
-	time.Sleep(700 * time.Millisecond)
-	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(border+2)+"m")
-
-	// Paced, not one per frame: a program on the other end would otherwise
-	// fling its view across the whole transcript.
-	if n := strings.Count(a.text(), "[<64;"); n > 20 {
-		t.Errorf("%d wheel notches in under a second; they should be paced", n)
-	}
-	// And tend does not pretend to have scrolled something it cannot.
-	if strings.Contains(a.text(), "scroll ") {
-		t.Errorf("a pane with no scrollback should not show a scroll offset:\n%s", a.text())
-	}
-}
-
-// TestAttachKeepsTheSelectionOnTheTextWhenAProgramRepaints: a program that
-// scrolls its own view does not say so — it repaints, and the only evidence
-// is that the same lines are somewhere else. A selection that ignores that
-// marks whatever lands under it, which is not what was dragged over.
-func TestAttachKeepsTheSelectionOnTheTextWhenAProgramRepaints(t *testing.T) {
-	a := startSession(t, 100, 14)
-	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-
-	// A full-screen program that scrolls itself, so the repaint is the only
-	// thing under test and no input path is involved.
-	prog := fakeAgentBin(t, "ticker", `
-printf '\033[?1049h\033[?1002h\033[?1006h'
-top=60
-while [ $top -gt 2 ]; do
-  printf '\033[H'
-  i=$top
-  while [ $i -lt $((top+11)) ]; do printf '\033[K TEXT-%03d\n' $i; i=$((i+1)); done
-  sleep 0.4
-  top=$((top-2))
-done
-sleep 30
-`)
-	a.send(t, prog+"\n")
-	a.waitForScreen(t, "the program", func(s string) bool {
-		return strings.Contains(s, "TEXT-06")
-	})
-	time.Sleep(300 * time.Millisecond)
-
-	// Anchor on a named line, drag sideways only, and hold while it scrolls.
-	anchor := a.lineContaining(t, "TEXT-0")
-	parts := strings.Split(a.lines()[anchor-1], "│")
-	want := strings.TrimSpace(parts[len(parts)-2])
-	col := columnOfString(a.lines()[anchor-1], "TEXT") + 1
-
-	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(anchor)+"M")
-	time.Sleep(100 * time.Millisecond)
-	a.send(t, "\x1b[<32;"+itoa(col+7)+";"+itoa(anchor)+"M")
-	time.Sleep(700 * time.Millisecond) // long enough to repaint, short enough
-	a.send(t, "\x1b[<0;"+itoa(col+7)+";"+itoa(anchor)+"m")
-
-	a.waitForScreen(t, "the copy", func(s string) bool {
-		return strings.Contains(s, "copied ")
-	})
-	// The text has moved down the screen by now; the selection should have
-	// moved with it rather than staying on the row.
-	if !strings.Contains(a.text(), want) {
-		t.Skipf("%q scrolled out of the window before the copy", want)
-	}
-	if got := a.reversedOn(anchor - 1); strings.Contains(got, want) {
-		t.Errorf("the mark stayed on row %d: it should have followed the text", anchor)
-	}
-}
-
-// TestAttachHoldsASelectionStillUnderAnimation is the bug that produced a
-// clipboard full of blank lines: staying put was left out of the candidate
-// shifts, so a screen that had not scrolled still got whichever offset lined
-// up best. A program with a spinner repaints constantly, and the selection
-// walked a little further off with every frame until it was past the bottom
-// of the screen marking nothing.
-func TestAttachHoldsASelectionStillUnderAnimation(t *testing.T) {
-	a := startSession(t, 100, 14)
-	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-
-	// Fixed content with one line changing ten times a second.
-	prog := fakeAgentBin(t, "spinner", `
-printf '\033[?1049h\033[?1002h\033[?1006h'
-printf '\033[H'
-i=1
-while [ $i -lt 11 ]; do printf '\033[K CONTENT-%02d\n' $i; i=$((i+1)); done
-n=0
-while true; do
-  printf '\033[1;1H\033[K working %d' $n
-  n=$((n+1))
-  sleep 0.1
-done
-`)
-	a.send(t, prog+"\n")
-	a.waitForScreen(t, "the program", func(s string) bool {
-		return strings.Contains(s, "CONTENT-05")
-	})
-	time.Sleep(400 * time.Millisecond)
-
-	row := a.lineContaining(t, "CONTENT-05")
-	col := columnOfString(a.lines()[row-1], "CONTENT") + 1
-
-	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(row)+"M")
-	time.Sleep(100 * time.Millisecond)
-	a.send(t, "\x1b[<32;"+itoa(col+9)+";"+itoa(row)+"M")
-	time.Sleep(1500 * time.Millisecond) // fifteen or so repaints
-	a.send(t, "\x1b[<0;"+itoa(col+9)+";"+itoa(row)+"m")
-
-	a.waitForScreen(t, "the copy", func(s string) bool {
-		return strings.Contains(s, "copied ")
-	})
-	// Still on the line it was put on, and still marking it.
-	if got := strings.TrimSpace(a.reversedOn(row - 1)); got != "CONTENT-05" {
-		t.Errorf("the mark drifted to %q; it should have stayed on CONTENT-05", got)
-	}
-	if strings.Contains(a.text(), "nothing to copy") {
-		t.Errorf("the selection ended up on nothing:\n%s", a.text())
-	}
-}
-
 // TestAttachRefusesToCopyBlankness: saying "copied" for a selection of blank
 // lines is worse than saying nothing, because the user pastes and finds the
 // last real thing they copied replaced by empty lines.
@@ -2442,58 +2253,6 @@ func TestAttachRefusesToCopyBlankness(t *testing.T) {
 	})
 	if strings.Contains(a.text(), "copied ") {
 		t.Errorf("blank lines should not be reported as copied:\n%s", a.text())
-	}
-}
-
-// TestAttachKeepsTheMarkOnScreenWhenTextScrollsAway: a pane holding its own
-// scrollback has no text outside the window, so following a scroll past the
-// edge walks the selection onto rows that hold nothing. Clamping it there
-// collapses both ends onto the same blank line, which is how a copy came back
-// empty. The mark stays on the part still showing instead.
-func TestAttachKeepsTheMarkOnScreenWhenTextScrollsAway(t *testing.T) {
-	a := startSession(t, 100, 14)
-	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-
-	prog := fakeAgentBin(t, "fast", `
-printf '\033[?1049h\033[?1002h\033[?1006h'
-top=1
-while true; do
-  printf '\033[H'
-  i=$top
-  while [ $i -lt $((top+11)) ]; do printf '\033[K TEXT-%03d\n' $i; i=$((i+1)); done
-  top=$((top+2))
-  sleep 0.2
-done
-`)
-	a.send(t, prog+"\n")
-	a.waitForScreen(t, "the program", func(s string) bool {
-		return strings.Contains(s, "TEXT-0")
-	})
-	time.Sleep(300 * time.Millisecond)
-
-	row := a.lineContaining(t, "TEXT-0")
-	col := columnOfString(a.lines()[row-1], "TEXT") + 1
-
-	a.send(t, "\x1b[<0;"+itoa(col)+";"+itoa(row)+"M")
-	time.Sleep(100 * time.Millisecond)
-	a.send(t, "\x1b[<32;"+itoa(col+8)+";"+itoa(row)+"M")
-	time.Sleep(2000 * time.Millisecond) // the marked text scrolls well away
-	a.send(t, "\x1b[<0;"+itoa(col+8)+";"+itoa(row)+"m")
-
-	a.waitForScreen(t, "the copy", func(s string) bool {
-		return strings.Contains(s, "copied ") || strings.Contains(s, "nothing to copy")
-	})
-	if strings.Contains(a.text(), "nothing to copy") {
-		t.Errorf("the selection collapsed onto blankness:\n%s", a.text())
-	}
-	// And what it took is a line of the program's, not empty space. The exact
-	// count is not the point and would only pin the test to the fixture.
-	status := strings.TrimSpace(a.lines()[len(a.lines())-1])
-	if !strings.Contains(status, "copied ") {
-		t.Errorf("expected a marked line to be copied: %q", status)
-	}
-	if strings.Contains(status, "copied 0 ") {
-		t.Errorf("copied nothing: %q", status)
 	}
 }
 
@@ -2533,12 +2292,13 @@ done
 	}
 	row := a.lineContaining(t, "line 8")
 
-	// Drag to the top edge, hold, release.
-	a.send(t, "\x1b[<0;40;"+itoa(row)+"M")
+	// Drag to the top edge, hold, release — with the modifier, since a plain
+	// drag in a pane that holds the mouse belongs to its program.
+	a.send(t, "\x1b[<8;40;"+itoa(row)+"M")
 	time.Sleep(100 * time.Millisecond)
-	a.send(t, "\x1b[<32;40;"+itoa(border+2)+"M")
+	a.send(t, "\x1b[<40;40;"+itoa(border+2)+"M")
 	time.Sleep(700 * time.Millisecond)
-	a.send(t, "\x1b[<0;40;"+itoa(border+2)+"m")
+	a.send(t, "\x1b[<8;40;"+itoa(border+2)+"m")
 	time.Sleep(300 * time.Millisecond)
 
 	// The pane must still be showing the program as it runs.
@@ -2565,4 +2325,103 @@ func frameNumber(screen string) int {
 		n = n*10 + int(r-'0')
 	}
 	return n
+}
+
+// TestAttachGivesTheMouseToAProgramInItsOwnCoordinates: the program believes
+// it has a terminal to itself whose top-left cell is 1,1. Handed the report as
+// it arrived, it sees every click displaced by the sidebar and the border, and
+// without the drags in between a press and a release it can select nothing.
+func TestAttachGivesTheMouseToAProgramInItsOwnCoordinates(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Asks for the mouse and prints whatever it is sent.
+	prog := fakeAgentBin(t, "mouser", "printf '\\033[?1002h\\033[?1006h'; printf 'READY\\n'; cat")
+	a.sendUntil(t, prog+"\n", "the program", func(s string) bool {
+		return strings.Contains(s, "READY")
+	})
+	time.Sleep(400 * time.Millisecond)
+
+	// The pane's first cell of text, on the screen, counted from one.
+	row := a.lineContaining(t, "READY")
+	col := columnOfString(a.lines()[row-1], "READY") + 1
+
+	// Press on it, drag four cells right and two down, release.
+	a.dragFromTo(t, 0, col, row, col+4, row+2)
+
+	// Where READY is in the pane's own terms: rows counted from the line
+	// under the border, columns from the cell inside it.
+	border := -1
+	for i, line := range a.lines() {
+		if strings.Contains(line, "┌") {
+			border = i
+			break
+		}
+	}
+	paneRow := (row - 1) - border
+	press := "[<0;1;" + itoa(paneRow) + "M"
+	drag := "[<32;5;" + itoa(paneRow+2) + "M"
+	release := "[<0;5;" + itoa(paneRow+2) + "m"
+
+	a.waitForScreen(t, "the whole gesture, translated", func(s string) bool {
+		return strings.Contains(s, press) && strings.Contains(s, drag) && strings.Contains(s, release)
+	})
+	// And tend did not select over the top of it.
+	if strings.Contains(a.text(), "copied ") || strings.Contains(a.text(), "nothing to copy") {
+		t.Errorf("a plain drag here belongs to the program:\n%s", a.text())
+	}
+}
+
+// TestAttachCopiesWhatAProgramAsksToHaveCopied is how copying works in a pane
+// that holds the mouse: the program does its own selecting, over its own
+// scrollback, and hands the result over with OSC 52. Dropping that made every
+// such copy fail without a word, which is what sent this client off trying to
+// do the program's selecting for it.
+func TestAttachCopiesWhatAProgramAsksToHaveCopied(t *testing.T) {
+	if _, err := exec.LookPath("xclip"); err != nil {
+		t.Skip("xclip is not installed")
+	}
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// "copied by the program", as a program would send it.
+	a.sendUntil(t, "printf '\\033]52;c;Y29waWVkIGJ5IHRoZSBwcm9ncmFt\\007'; echo SENT\n", "the write", func(s string) bool {
+		return strings.Contains(s, "SENT")
+	})
+	a.waitForScreen(t, "the copy to be reported", func(s string) bool {
+		return strings.Contains(s, "copied 21 characters")
+	})
+
+	out, err := exec.Command("xclip", "-selection", "clipboard", "-o").Output()
+	if err != nil {
+		t.Skipf("reading the clipboard back: %v", err)
+	}
+	if got := string(out); got != "copied by the program" {
+		t.Errorf("clipboard = %q", got)
+	}
+}
+
+// TestAttachForcesItsOwnSelectionWithTheModifier: for a program that holds the
+// mouse and does nothing useful with a drag, the modifier takes it back.
+func TestAttachForcesItsOwnSelectionWithTheModifier(t *testing.T) {
+	a := startSession(t, 100, 16)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	prog := fakeAgentBin(t, "mouser", "printf '\\033[?1002h\\033[?1006h'; printf 'alpha bravo charlie\\n'; cat")
+	a.sendUntil(t, prog+"\n", "the program", func(s string) bool {
+		return strings.Contains(s, "alpha bravo charlie")
+	})
+	time.Sleep(400 * time.Millisecond)
+	row := a.lineContaining(t, "alpha bravo charlie")
+	col := columnOfString(a.lines()[row-1], "alpha") + 1
+
+	const alt = 8
+	a.dragFromTo(t, alt, col, row, col+10, row)
+	a.waitForScreen(t, "the copy", func(s string) bool {
+		return strings.Contains(s, "copied 11 characters")
+	})
+	// The program heard none of it.
+	if strings.Contains(a.text(), "[<") {
+		t.Errorf("a forced selection should not reach the program:\n%s", a.text())
+	}
 }

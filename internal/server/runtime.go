@@ -48,8 +48,11 @@ type paneRuntime struct {
 	// client holding a stale answer sends the wheel to the wrong place.
 	mouse   bool
 	running bool
-	closing bool
-	exitErr string
+	// clipboard holds copies the program asked for that have not been passed
+	// on yet.
+	clipboard [][]byte
+	closing   bool
+	exitErr   string
 }
 
 func newPaneRuntime(
@@ -76,15 +79,24 @@ func newPaneRuntime(
 	// runtime's lock. Recording it here and letting the detection loop apply
 	// it keeps that callback from reaching for the session lock.
 	rt.screen.OnTitle = func(title string) { rt.title = title }
+	// Same arrangement for a clipboard write: recorded under this lock, and
+	// carried out to subscribers by the reader once the write returns.
+	rt.screen.OnClipboard = func(text []byte) {
+		rt.clipboard = append(rt.clipboard, append([]byte(nil), text...))
+	}
 	return rt
 }
 
-// write feeds terminal output to the screen.
-func (rt *paneRuntime) write(b []byte) {
+// write feeds terminal output to the screen, and returns any clipboard writes
+// the output contained.
+func (rt *paneRuntime) write(b []byte) [][]byte {
 	rt.mu.Lock()
+	defer rt.mu.Unlock()
 	_, _ = rt.screen.Write(b)
 	rt.dirty = true
-	rt.mu.Unlock()
+	copies := rt.clipboard
+	rt.clipboard = nil
+	return copies
 }
 
 // observation is what one poll of a pane found.
@@ -214,14 +226,18 @@ func (rt *paneRuntime) status() PaneStatus {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 
+	modes := rt.screen.Modes()
 	st := PaneStatus{
-		Mouse:   rt.screen.Modes().Mouse != vt.MouseOff,
-		ID:      rt.id,
-		Title:   rt.title,
-		Agent:   rt.agentID,
-		Running: rt.running,
-		ExitErr: rt.exitErr,
-		Pid:     rt.pty.Pid(),
+		Mouse:       modes.Mouse != vt.MouseOff,
+		MouseDrag:   modes.Mouse >= vt.MouseButtonEvent,
+		MouseMotion: modes.Mouse >= vt.MouseAnyEvent,
+		MouseSGR:    modes.MouseEncoding == vt.MouseEncodingSGR || modes.MouseEncoding == vt.MouseEncodingSGRPixels,
+		ID:          rt.id,
+		Title:       rt.title,
+		Agent:       rt.agentID,
+		Running:     rt.running,
+		ExitErr:     rt.exitErr,
+		Pid:         rt.pty.Pid(),
 	}
 	if rt.detector != nil {
 		st.State = rt.detector.State()

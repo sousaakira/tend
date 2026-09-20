@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 )
@@ -659,5 +660,39 @@ func BenchmarkScreenStyledOutput(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		s.Write(data)
+	}
+}
+
+// TestScreenClipboardWrite: a program that holds the mouse does its own
+// selecting and hands the result over with OSC 52. Dropping it makes every
+// such copy fail without a word.
+func TestScreenClipboardWrite(t *testing.T) {
+	s := NewScreen(40, 5, 0)
+	var got [][]byte
+	s.OnClipboard = func(b []byte) { got = append(got, append([]byte(nil), b...)) }
+
+	// "hello world", to the clipboard selection, terminated either way.
+	_, _ = s.Write([]byte("\x1b]52;c;aGVsbG8gd29ybGQ=\x07"))
+	_, _ = s.Write([]byte("\x1b]52;c;c2Vjb25k\x1b\\"))
+	if len(got) != 2 || string(got[0]) != "hello world" || string(got[1]) != "second" {
+		t.Fatalf("clipboard writes = %q", got)
+	}
+
+	// A read request is not answered: that would let anything running in a
+	// pane see whatever the user last copied anywhere.
+	got = nil
+	_, _ = s.Write([]byte("\x1b]52;c;?\x07"))
+	// Nor is rubbish, nor an empty payload.
+	_, _ = s.Write([]byte("\x1b]52;c;!!!not-base64!!!\x07"))
+	_, _ = s.Write([]byte("\x1b]52;c;\x07"))
+	if len(got) != 0 {
+		t.Errorf("these should all be ignored, got %q", got)
+	}
+
+	// A long copy survives: the limit is sized for this, not for titles.
+	long := strings.Repeat("a line of a long answer\n", 8000) // ~190KB
+	_, _ = s.Write([]byte("\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(long)) + "\x07"))
+	if len(got) != 1 || string(got[0]) != long {
+		t.Errorf("a long copy was dropped or damaged: %d writes", len(got))
 	}
 }
