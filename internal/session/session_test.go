@@ -685,3 +685,38 @@ func TestCloseWorkspace(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// TestGroupWorkspace: a group is only the set of workspaces naming it, so
+// creating one is naming it and the last member leaving removes it.
+func TestGroupWorkspace(t *testing.T) {
+	s := New()
+	a := s.AddWorkspace("a")
+	b := s.AddWorkspace("b")
+
+	if a.Group != "" {
+		t.Error("a workspace should start in no group")
+	}
+	for _, w := range []*Workspace{a, b} {
+		if err := s.GroupWorkspace(w.ID, "clients"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if a.Group != "clients" || b.Group != "clients" {
+		t.Errorf("groups = %q %q", a.Group, b.Group)
+	}
+
+	// Leaving is naming nothing.
+	if err := s.GroupWorkspace(a.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if a.Group != "" {
+		t.Errorf("a.Group = %q, want none", a.Group)
+	}
+
+	if err := s.GroupWorkspace(WorkspaceID(999), "x"); err == nil {
+		t.Error("grouping a workspace that does not exist should fail")
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Error(err)
+	}
+}

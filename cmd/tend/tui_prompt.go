@@ -12,6 +12,13 @@ const (
 	promptNone promptKind = iota
 	promptRenameTab
 	promptRenameSpace
+	// promptGroupSpace names the group a space belongs with. An empty answer
+	// takes it out of the one it is in, which is the only way to say that and
+	// the reason this prompt does not treat empty as cancelling.
+	promptGroupSpace
+	// promptRenameGroup renames a group, which means moving every space in it
+	// at once: a group is only the set of spaces naming it.
+	promptRenameGroup
 )
 
 // startPrompt opens the prompt, seeded with the current name.
@@ -37,10 +44,25 @@ func (t *tui) startPrompt(kind promptKind) {
 		if w, ok := t.workspaceLocked(); ok {
 			t.promptText = w.Name
 		}
+	case promptGroupSpace:
+		if w, ok := t.workspaceLocked(); ok {
+			t.promptText = w.Group
+		}
+	case promptRenameGroup:
+		t.promptText = t.promptGroup
 	}
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
+}
+
+// startGroupRename opens the rename prompt on a group rather than on whatever
+// space is being looked at.
+func (t *tui) startGroupRename(group string) {
+	t.mu.Lock()
+	t.promptGroup = group
+	t.mu.Unlock()
+	t.startPrompt(promptRenameGroup)
 }
 
 func (t *tui) prompting() bool {
@@ -111,15 +133,16 @@ func (t *tui) promptKeys(data []byte) (bool, error) {
 func (t *tui) commitPrompt() error {
 	t.mu.Lock()
 	kind, name := t.prompt, strings.TrimSpace(t.promptText)
-	tab, ws := t.tab, t.workspace
+	tab, ws, group := t.tab, t.workspace, t.promptGroup
 	t.prompt, t.promptText, t.promptPristine = promptNone, "", false
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
 
-	if name == "" {
+	if name == "" && kind != promptGroupSpace {
 		// An empty name would make the thing disappear from every list it is
-		// in, so it is treated as cancelling rather than as a name.
+		// in, so it is treated as cancelling rather than as a name. A group is
+		// the exception: emptying it is how a space leaves one.
 		return nil
 	}
 
@@ -138,6 +161,18 @@ func (t *tui) commitPrompt() error {
 		if err := t.client.RenameWorkspace(ws, name); err != nil {
 			return err
 		}
+	case promptGroupSpace:
+		if ws == 0 {
+			return nil
+		}
+		if err := t.client.GroupWorkspace(ws, name); err != nil {
+			return err
+		}
+	case promptRenameGroup:
+		if group == "" {
+			return nil
+		}
+		return t.renameGroup(group, name)
 	default:
 		return nil
 	}
@@ -151,6 +186,10 @@ func (t *tui) promptLabelLocked() string {
 		return "rename tab: "
 	case promptRenameSpace:
 		return "rename space: "
+	case promptGroupSpace:
+		return "group (empty to ungroup): "
+	case promptRenameGroup:
+		return "rename group: "
 	}
 	return ""
 }

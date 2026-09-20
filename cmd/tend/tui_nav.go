@@ -111,10 +111,19 @@ func (t *tui) switchWorkspace(forward bool) error {
 // It is named rather than left blank. An unnamed space shows as a dash in the
 // list and vanishes from the status bar, which makes the one thing the user
 // just created the hardest one to find.
-func (t *tui) newWorkspace() error {
+func (t *tui) newWorkspace() error { return t.newWorkspaceIn("") }
+
+// newWorkspaceIn creates a space already in a group, which is what "new space
+// here" on a group heading means.
+func (t *tui) newWorkspaceIn(group string) error {
 	ws, err := t.client.NewWorkspace(t.nextName("space", len(t.snapshotWorkspaces())))
 	if err != nil {
 		return err
+	}
+	if group != "" {
+		if err := t.client.GroupWorkspace(ws, group); err != nil {
+			return err
+		}
 	}
 	if _, _, err := t.client.NewTab(ws, t.nextName("tab", 0), proto.PaneSpec{Command: t.config.Shell()}); err != nil {
 		return err
@@ -262,18 +271,7 @@ func (t *tui) newTabHere() error {
 // would bury the one thing the sidebar is for.
 func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 	rows := []ui.SidebarRow{{Kind: ui.SidebarHeading, Label: "spaces"}}
-
-	for _, w := range t.snap.Workspaces {
-		rows = append(rows, ui.SidebarRow{
-			Kind:      ui.SidebarSpace,
-			Label:     orDash(w.Name),
-			Detail:    w.Branch,
-			Workspace: w.ID,
-			State:     t.spaceStateLocked(w),
-			Running:   true,
-			Active:    w.ID == t.workspace,
-		})
-	}
+	rows = append(rows, t.spaceRowsLocked()...)
 	rows = append(rows,
 		ui.SidebarRow{
 			Kind:           ui.SidebarAction,
@@ -298,6 +296,101 @@ func (t *tui) sidebarRowsLocked() []ui.SidebarRow {
 		Active:         t.grouped,
 	})
 	return append(rows, t.agentRowsLocked()...)
+}
+
+// spaceRowsLocked lays the spaces out as a tree.
+//
+// A group appears where its first member is, so the order on screen follows
+// the order of the session rather than sorting groups to one end: a user who
+// made a space expects to find it where they put it, not where an alphabet
+// puts it.
+func (t *tui) spaceRowsLocked() []ui.SidebarRow {
+	var rows []ui.SidebarRow
+	seen := make(map[string]bool)
+
+	for _, w := range t.snap.Workspaces {
+		if w.Group == "" {
+			rows = append(rows, t.spaceRowLocked(w, 0))
+			continue
+		}
+		if seen[w.Group] {
+			continue
+		}
+		seen[w.Group] = true
+
+		members := t.groupMembersLocked(w.Group)
+		folded := t.folded[w.Group]
+		rows = append(rows, ui.SidebarRow{
+			Kind:   ui.SidebarSpaceGroup,
+			Label:  w.Group,
+			Group:  w.Group,
+			Folded: folded,
+			Action: ui.ActionToggleGroup,
+			// A folded group still says what is happening inside it. Hiding
+			// that would make folding a way to stop being told an agent is
+			// waiting, which is the opposite of what folding is for.
+			Trailing: t.groupStateLabel(members),
+			Active:   t.inGroupLocked(w.Group),
+		})
+		if folded {
+			continue
+		}
+		for _, member := range members {
+			rows = append(rows, t.spaceRowLocked(member, 1))
+		}
+	}
+	return rows
+}
+
+// spaceRowLocked is one space, at the given depth.
+func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
+	return ui.SidebarRow{
+		Kind:      ui.SidebarSpace,
+		Label:     orDash(w.Name),
+		Detail:    w.Branch,
+		Group:     w.Group,
+		Depth:     depth,
+		Workspace: w.ID,
+		State:     t.spaceStateLocked(w),
+		Running:   true,
+		Active:    w.ID == t.workspace,
+	}
+}
+
+// groupMembersLocked returns a group's spaces in session order.
+func (t *tui) groupMembersLocked(group string) []proto.WorkspaceInfo {
+	var out []proto.WorkspaceInfo
+	for _, w := range t.snap.Workspaces {
+		if w.Group == group {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// inGroupLocked reports whether the space being looked at is in a group.
+func (t *tui) inGroupLocked(group string) bool {
+	for _, w := range t.snap.Workspaces {
+		if w.ID == t.workspace {
+			return w.Group == group
+		}
+	}
+	return false
+}
+
+// groupStateLabel is what a group heading says about its members: the number
+// of them that want attention, or nothing when none do.
+func (t *tui) groupStateLabel(members []proto.WorkspaceInfo) string {
+	blocked := 0
+	for _, w := range members {
+		if t.spaceStateLocked(w) == "blocked" {
+			blocked++
+		}
+	}
+	if blocked == 0 {
+		return ""
+	}
+	return itoaInt(blocked) + " waiting"
 }
 
 // agentRowsLocked lists what is running, flat or under its tab.
@@ -396,6 +489,9 @@ func (t *tui) spaceStateLocked(w proto.WorkspaceInfo) string {
 type navTarget struct {
 	pane      uint64
 	workspace uint64
+	// group is set for a group heading, which is a place the cursor stops so
+	// that a folded group can be opened without reaching for the mouse.
+	group string
 }
 
 // targetOf returns where a row goes, and whether it goes anywhere. Headings,
@@ -406,6 +502,8 @@ func targetOf(r ui.SidebarRow) (navTarget, bool) {
 		return navTarget{pane: r.Pane, workspace: r.Workspace}, true
 	case ui.SidebarSpace:
 		return navTarget{workspace: r.Workspace}, true
+	case ui.SidebarSpaceGroup:
+		return navTarget{group: r.Group}, true
 	}
 	return navTarget{}, false
 }
@@ -476,6 +574,15 @@ func (t *tui) navigate(delta int) {
 	t.dirty = true
 }
 
+// toggleGroup folds a group shut or open.
+func (t *tui) toggleGroup(group string) {
+	t.mu.Lock()
+	t.folded[group] = !t.folded[group]
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+}
+
 // enterNavigate opens the list and puts the cursor on the focused pane, so
 // moving from it is relative to where the user already is.
 func (t *tui) enterNavigate() {
@@ -528,6 +635,12 @@ func (t *tui) navigateKey(key string) (bool, error) {
 		}
 		if target.workspace != 0 {
 			return true, t.showWorkspace(target.workspace)
+		}
+		if target.group != "" {
+			// A group is not somewhere to go, so choosing it opens it. That
+			// is the only thing there is to do with a heading, and leaving it
+			// inert would make a folded group a dead end for the keyboard.
+			t.toggleGroup(target.group)
 		}
 		return true, nil
 	case "\x1b", "q", "\x03":

@@ -25,6 +25,8 @@ const (
 	MenuSplitDown  = "menu-split-down"
 	MenuZoom       = "menu-zoom"
 	MenuGoTo       = "menu-go-to"
+	MenuGroup      = "menu-group"
+	MenuFold       = "menu-fold"
 )
 
 // MenuItem is one line of a menu.
@@ -48,6 +50,9 @@ type Menu struct {
 	Pane      uint64
 	Tab       uint64
 	Workspace uint64
+	// Group names the group a group menu acts on, which has no identifier of
+	// its own because it has no record of its own.
+	Group string
 }
 
 // menuPadding is the space either side of a label inside the border.
@@ -167,9 +172,31 @@ func SpaceMenu(workspace uint64, x, y int) Menu {
 			{Label: "new space", Action: MenuNewSpace},
 			{Label: "new tab", Action: MenuNewTab},
 			{Label: "rename", Action: MenuRename},
+			{Label: "group...", Action: MenuGroup},
 			{Label: "close space", Action: MenuClose},
 		},
 		X: x, Y: y, Workspace: workspace,
+	}
+}
+
+// GroupMenu is what a right-click on a group heading offers.
+//
+// It acts on the group as a whole, which is the set of spaces naming it: there
+// is no group record to rename, so renaming one moves every member.
+func GroupMenu(group string, folded bool, x, y int) Menu {
+	fold := "fold"
+	if folded {
+		fold = "unfold"
+	}
+	return Menu{
+		Title: "group",
+		Items: []MenuItem{
+			{Label: fold, Action: MenuFold},
+			{Label: "new space here", Action: MenuNewSpace},
+			{Label: "rename group", Action: MenuRename},
+			{Label: "ungroup", Action: MenuClose},
+		},
+		X: x, Y: y, Group: group,
 	}
 }
 

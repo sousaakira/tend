@@ -924,3 +924,59 @@ func TestSidebarTrailingIsItsOwnTarget(t *testing.T) {
 		t.Errorf("both should be drawn on one row:\n%q", line)
 	}
 }
+
+// TestSidebarDrawsAFoldedGroup: the triangle points at what it will do, and a
+// folded group shows nothing of what is inside it except that it is waiting.
+func TestSidebarDrawsAFoldedGroup(t *testing.T) {
+	open := sidebarFrame([]SidebarRow{
+		{Kind: SidebarSpaceGroup, Label: "clients", Group: "clients", Action: ActionToggleGroup},
+		{Kind: SidebarSpace, Label: "backend", Detail: "develop", Depth: 1, Workspace: 1},
+	})
+	g := vt.NewGrid(40, 8, 0)
+	Draw(g, open, DefaultTheme())
+	lines := gridText(g)
+	if !strings.Contains(lines[0], "▼ clients") {
+		t.Errorf("an open group points down:\n%q", lines[0])
+	}
+	// The member is indented under its heading, and its branch under its name.
+	nameAt := strings.Index(lines[1], "backend")
+	if nameAt <= strings.Index(lines[0], "clients") {
+		t.Errorf("the member should be indented:\n%q\n%q", lines[0], lines[1])
+	}
+
+	folded := sidebarFrame([]SidebarRow{{
+		Kind: SidebarSpaceGroup, Label: "clients", Group: "clients",
+		Folded: true, Trailing: "2 waiting", Action: ActionToggleGroup,
+	}})
+	g = vt.NewGrid(40, 8, 0)
+	Draw(g, folded, DefaultTheme())
+	line := gridText(g)[0]
+	if !strings.Contains(line, "▶ clients") {
+		t.Errorf("a folded group points right:\n%q", line)
+	}
+	// Folding is not a way to stop being told an agent is waiting.
+	if !strings.Contains(line, "2 waiting") {
+		t.Errorf("a folded group should still report its members:\n%q", line)
+	}
+
+	// The heading is one click target, and it says which group it is.
+	row, ok := SidebarRowAt(folded, 3, 0)
+	if !ok || row.Action != ActionToggleGroup || row.Group != "clients" {
+		t.Errorf("heading target = %+v ok=%v", row, ok)
+	}
+}
+
+// TestGroupMenuActsOnTheGroup: a group has no record of its own, so its menu
+// carries the name rather than an identifier.
+func TestGroupMenuActsOnTheGroup(t *testing.T) {
+	m := GroupMenu("clients", false, 0, 0)
+	if m.Group != "clients" || m.Workspace != 0 {
+		t.Errorf("group menu targets %+v", m)
+	}
+	if m.Items[0].Label != "fold" {
+		t.Errorf("an open group offers to fold, got %q", m.Items[0].Label)
+	}
+	if shut := GroupMenu("clients", true, 0, 0); shut.Items[0].Label != "unfold" {
+		t.Errorf("a folded group offers to unfold, got %q", shut.Items[0].Label)
+	}
+}

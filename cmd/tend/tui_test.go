@@ -1242,9 +1242,17 @@ func TestAttachClickNewSpace(t *testing.T) {
 
 // sidebarText is only the sidebar's columns, so an assertion about the list
 // cannot be satisfied by whatever a pane happens to be showing.
+//
+// The status bar is left out with them: it spans the full width, so its own
+// mention of the current space sits in the sidebar's columns and would answer
+// for the list.
 func (a *attached) sidebarText() string {
 	var b strings.Builder
-	for _, line := range a.lines() {
+	lines := a.lines()
+	if len(lines) > ui.StatusRows {
+		lines = lines[:len(lines)-ui.StatusRows]
+	}
+	for _, line := range lines {
 		r := []rune(line)
 		if len(r) > ui.SidebarWidth {
 			r = r[:ui.SidebarWidth]
@@ -1346,4 +1354,107 @@ func TestAttachMenuButtonAndEscape(t *testing.T) {
 	if !strings.Contains(a.sidebarText(), "main") {
 		t.Errorf("escaping should change nothing:\n%s", a.sidebarText())
 	}
+}
+
+// groupSpace puts the space named in the sidebar into a group, through the
+// menu, the way a user would.
+func (a *attached) groupSpace(t *testing.T, space, group string) {
+	t.Helper()
+	a.rightClickAt(t, 6, a.lineContaining(t, space))
+	a.waitForScreen(t, "the space menu", func(s string) bool {
+		return strings.Contains(s, "group...")
+	})
+	a.clickAt(t, 8, a.lineContaining(t, "group..."))
+	a.waitForScreen(t, "the group prompt", func(s string) bool {
+		return strings.Contains(s, "group (empty to ungroup)")
+	})
+	a.send(t, group+"\r")
+	time.Sleep(300 * time.Millisecond)
+}
+
+// TestAttachGroupsSpacesIntoATree covers the sidebar's shape: spaces kept
+// together read as a tree, and folding one hides its members without hiding
+// that they are there.
+func TestAttachGroupsSpacesIntoATree(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "a second space", func(s string) bool {
+		return strings.Contains(s, "space 2")
+	})
+
+	a.groupSpace(t, "space 2", "clients")
+	a.waitForScreen(t, "the group", func(string) bool {
+		return strings.Contains(a.sidebarText(), "▼ clients")
+	})
+	// The space is still listed, under its heading.
+	if !strings.Contains(a.sidebarText(), "space 2") {
+		t.Errorf("the member should still be listed:\n%s", a.sidebarText())
+	}
+
+	a.clickAt(t, 3, a.lineContaining(t, "clients"))
+	a.waitForScreen(t, "the group to fold", func(string) bool {
+		side := a.sidebarText()
+		return strings.Contains(side, "▶ clients") && !strings.Contains(side, "space 2")
+	})
+
+	a.clickAt(t, 3, a.lineContaining(t, "clients"))
+	a.waitForScreen(t, "the group to open", func(string) bool {
+		return strings.Contains(a.sidebarText(), "space 2")
+	})
+}
+
+// TestAttachUngroupsFromTheGroupMenu: ungrouping keeps the spaces and drops
+// only the heading.
+func TestAttachUngroupsFromTheGroupMenu(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "a second space", func(s string) bool {
+		return strings.Contains(s, "space 2")
+	})
+	a.groupSpace(t, "space 2", "clients")
+	a.waitForScreen(t, "the group", func(string) bool {
+		return strings.Contains(a.sidebarText(), "clients")
+	})
+
+	a.rightClickAt(t, 4, a.lineContaining(t, "clients"))
+	a.waitForScreen(t, "the group menu", func(s string) bool {
+		return strings.Contains(s, "ungroup")
+	})
+	a.clickAt(t, 6, a.lineContaining(t, "ungroup"))
+
+	a.waitForScreen(t, "the group to go", func(string) bool {
+		side := a.sidebarText()
+		return !strings.Contains(side, "clients") && strings.Contains(side, "space 2")
+	})
+}
+
+// TestAttachNavigatesIntoAFoldedGroup: whatever the mouse can reach, the
+// keyboard can. A folded group would otherwise be a dead end.
+func TestAttachNavigatesIntoAFoldedGroup(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf FIRST-SPACE\n", "the marker", func(s string) bool {
+		return strings.Contains(s, "FIRST-SPACE")
+	})
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "a second space", func(s string) bool {
+		return strings.Contains(s, "space 2")
+	})
+	a.groupSpace(t, "space 2", "clients")
+	a.clickAt(t, 3, a.lineContaining(t, "clients"))
+	a.waitForScreen(t, "the group to fold", func(string) bool {
+		return strings.Contains(a.sidebarText(), "▶ clients")
+	})
+
+	// Walk to the heading and open it from the keyboard.
+	a.send(t, "\x02g")
+	a.waitForScreen(t, "navigate mode", func(s string) bool {
+		return strings.Contains(s, "NAVIGATE")
+	})
+	a.send(t, "j\r")
+	a.waitForScreen(t, "the group to open", func(string) bool {
+		return strings.Contains(a.sidebarText(), "▼ clients")
+	})
 }

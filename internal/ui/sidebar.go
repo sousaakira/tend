@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/sousaakira/tend/internal/vt"
+import (
+	"strings"
+
+	"github.com/sousaakira/tend/internal/vt"
+)
 
 // The sidebar answers two questions without leaving the pane you are in:
 // where else could I be, and which agent needs me.
@@ -27,6 +31,8 @@ const (
 	SidebarAgent
 	// SidebarGroup is a tab heading, shown when the agent list is grouped.
 	SidebarGroup
+	// SidebarSpaceGroup is a heading over spaces kept together, which folds.
+	SidebarSpaceGroup
 	// SidebarAction is a row that does something rather than going somewhere.
 	SidebarAction
 	// SidebarBlank is a spacer.
@@ -38,6 +44,8 @@ const (
 	ActionNewSpace      = "new-space"
 	ActionOpenMenu      = "open-menu"
 	ActionToggleGrouped = "toggle-grouped"
+	// ActionToggleGroup folds or unfolds the group named by the row.
+	ActionToggleGroup = "toggle-group"
 )
 
 // SidebarRow is one entry. A two-line entry is one row: the detail is drawn
@@ -59,6 +67,12 @@ type SidebarRow struct {
 	Tab       uint64
 	Workspace uint64
 	Action    string
+
+	// Group is the group a row belongs to, or names when it is the heading
+	// over one. Depth indents a row under its heading.
+	Group  string
+	Depth  int
+	Folded bool
 
 	State   string
 	Running bool
@@ -157,6 +171,21 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	case SidebarGroup:
 		writeString(dst, 3, y, truncate(r.Label, limit-3), theme.SidebarGroup, limit)
 
+	case SidebarSpaceGroup:
+		// The triangle points at what it will do: down when the group is open
+		// and its spaces are below, right when it is shut and they are not.
+		marker := "▼ "
+		if r.Folded {
+			marker = "▶ "
+		}
+		style := theme.SidebarGroup
+		if r.Active {
+			style = theme.SidebarGroupActive
+		}
+		x := writeString(dst, 1, y, marker, style, limit)
+		writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
+		drawTrailing(dst, r, y, limit, theme)
+
 	case SidebarAction:
 		style := theme.SidebarGroup
 		if r.Selected {
@@ -203,6 +232,7 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	}
 
 	x := writeString(dst, 0, y, cursor, style, limit)
+	x = writeString(dst, x, y, indent(r.Depth), style, limit)
 	x = writeString(dst, x, y, stateCircle(r), mark, limit)
 	writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
 
@@ -212,8 +242,20 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 			detail = style
 			fill(dst, y+1, 0, limit, style)
 		}
-		writeString(dst, 3, y+1, truncate(r.Detail, limit-3), detail, limit)
+		// Lined up under the name rather than under the marker: the detail
+		// belongs to the name, and a column of branches that steps in and out
+		// with the tree is harder to read down than one that does not.
+		at := 3 + 2*r.Depth
+		writeString(dst, at, y+1, truncate(r.Detail, limit-at), detail, limit)
 	}
+}
+
+// indent is the space a row sits in under its heading.
+func indent(depth int) string {
+	if depth <= 0 {
+		return ""
+	}
+	return strings.Repeat("  ", depth)
 }
 
 // stateCircle is the mark beside an entry: filled for the one in view, hollow

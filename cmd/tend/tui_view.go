@@ -319,6 +319,9 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 	switch {
 	case row.Action == ui.ActionNewSpace:
 		return true, t.newWorkspace()
+	case row.Action == ui.ActionToggleGroup:
+		t.toggleGroup(row.Group)
+		return true, nil
 	case row.Action == ui.ActionOpenMenu:
 		t.mu.Lock()
 		ws := t.workspace

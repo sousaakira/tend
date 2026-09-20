@@ -35,6 +35,7 @@ var Methods = []string{
 	proto.MethodTabNew,
 	proto.MethodTabClose,
 	proto.MethodWorkspaceClose,
+	proto.MethodWorkspaceGroup,
 	proto.MethodTabRename,
 	proto.MethodWorkspaceRename,
 	proto.MethodPaneSplit,
@@ -356,6 +357,13 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return nil, c.srv.CloseWorkspace(session.WorkspaceID(p.Workspace))
 
+	case proto.MethodWorkspaceGroup:
+		var p proto.WorkspaceGroupParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.GroupWorkspace(session.WorkspaceID(p.Workspace), p.Group)
+
 	case proto.MethodTabRename:
 		var p proto.TabRenameParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -519,9 +527,10 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 	}
 	for _, w := range sess.Workspaces() {
 		info := proto.WorkspaceInfo{
-			ID:   uint64(w.ID),
-			Name: w.Name,
-			Dir:  w.Dir,
+			ID:    uint64(w.ID),
+			Name:  w.Name,
+			Dir:   w.Dir,
+			Group: w.Group,
 		}
 		if at := w.ActiveTab(); at != nil {
 			info.ActiveTab = uint64(at.ID)

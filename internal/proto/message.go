@@ -18,6 +18,7 @@ const (
 	MethodTabRename = "tab.rename"
 
 	MethodWorkspaceClose  = "workspace.close"
+	MethodWorkspaceGroup  = "workspace.group"
 	MethodWorkspaceRename = "workspace.rename"
 
 	MethodPaneSplit     = "pane.split"
@@ -104,8 +105,10 @@ type WorkspaceInfo struct {
 	// Dir is what the workspace is about, and Branch the git branch checked
 	// out there. Branch is computed by the server because only it can see the
 	// directory: a client may be on another machine entirely.
-	Dir       string    `json:"dir,omitempty"`
-	Branch    string    `json:"branch,omitempty"`
+	Dir    string `json:"dir,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	// Group is what the workspace is kept with. Empty means it stands alone.
+	Group     string    `json:"group,omitempty"`
 	Tabs      []TabInfo `json:"tabs"`
 	ActiveTab uint64    `json:"active_tab,omitempty"`
 }
@@ -139,6 +142,13 @@ type WorkspaceNewParams struct {
 // WorkspaceCloseParams closes a workspace and every pane in it.
 type WorkspaceCloseParams struct {
 	Workspace uint64 `json:"workspace"`
+}
+
+// WorkspaceGroupParams moves a workspace into a group, or out of one when the
+// group is empty.
+type WorkspaceGroupParams struct {
+	Workspace uint64 `json:"workspace"`
+	Group     string `json:"group,omitempty"`
 }
 
 // WorkspaceNewResult reports the new workspace.

@@ -302,6 +302,12 @@ func (c *Client) CloseTab(tab uint64) error {
 }
 
 // RenameTab changes a tab's label.
+// GroupWorkspace moves a workspace into a group, or out of one when the name
+// is empty.
+func (c *Client) GroupWorkspace(ws uint64, group string) error {
+	return c.Call(proto.MethodWorkspaceGroup, proto.WorkspaceGroupParams{Workspace: ws, Group: group}, nil)
+}
+
 // CloseWorkspace closes a workspace and every pane in it.
 func (c *Client) CloseWorkspace(ws uint64) error {
 	return c.Call(proto.MethodWorkspaceClose, proto.WorkspaceCloseParams{Workspace: ws}, nil)

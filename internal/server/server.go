@@ -418,6 +418,16 @@ func (s *Server) CloseTab(id session.TabID) error {
 	return nil
 }
 
+// GroupWorkspace moves a workspace into a group, or out of one.
+func (s *Server) GroupWorkspace(id session.WorkspaceID, group string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrClosed
+	}
+	return s.session.GroupWorkspace(id, group)
+}
+
 // CloseWorkspace closes a workspace and stops every pane in it.
 func (s *Server) CloseWorkspace(id session.WorkspaceID) error {
 	s.mu.Lock()

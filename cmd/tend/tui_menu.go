@@ -51,6 +51,8 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 		switch row.Kind {
 		case ui.SidebarSpace:
 			return ui.SpaceMenu(row.Workspace, x, y), true
+		case ui.SidebarSpaceGroup:
+			return ui.GroupMenu(row.Group, row.Folded, x, y), true
 		case ui.SidebarAgent:
 			return ui.AgentMenu(row.Pane, row.Tab, row.Workspace, x, y), true
 		}
@@ -140,7 +142,21 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		return t.jumpToPane(m.Pane)
 
 	case ui.MenuNewSpace:
+		if m.Group != "" {
+			return t.newWorkspaceIn(m.Group)
+		}
 		return t.newWorkspace()
+
+	case ui.MenuGroup:
+		if err := t.showWorkspace(m.Workspace); err != nil {
+			return err
+		}
+		t.startPrompt(promptGroupSpace)
+		return nil
+
+	case ui.MenuFold:
+		t.toggleGroup(m.Group)
+		return nil
 
 	case ui.MenuNewTab:
 		if m.Workspace != 0 {
@@ -182,11 +198,38 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	return nil
 }
 
+// renameGroup moves every space in a group to a new name, which is what
+// renaming a group means when a group is only the set of spaces naming it.
+func (t *tui) renameGroup(group, name string) error {
+	t.mu.Lock()
+	var ids []uint64
+	for _, w := range t.snap.Workspaces {
+		if w.Group == group {
+			ids = append(ids, w.ID)
+		}
+	}
+	folded := t.folded[group]
+	delete(t.folded, group)
+	if name != "" {
+		t.folded[name] = folded
+	}
+	t.mu.Unlock()
+
+	for _, id := range ids {
+		if err := t.client.GroupWorkspace(id, name); err != nil {
+			return err
+		}
+	}
+	return t.refresh()
+}
+
 // renameFor opens the rename prompt on the menu's target, moving there first:
 // the prompt edits what is being looked at, and renaming something out of
 // view would leave the user reading a name that is not the one changing.
 func (t *tui) renameFor(m ui.Menu) error {
 	switch {
+	case m.Group != "":
+		t.startGroupRename(m.Group)
 	case m.Pane != 0:
 		if err := t.jumpToPane(m.Pane); err != nil {
 			return err
@@ -209,6 +252,10 @@ func (t *tui) renameFor(m ui.Menu) error {
 // closeFor closes the menu's target, whichever kind it is.
 func (t *tui) closeFor(m ui.Menu) error {
 	switch {
+	case m.Group != "":
+		// "Ungroup" is renaming the group to nothing: its spaces stay, they
+		// just stop being kept together.
+		return t.renameGroup(m.Group, "")
 	case m.Pane != 0:
 		if err := t.client.ClosePane(m.Pane); err != nil {
 			return err

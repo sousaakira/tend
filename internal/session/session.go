@@ -79,6 +79,14 @@ type Workspace struct {
 	// user says "this is the RVX backend", and a place is most of what that
 	// means.
 	Dir string
+	// Group is what the workspace belongs with: a client of the same company,
+	// a repository with several checkouts, anything the user keeps together.
+	// Empty means it stands on its own.
+	//
+	// It is a session fact rather than a client one. Two people attached to
+	// the same session should see the same grouping; which groups are folded
+	// shut is the part that belongs to whoever is looking.
+	Group string
 
 	tabs   []*Tab
 	active int
@@ -214,6 +222,22 @@ func (s *Session) AddWorkspaceIn(name, dir string) *Workspace {
 	s.workspaces = append(s.workspaces, w)
 	s.active = len(s.workspaces) - 1
 	return w
+}
+
+// GroupWorkspace moves a workspace into a group, or out of one when the name
+// is empty.
+//
+// Groups have no records of their own: a group is the set of workspaces that
+// name it. That means creating one is naming it, the last workspace leaving
+// removes it, and there is no way for a group to exist while empty or for a
+// workspace to point at one that does not.
+func (s *Session) GroupWorkspace(id WorkspaceID, group string) error {
+	w, ok := s.Workspace(id)
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchWorkspace, id)
+	}
+	w.Group = group
+	return nil
 }
 
 // FocusWorkspace focuses a workspace by id.

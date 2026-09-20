@@ -81,6 +81,7 @@ func runAttach(args []string) error {
 		input:    make(chan []byte, 64),
 		lostConn: make(chan struct{}, 1),
 		resync:   make(chan struct{}, 1),
+		folded:   make(map[string]bool),
 	}
 	t.keys.PrefixKey = prefix
 	t.sidebar = cfg.UI.Sidebar
@@ -116,17 +117,24 @@ type tui struct {
 	nav        navTarget
 	// menu is the context menu, open on the thing it acts on. Nil when none.
 	menu *ui.Menu
+	// folded names the groups shut in this client's sidebar. Which groups a
+	// space belongs to is a session fact; which of them this person has
+	// folded away is not, so it is never sent upstream.
+	folded map[string]bool
 
 	prompt         promptKind
 	promptText     string
 	promptPristine bool
-	message        string
-	alert          bool
-	msgAt          time.Time
-	overlay        []string
-	zoom           bool
-	offline        bool
-	dirty          bool
+	// promptGroup is what a group rename is renaming, since a group has no
+	// identifier of its own.
+	promptGroup string
+	message     string
+	alert       bool
+	msgAt       time.Time
+	overlay     []string
+	zoom        bool
+	offline     bool
+	dirty       bool
 
 	// scrollPane is the pane being looked back through, zero when live.
 	// The pane keeps running while it is read: scrolling is a view, not a
