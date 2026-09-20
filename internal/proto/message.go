@@ -67,6 +67,33 @@ type HelloParams struct {
 // Methods lists what this server actually implements, so a client can disable
 // an action it cannot perform rather than discovering the gap when a user
 // tries it.
+// KnownMethods is every method this build of the protocol has a name for.
+//
+// It exists so the two halves can work out which of them is behind. Builds are
+// git descriptions with no ordering, so comparing them says only that they
+// differ; what one side can do and the other has never heard of is a fact with
+// a direction in it.
+var KnownMethods = []string{
+	MethodHello,
+	MethodSessionSnapshot,
+	MethodWorkspaceNew,
+	MethodWorkspaceClose,
+	MethodWorkspaceGroup,
+	MethodWorkspaceRename,
+	MethodTabNew,
+	MethodTabClose,
+	MethodTabRename,
+	MethodTabLayout,
+	MethodPaneSplit,
+	MethodPaneClose,
+	MethodPaneResize,
+	MethodPaneSubscribe,
+	MethodPaneScreen,
+	MethodPaneText,
+	MethodPaneAdjust,
+	MethodServerShutdown,
+}
+
 // ErrUnknownMethod is what a server answers when it has never heard of a
 // method. A client recognises it to tell "this cannot be done" apart from
 // "the server on the other end is older than you are", which are the same
@@ -359,4 +386,33 @@ type Event struct {
 	State string `json:"state,omitempty"`
 	Rule  string `json:"rule,omitempty"`
 	Err   string `json:"error,omitempty"`
+}
+
+// Compare reports which side of a connection knows things the other does not,
+// given the methods a server advertises.
+//
+// Both can be true at once: two builds that each added something the other
+// lacks have diverged rather than one being behind, and saying "you are old"
+// to either of them would be wrong.
+func Compare(advertised []string) (serverAhead, clientAhead bool) {
+	has := make(map[string]bool, len(advertised))
+	for _, m := range advertised {
+		has[m] = true
+	}
+	known := make(map[string]bool, len(KnownMethods))
+	for _, m := range KnownMethods {
+		known[m] = true
+	}
+
+	for _, m := range advertised {
+		if !known[m] {
+			serverAhead = true
+		}
+	}
+	for _, m := range KnownMethods {
+		if m != MethodHello && !has[m] {
+			clientAhead = true
+		}
+	}
+	return serverAhead, clientAhead
 }

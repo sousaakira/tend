@@ -124,8 +124,13 @@ func startServer(name string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("starting a server for %q: %w", name, err)
 	}
-	// Not waited on deliberately: the server is meant to outlive this process,
-	// and is reparented once we exit.
+	// Waited on in the background, purely to reap it. The server is meant to
+	// outlive this process and does — waiting does not hold it back — but a
+	// child that exits before its parent stays a zombie until somebody asks
+	// how it went. Most of these exit at once, because starting a server when
+	// one already holds the socket is the ordinary way two clients race, and
+	// a long-lived client collects one corpse per attempt.
+	go func() { _ = cmd.Wait() }()
 	return nil
 }
 

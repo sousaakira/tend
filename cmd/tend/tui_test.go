@@ -105,6 +105,19 @@ func startSessionBuilt(t *testing.T, cols, rows int, build string) *attached {
 	return startSessionWith(t, cols, rows, build, "")
 }
 
+// startSessionOlder runs the session's server as one that has never heard of
+// a method this client uses, which is what being behind actually means.
+func startSessionOlder(t *testing.T, cols, rows int, build string) *attached {
+	t.Helper()
+	var without []string
+	for _, m := range server.Methods {
+		if m != proto.MethodPaneText {
+			without = append(without, m)
+		}
+	}
+	return startSessionWith(t, cols, rows, build, "", without...)
+}
+
 // startSessionIn runs the session's server rooted at a directory, which is
 // what a workspace with none of its own takes.
 func startSessionIn(t *testing.T, cols, rows int, dir string) *attached {
@@ -112,7 +125,7 @@ func startSessionIn(t *testing.T, cols, rows int, dir string) *attached {
 	return startSessionWith(t, cols, rows, version, dir)
 }
 
-func startSessionWith(t *testing.T, cols, rows int, build, dir string) *attached {
+func startSessionWith(t *testing.T, cols, rows int, build, dir string, advertise ...string) *attached {
 	t.Helper()
 
 	runtimeDir := t.TempDir()
@@ -132,6 +145,7 @@ func startSessionWith(t *testing.T, cols, rows int, build, dir string) *attached
 	}
 	srv, err := server.New(server.Config{
 		Build:          build,
+		Advertise:      advertise,
 		Dir:            dir,
 		DetectInterval: 20 * time.Millisecond,
 		DefaultSize:    pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
@@ -1606,7 +1620,7 @@ func TestAttachWheelReachesAProgramThatAskedForIt(t *testing.T) {
 // while something is already in front of them, so the restart is offered where
 // the problem is.
 func TestAttachOffersToRestartAnOlderServer(t *testing.T) {
-	a := startSessionBuilt(t, 100, 20, "0.0.1-ancient")
+	a := startSessionOlder(t, 100, 20, "0.0.1-ancient")
 	a.waitForScreen(t, "the notice", func(s string) bool {
 		return strings.Contains(s, "older server") && strings.Contains(s, "0.0.1-ancient")
 	})
@@ -1638,7 +1652,7 @@ func TestAttachOffersToRestartAnOlderServer(t *testing.T) {
 // TestAttachKeepsAnOlderServerWhenAsked: the notice is a question, and the
 // answer "carry on" has to leave a working session.
 func TestAttachKeepsAnOlderServerWhenAsked(t *testing.T) {
-	a := startSessionBuilt(t, 100, 20, "0.0.1-ancient")
+	a := startSessionOlder(t, 100, 20, "0.0.1-ancient")
 	a.waitForScreen(t, "the notice", func(s string) bool {
 		return strings.Contains(s, "older server")
 	})
@@ -2172,5 +2186,49 @@ func TestAttachDoesNotScrollWhileSelectingInside(t *testing.T) {
 	}
 	if !strings.Contains(a.text(), "LINE-30") || !strings.Contains(before, "LINE-30") {
 		t.Errorf("the view should be where it was:\n%s", a.text())
+	}
+}
+
+// TestAttachSaysWhenTheClientIsTheOldHalf: the server is respawned by
+// whichever binary is on disk, so after an upgrade the running client is
+// usually the one behind. It cannot replace itself, and restarting a server
+// that is already ahead would cost the panes for nothing.
+func TestAttachSaysWhenTheClientIsTheOldHalf(t *testing.T) {
+	// A server offering a method this client has never heard of.
+	newer := append(append([]string{}, server.Methods...), "pane.teleport")
+	a := startSessionWith(t, 100, 20, "9.9.9-newer", "", newer...)
+
+	a.waitForScreen(t, "the notice", func(s string) bool {
+		return strings.Contains(s, "newer than this client")
+	})
+	if text := a.text(); strings.Contains(text, "restart it now") {
+		t.Errorf("restarting the server is not the answer here:\n%s", text)
+	}
+	if !strings.Contains(a.text(), "Detach and run tend again") {
+		t.Errorf("the notice should say what does help:\n%s", a.text())
+	}
+
+	// "r" is not a restart here; it dismisses like any other key.
+	a.send(t, "r")
+	a.waitForScreen(t, "the notice to go", func(s string) bool {
+		return !strings.Contains(s, "newer than this client")
+	})
+	a.sendUntil(t, "printf STILL-HERE\n", "the pane to work", func(s string) bool {
+		return strings.Contains(s, "STILL-HERE")
+	})
+	if strings.Contains(a.text(), "reconnected") {
+		t.Errorf("nothing should have been restarted:\n%s", a.text())
+	}
+}
+
+// TestAttachSaysNothingWhenTheBuildsAgree: a notice on every attach is one
+// nobody reads, and two halves that can do the same things are not a problem
+// however their version strings were stamped.
+func TestAttachSaysNothingWhenTheBuildsAgree(t *testing.T) {
+	a := startSessionBuilt(t, 100, 20, "some-other-stamp")
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	time.Sleep(400 * time.Millisecond)
+	if text := a.text(); strings.Contains(text, "older server") || strings.Contains(text, "newer than") {
+		t.Errorf("differing build strings alone are not a mismatch:\n%s", text)
 	}
 }

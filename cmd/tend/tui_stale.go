@@ -17,42 +17,106 @@ import (
 // restart is offered where the problem is, and taken only when asked for.
 
 // staleServerOverlay is what the notice says, with the keys that answer it.
-func staleServerOverlay(build, self, session string) []string {
+//
+// Which half is behind decides what to offer. A server older than the client
+// can be replaced from here, and the panes it holds are the price. A client
+// older than the server cannot replace itself — this process is the old code
+// — so the only honest advice is to leave and come back, and the panes are
+// not at risk because the server is the half that holds them.
+func staleServerOverlay(m mismatch, self, session string) []string {
+	build := m.build
 	if build == "" {
 		// Old enough that it predates the field naming the build, which is
 		// itself the answer to "how old".
 		build = "an older build"
 	}
-	return []string{
-		"This session runs an older server",
+	title := "This session runs an older server"
+	switch {
+	case m.serverAhead && m.clientAhead:
+		title = "This client and this session have diverged"
+	case m.serverAhead:
+		title = "This session is newer than this client"
+	}
+	lines := []string{
+		title,
 		"",
 		"server:  " + build,
 		"client:  " + self,
 		"",
+	}
+
+	if m.serverAhead {
+		// This process is the old code and cannot replace itself. Restarting
+		// the server would cost the panes and leave the client where it was.
+		lines = append(lines,
+			"Anything added since this client started is",
+			"missing from it, however new the server is.",
+			"",
+			"Detach and run tend again to pick it up.",
+			"",
+			"ctrl+b d   detach",
+			"enter      carry on with what this client has",
+		)
+		if m.clientAhead {
+			lines = append(lines, "",
+				"Each also has something the other lacks, so",
+				"replacing the server alone will not settle it.")
+		}
+		return lines
+	}
+	return append(lines,
 		"Anything this client can do that the old server",
 		"cannot will fail until it is replaced.",
 		"",
 		"r      restart it now, closing its panes",
 		"enter  keep it and carry on",
 		"",
-		"Elsewhere: " + restartCommand(session),
-	}
+		"Elsewhere: "+restartCommand(session),
+	)
 }
 
 // warnIfServerIsOlder puts the notice up when the session is being run by a
 // binary other than this one.
 func (t *tui) warnIfServerIsOlder() {
-	build := t.client.Server().Build
-	if build == version {
+	m, ok := t.disagree()
+	if !ok {
 		return
 	}
+	t.showMismatch(m)
+}
 
+// showMismatch puts the notice up.
+func (t *tui) showMismatch(m mismatch) {
 	t.mu.Lock()
 	t.staleServer = true
-	t.overlay = staleServerOverlay(build, version, t.session)
+	t.canRestart = !m.serverAhead
+	t.overlay = staleServerOverlay(m, version, t.session)
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
+}
+
+// mismatch is what the two halves disagree about.
+type mismatch struct {
+	build       string
+	serverAhead bool
+	clientAhead bool
+}
+
+// disagree compares this client with the server it is talking to.
+//
+// The builds are git descriptions with no ordering, so they say only that the
+// two differ. Which of them is behind comes from what each knows how to do:
+// a method this client uses and the server never heard of puts the server
+// behind, and one the server offers and this client does not know puts the
+// client behind. Both at once is divergence, and neither side is "old".
+func (t *tui) disagree() (mismatch, bool) {
+	hello := t.client.Server()
+	serverAhead, clientAhead := proto.Compare(hello.Methods)
+	if !serverAhead && !clientAhead {
+		return mismatch{}, false
+	}
+	return mismatch{build: hello.Build, serverAhead: serverAhead, clientAhead: clientAhead}, true
 }
 
 // staleServerKeys answers the notice. It reports whether it took the input.
@@ -64,9 +128,16 @@ func (t *tui) staleServerKeys(data []byte) (bool, error) {
 		return false, nil
 	}
 
+	t.mu.Lock()
+	canRestart := t.canRestart
+	t.mu.Unlock()
+
 	for _, key := range splitKeys(data) {
 		t.dismissStaleServer()
-		if key == "r" || key == "R" {
+		if (key == "r" || key == "R") && canRestart {
+			// Only offered when the server is the half behind. This process
+			// cannot replace itself, and restarting the server it is already
+			// behind would cost the panes for nothing.
 			return true, t.restartServer()
 		}
 		// Every other key means "carry on", and is not passed through: the
@@ -103,13 +174,13 @@ func (t *tui) restartServer() error {
 // staleServerCommand is the key binding that brings the notice back, for
 // somebody who dismissed it and then hit the failure it was about.
 func (t *tui) showStaleServerNotice() {
-	build := t.client.Server().Build
-	t.mu.Lock()
-	t.staleServer = true
-	t.overlay = staleServerOverlay(build, version, t.session)
-	t.dirty = true
-	t.mu.Unlock()
-	t.wakeUp()
+	m, ok := t.disagree()
+	if !ok {
+		// Nothing to compare found a difference, but a call was refused all
+		// the same. Say what is known rather than nothing.
+		m = mismatch{build: t.client.Server().Build}
+	}
+	t.showMismatch(m)
 }
 
 // reportStaleServer turns "the server has never heard of that" into the notice

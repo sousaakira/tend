@@ -317,11 +317,15 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		if p.Version != proto.Version {
 			return nil, fmt.Errorf("protocol version %d, this server speaks %d", p.Version, proto.Version)
 		}
+		methods := Methods
+		if len(c.srv.cfg.Advertise) > 0 {
+			methods = c.srv.cfg.Advertise
+		}
 		return proto.HelloResult{
 			Version: proto.Version,
 			Server:  "tend",
 			Build:   c.srv.cfg.Build,
-			Methods: Methods,
+			Methods: methods,
 		}, nil
 
 	case proto.MethodSessionSnapshot:

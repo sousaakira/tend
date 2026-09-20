@@ -120,6 +120,9 @@ type tui struct {
 	// staleServer marks that the notice about an older server is up and has
 	// the keyboard, because it is asking whether to restart it.
 	staleServer bool
+	// canRestart marks that replacing the server would help, which it does
+	// only when the server is the half that is behind.
+	canRestart bool
 	// sel is text being marked in a pane, or nil. It belongs to this client:
 	// what one person has selected is not part of the session.
 	sel *ui.Selection
