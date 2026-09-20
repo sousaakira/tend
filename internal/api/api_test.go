@@ -21,6 +21,7 @@ type harness struct {
 	conn net.Conn
 	r    *bufio.Reader
 	pane session.PaneID
+	path string
 }
 
 func start(t *testing.T) *harness {
@@ -43,7 +44,7 @@ func start(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(srv, "test-build")
+	a := New(srv, "test-build", []string{"/bin/sh"})
 	go func() { _ = a.Serve(ln) }()
 	conn, err := net.Dial("unix", path)
 	if err != nil {
@@ -55,7 +56,27 @@ func start(t *testing.T) *harness {
 		a.Close()
 		_ = srv.Close()
 	})
-	return &harness{srv: srv, conn: conn, r: bufio.NewReader(conn), pane: pane}
+	return &harness{srv: srv, conn: conn, r: bufio.NewReader(conn), pane: pane, path: path}
+}
+
+// another opens a second connection. Each connection is answered in order, so
+// a caller that is waiting on one call needs another for anything that has to
+// happen while it waits — which is also how two scripts use one session.
+func (h *harness) another(t *testing.T) *harness {
+	t.Helper()
+	conn, err := net.Dial("unix", h.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return &harness{srv: h.srv, conn: conn, r: bufio.NewReader(conn), pane: h.pane, path: h.path}
+}
+
+// send writes one line without waiting for the reply, for the cases where
+// something else is waiting for what it causes.
+func (h *harness) send(line string) error {
+	_, err := fmt.Fprintln(h.conn, line)
+	return err
 }
 
 // call sends one line and reads one back, which is the whole protocol.

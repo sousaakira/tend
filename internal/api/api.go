@@ -147,16 +147,26 @@ type AgentSessionInfo struct {
 type API struct {
 	srv   *server.Server
 	build string
+	// shellCmd is what a pane opened through this socket runs when the caller
+	// names no command, which is the same login shell the client would use.
+	shellCmd []string
 
 	mu    sync.Mutex
 	conns map[net.Conn]struct{}
 	done  bool
 }
 
-// New returns the API for a server. build is reported by ping.
-func New(srv *server.Server, build string) *API {
-	return &API{srv: srv, build: build, conns: make(map[net.Conn]struct{})}
+// New returns the API for a server. build is reported by ping, and shell is
+// what a pane runs when a caller names no command.
+func New(srv *server.Server, build string, shell []string) *API {
+	if len(shell) == 0 {
+		shell = []string{"/bin/sh"}
+	}
+	return &API{srv: srv, build: build, shellCmd: shell, conns: make(map[net.Conn]struct{})}
 }
+
+// shell is the command a pane opened through this socket runs by default.
+func (a *API) shell() []string { return append([]string(nil), a.shellCmd...) }
 
 // Serve answers callers until the listener closes.
 func (a *API) Serve(ln net.Listener) error {
@@ -235,7 +245,8 @@ func (a *API) handle(conn net.Conn) {
 			}})
 			continue
 		}
-		result, err := a.call(req)
+		var pending pending
+		result, err := a.call(req, &pending)
 		if err != nil {
 			body := ErrorBody{Code: "internal_error", Message: err.Error()}
 			var ce *callError
@@ -249,6 +260,12 @@ func (a *API) handle(conn net.Conn) {
 		}
 		if err := enc.Encode(successResponse{ID: req.ID, Result: result}); err != nil {
 			return
+		}
+		if pending.after != nil {
+			// Stopping the server, or letting go of its panes, cuts this
+			// connection. Doing it after the reply is on the wire is what lets
+			// the caller tell "it worked" from "it died".
+			go pending.after()
 		}
 	}
 }
@@ -299,6 +316,10 @@ func paneErr(name string, err error) error {
 	case errors.Is(err, server.ErrBadAgent):
 		return fail("invalid_agent", "agent label must not be empty")
 	}
+	var badKey *server.ErrUnknownKey
+	if errors.As(err, &badKey) {
+		return fail("invalid_key", "unsupported key %q", badKey.Key)
+	}
 	return err
 }
 
@@ -329,7 +350,12 @@ func (a *API) info(st server.PaneStatus) PaneInfo {
 	return info
 }
 
-func (a *API) call(req Request) (any, error) {
+// pending is what one call asked to happen after its reply has been written.
+// It belongs to the connection being answered, not to the API: two scripts
+// calling at once must not inherit each other's.
+type pending struct{ after func() }
+
+func (a *API) call(req Request, p *pending) (any, error) {
 	switch req.Method {
 	case MethodPing:
 		return map[string]any{"type": "pong", "version": a.build, "protocol": Protocol}, nil
@@ -496,5 +522,5 @@ func (a *API) call(req Request) (any, error) {
 			"details": map[string]any{"messages": messages},
 		}, nil
 	}
-	return nil, fail("unknown_method", "unknown method %q", req.Method)
+	return a.callMore(req, p)
 }

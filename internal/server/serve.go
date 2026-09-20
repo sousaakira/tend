@@ -490,7 +490,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		// worked: by the time the client reads "ok" the replacement is already
 		// accepting on the socket. Letting go of the panes waits for the reply
 		// to be written, like a shutdown does.
-		h, err := c.srv.replace()
+		h, err := c.srv.Replace()
 		if err != nil {
 			return nil, err
 		}

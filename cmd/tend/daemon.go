@@ -290,7 +290,7 @@ func runServe(args []string) error {
 	fmt.Fprintf(os.Stderr, "%s session %q listening on %s\n", tag(), *name, path)
 	fmt.Fprintf(os.Stderr, "%s automation on %s\n", tag(), apiPath)
 
-	automation := api.New(srv, version)
+	automation := api.New(srv, version, cfg.Shell())
 	defer automation.Close()
 	go func() {
 		if err := automation.Serve(apiLn); err != nil {

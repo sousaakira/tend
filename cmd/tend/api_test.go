@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,7 +49,7 @@ func TestServeOffersTheAutomationSocket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn := dialAPI(t, apiPath)
+	conn := dialAPISocket(t, apiPath)
 	defer conn.Close()
 	r := bufio.NewReader(conn)
 
@@ -101,7 +102,7 @@ func TestServeOffersTheAutomationSocket(t *testing.T) {
 	})
 }
 
-func dialAPI(t *testing.T, path string) net.Conn {
+func dialAPISocket(t *testing.T, path string) net.Conn {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -138,4 +139,62 @@ func readServerLog(runtimeDir, name string) string {
 		return err.Error()
 	}
 	return string(b)
+}
+
+// TestTheCommandsScriptsUse drives a session the way a script or another agent
+// does — from outside, with no client attached — and checks the answers are
+// what a shell can act on. If it regresses, automation is unusable without
+// somebody sitting in front of the session.
+func TestTheCommandsScriptsUse(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	// No session yet: the failure has to say so rather than hang or panic.
+	if out, err := run("agent", "list", "-s", "cli"); err == nil {
+		t.Fatalf("agent list against nothing succeeded: %s", out)
+	} else if !strings.Contains(out, "not running") {
+		t.Errorf("the error does not explain itself: %s", out)
+	}
+
+	if out, err := run("new", "-s", "cli", "--", "/bin/sh"); err != nil {
+		t.Fatalf("tend new: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { stopSession(t, "cli") })
+
+	// A pane is there, and can be typed into and read back.
+	out, err := run("pane", "list", "-s", "cli")
+	if err != nil || !strings.Contains(out, `"p_1"`) {
+		t.Fatalf("pane list = %q, %v", out, err)
+	}
+	if out, err := run("pane", "send-text", "-s", "cli", "-submit", "p_1", "printf from-the-cli"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	if out, err := run("pane", "wait", "-s", "cli", "-contains", "from-the-cli", "-timeout", "10s", "p_1"); err != nil {
+		t.Fatalf("pane wait: %v\n%s", err, out)
+	}
+	out, err = run("pane", "read", "-s", "cli", "p_1")
+	if err != nil || !strings.Contains(out, "from-the-cli") {
+		t.Fatalf("pane read = %q, %v", out, err)
+	}
+
+	// A wait that runs out has to fail the command, so `&&` in a script means
+	// what it looks like.
+	if out, err := run("pane", "wait", "-s", "cli", "-contains", "never-printed", "-timeout", "300ms", "p_1"); err == nil {
+		t.Errorf("a wait that timed out succeeded: %s", out)
+	}
+
+	// And the generic door reaches methods with no command of their own.
+	out, err = run("api", "-s", "cli", "session.snapshot")
+	if err != nil || !strings.Contains(out, `"session_snapshot"`) {
+		t.Fatalf("tend api = %q, %v", out, err)
+	}
 }

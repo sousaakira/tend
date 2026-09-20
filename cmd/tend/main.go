@@ -29,6 +29,9 @@ commands:
   new               open a pane in a session
   kill              close panes, or stop a session
   handoff           replace a session's server, keeping its programs
+  agent             drive an agent: read it, prompt it, wait for it
+  pane              drive a pane: read it, type into it, wait for it
+  api               call the automation socket directly
   follow            print a session's events, for diagnosis
   serve             run a session server in the foreground
   config            show or create the settings file
@@ -81,6 +84,12 @@ func main() {
 		err = runKill(args[1:])
 	case "handoff":
 		err = runHandoff(args[1:])
+	case "agent":
+		err = runAgent(args[1:])
+	case "pane":
+		err = runPane(args[1:])
+	case "api":
+		err = runAPI(args[1:])
 	case "attach":
 		err = runAttach(args[1:])
 	case "follow":

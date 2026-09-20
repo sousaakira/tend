@@ -100,6 +100,18 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   state afterwards. Also run on the owner's live session with Claude Code
   mid-session: the new server reported the pane's mouse modes (any-event, SGR)
   exactly as the old one had, which only `RenderResume` could have told it.
+- **Automation API and CLI** (a large part of herdr's item 3): the socket
+  answers `session.snapshot`, `workspace.list|get|create|rename|close`,
+  `tab.list|get|create|rename|close`, `pane.list|get|read|send_text|send_keys|
+  split|close|resize|wait_for_output`, `agent.list|get|read|prompt|send_keys|
+  wait|start`, `events.wait`, `server.stop|live_handoff`, in herdr's names and
+  shapes. The commands are `tend agent <list|get|read|prompt|send-keys|wait>`,
+  `tend pane <list|get|read|send-text|send-keys|wait>` and `tend api <method>
+  [json]` for anything without a command of its own. Keys are named as herdr
+  names them (`internal/vt/keys.go`), encoded against the pane's own modes, and
+  a prompt's text and its Enter are sent 300ms apart as herdr does. Verified
+  against the real Claude Code with no client attached: prompted it, waited for
+  it to come back idle, and read its answer out of the pane.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -115,6 +127,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Forced selection | none inside a mouse-holding program | alt+drag selects a block anywhere | fallback for programs that hold the mouse and do nothing with a drag |
 | Clipboard | OSC 52 only | local tool (`wl-copy`/`xclip`/`xsel`/`pbcopy`) when not over ssh, plus OSC 52 always | the owner's terminal refuses OSC 52 |
 | Handoff transport | pty descriptors sent as `SCM_RIGHTS` over a socket; the new server binds the socket afresh | descriptors inherited by the child (`exec.Cmd.ExtraFiles`) at fixed numbers, the **listening socket included** | inheritance needs no protocol, and handing the listener over means the socket file is never removed and recreated — there is no instant with nobody listening |
+| Focus and scroll over the API | `pane.focus`, `agent.focus`, `pane.scroll`, `pane.current` are server methods | not offered | in tend these are client state (AGENTS.md: what one person is looking at stays in the client), so the server has no focus to set and would be answering for a client that may not be attached |
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
 | Claude / JSONC settings | `jsonc_parser` preserves comments and compact layout | `encoding/json`; comments lost and **keys re-sorted alphabetically** on rewrite (content otherwise identical — checked against the owner's real 44 KB `settings.json`: install adds one `SessionStart` entry, a second install adds nothing, uninstall restores it exactly) | avoid a new dependency; invalid JSON is an error, not silently stripped |
 | Integration assets | `.sh` and `.ps1` | Unix `.sh` / `.js` / `.ts` / Hermes plugin only | Windows PowerShell assets not ported yet; platform code is compile-gated when they are |
@@ -180,20 +193,22 @@ an agent may name one, by id, except pi and omp which resume from a path.
 - Note the versioning rule in `../herdr/CLAUDE.md` ("Integration asset
   versions") when bumping `TEND_INTEGRATION_VERSION` markers
 
-### 3. Automation API and CLI — large, and a prerequisite
+### 3. Automation API and CLI — the core is done, the rest is open
 
-The half of herdr built for scripts and for other agents. **Plugins depend on
-it**: in herdr "the entire CLI is the plugin API". The integration methods and
-pane report methods above are a slice of this; the rest (agent.list, pane.read,
-events.wait, layout.export, …) is still open.
+What a script needs is ported (see "Ported, and checked"). What is left:
 
+- **Streaming**: `events.subscribe` as a stream. `events.wait` returns one
+  event; a caller that wants a feed calls again, which drops what happened in
+  between. herdr: `api/subscriptions.rs` (842 lines).
+- **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
+  `pane.current`): deliberately absent, see "Different from herdr on purpose".
+- `layout.export|apply`, `pane.move|swap|neighbor|edges|zoom|process_info`,
+  `agent.explain|rename|view.*`, `worktree.*`, `plugin.*`, `command.invoke`,
+  `notification.show`, graphics, `pane.report_metadata`.
+- A published schema (`herdr api schema`, `schemars`), which plugins read.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,
-  `cli/workspace.rs`, `cli/api.rs`; methods such as `agent.list|get|read|
-  prompt|send_keys|wait|start|explain`, `pane.read|send_text|send_keys|
-  wait_for_output|scroll|get|list|current`, `events.subscribe|wait`,
-  `layout.export|apply`; user docs `socket-api.mdx`, `cli-reference.mdx`,
-  `agent-automation.mdx`.
-- tend today: `tend screen`, `tend watch`, `tend follow`, `tend ls`, `tend new`.
+  `cli/workspace.rs`, `cli/api.rs`; user docs `socket-api.mdx`,
+  `cli-reference.mdx`, `agent-automation.mdx`.
 
 ### 4. Plugins — large; needs item 3 first
 

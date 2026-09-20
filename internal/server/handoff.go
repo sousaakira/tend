@@ -230,8 +230,9 @@ func (s *Server) CommitHandoff(h *Handoff) error {
 
 // Replace carries out a handoff through the function the server was configured
 // with, and reports whether the replacement took over. It does not commit:
-// the caller does, once it has told whoever asked.
-func (s *Server) replace() (*Handoff, error) {
+// the caller does, once it has told whoever asked. Until then this server is
+// still the one answering, and a caller that never commits leaves it that way.
+func (s *Server) Replace() (*Handoff, error) {
 	if s.cfg.Replace == nil {
 		return nil, ErrHandoffUnavailable
 	}

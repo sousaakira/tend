@@ -88,7 +88,7 @@ func TestHandoffReplacesTheServerUnderARunningShell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn := dialAPI(t, apiPath)
+	conn := dialAPISocket(t, apiPath)
 	defer conn.Close()
 	r := bufio.NewReader(conn)
 	if reply := callAPI(t, conn, r, `{"id":"h","method":"ping"}`); reply["error"] != nil {
