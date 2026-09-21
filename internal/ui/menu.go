@@ -181,28 +181,35 @@ func TabMenu(tab uint64, x, y int) Menu {
 	}
 }
 
-// SpaceMenu is what a right-click on a space offers.
-func SpaceMenu(workspace uint64, x, y int) Menu {
+// SpaceMenu is what a right-click on a space offers. groups says whether
+// the session has any group yet: making one is always offered, where it
+// can be seen, and moving into one only once there is one to move into.
+func SpaceMenu(workspace uint64, groups bool, x, y int) Menu {
+	items := []MenuItem{
+		{Label: "new space", Action: MenuNewSpace},
+		{Label: "new tab", Action: MenuNewTab},
+		{Label: "rename", Action: MenuRename},
+		{Label: "new group...", Action: MenuGroup},
+	}
+	if groups {
+		items = append(items, MenuItem{Label: "move to group...", Action: MenuMoveToGroup})
+	}
 	return Menu{
 		Title: "space",
-		Items: []MenuItem{
-			{Label: "new space", Action: MenuNewSpace},
-			{Label: "new tab", Action: MenuNewTab},
-			{Label: "rename", Action: MenuRename},
-			{Label: "move to group...", Action: MenuMoveToGroup},
+		Items: append(items, []MenuItem{
 			{Label: "new worktree...", Action: MenuNewWorktree},
 			{Label: "open worktree...", Action: MenuOpenWorktree},
 			{Label: "remove worktree", Action: MenuRemoveWorktree},
 			{Label: "move up", Action: MenuMoveBack},
 			{Label: "move down", Action: MenuMoveOn},
 			{Label: "close space", Action: MenuClose},
-		},
+		}...),
 		X: x, Y: y, Workspace: workspace,
 	}
 }
 
 // GroupPickMenu lists where a space can go: each group it is not in, a new
-// one, and out of the one it is in. Typing a name that already exists is
+// one (also on the space menu itself), and out of the one it is in. Typing a name that already exists is
 // how a space joined a group before, and it is easy to get one letter wrong
 // and make a second group; picking it from a list is not.
 func GroupPickMenu(workspace uint64, current string, groups []string, x, y int) Menu {

@@ -938,6 +938,29 @@ func TestGroupMenuActsOnTheGroup(t *testing.T) {
 	}
 }
 
+// TestSpaceMenuOffersANewGroupFirstHand: making a group is on the space's
+// own menu, and moving into one appears once a group exists. If it
+// regresses, the first group is behind a submenu nobody opens, as the owner
+// found — "there is no new group".
+func TestSpaceMenuOffersANewGroupFirstHand(t *testing.T) {
+	has := func(m Menu, label string) bool {
+		for _, it := range m.Items {
+			if it.Label == label {
+				return true
+			}
+		}
+		return false
+	}
+	none := SpaceMenu(1, false, 0, 0)
+	if !has(none, "new group...") || has(none, "move to group...") {
+		t.Errorf("with no groups: %+v", none.Items)
+	}
+	some := SpaceMenu(1, true, 0, 0)
+	if !has(some, "new group...") || !has(some, "move to group...") {
+		t.Errorf("with groups: %+v", some.Items)
+	}
+}
+
 // TestGroupPickMenuOffersEveryOtherGroup: moving a space into a group is
 // picking one that exists, making one, or leaving the one it is in. If it
 // regresses, joining a group means typing its name exactly, and a typo makes
@@ -1191,7 +1214,7 @@ func TestMenuTargetsWhatItWasOpenedOn(t *testing.T) {
 	if m := PaneMenu(7, 0, 0, true); m.Pane != 7 || m.Tab != 0 || m.Workspace != 0 {
 		t.Errorf("pane menu targets %+v", m)
 	}
-	if m := SpaceMenu(3, 0, 0); m.Workspace != 3 || m.Pane != 0 {
+	if m := SpaceMenu(3, false, 0, 0); m.Workspace != 3 || m.Pane != 0 {
 		t.Errorf("space menu targets %+v", m)
 	}
 

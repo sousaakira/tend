@@ -442,6 +442,16 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 	}
 }
 
+// hasGroupsLocked reports whether any space is in a group.
+func (t *tui) hasGroupsLocked() bool {
+	for _, w := range t.snap.Workspaces {
+		if w.Group != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // groupOfLocked is the group a space is in, or "".
 func (t *tui) groupOfLocked(workspace uint64) string {
 	for _, w := range t.snap.Workspaces {

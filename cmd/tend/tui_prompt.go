@@ -24,9 +24,9 @@ const (
 	// promptNewWorktree asks for the branch of a new worktree, with a
 	// generated one already in the box.
 	promptNewWorktree
-	// promptGroupSpace names the group a space belongs with. An empty answer
-	// takes it out of the one it is in, which is the only way to say that and
-	// the reason this prompt does not treat empty as cancelling.
+	// promptGroupSpace names a new group for a space. Leaving a group and
+	// joining one that exists are picked from a menu, so an empty answer
+	// cancels here as it does everywhere else.
 	promptGroupSpace
 	// promptRenameGroup renames a group, which means moving every space in it
 	// at once: a group is only the set of spaces naming it.
@@ -72,10 +72,6 @@ func (t *tui) startPrompt(kind promptKind) {
 			if p.ID == t.focus {
 				t.promptText = p.Title
 			}
-		}
-	case promptGroupSpace:
-		if w, ok := t.workspaceLocked(); ok {
-			t.promptText = w.Group
 		}
 	case promptRenameGroup:
 		t.promptText = t.promptGroup
@@ -168,10 +164,9 @@ func (t *tui) commitPrompt() error {
 	t.mu.Unlock()
 	t.wakeUp()
 
-	if name == "" && kind != promptGroupSpace {
+	if name == "" {
 		// An empty name would make the thing disappear from every list it is
-		// in, so it is treated as cancelling rather than as a name. A group is
-		// the exception: emptying it is how a space leaves one.
+		// in, so it is treated as cancelling rather than as a name.
 		return nil
 	}
 
@@ -235,7 +230,7 @@ func (t *tui) promptLabelLocked() string {
 	case promptNewWorktree:
 		return "new worktree — branch"
 	case promptGroupSpace:
-		return "group — empty to ungroup"
+		return "new group — name"
 	case promptRenameGroup:
 		return "rename group"
 	}

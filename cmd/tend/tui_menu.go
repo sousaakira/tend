@@ -82,12 +82,13 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 	frame := t.buildFrame()
 	cols, rows := t.cols, t.rows
 	panes := len(t.rects)
+	groups := t.hasGroupsLocked()
 	t.mu.Unlock()
 
 	if row, ok := ui.SidebarRowAt(frame, x, y, rows); ok {
 		switch row.Kind {
 		case ui.SidebarSpace:
-			return ui.SpaceMenu(row.Workspace, x, y), true
+			return ui.SpaceMenu(row.Workspace, groups, x, y), true
 		case ui.SidebarSpaceGroup:
 			return ui.GroupMenu(row.Group, row.Folded, x, y), true
 		case ui.SidebarAgent:

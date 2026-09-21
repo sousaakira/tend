@@ -1524,14 +1524,10 @@ func TestAttachMenuButtonAndEscape(t *testing.T) {
 // menu, the way a user would.
 func (a *attached) groupSpace(t *testing.T, space, group string) {
 	t.Helper()
-	a.openMenuOn(t, 6, a.lineContaining(t, space), "move to group...")
-	a.clickAt(t, 8, a.lineContaining(t, "move to group..."))
-	a.waitForScreen(t, "the list of groups", func(s string) bool {
-		return strings.Contains(s, "new group...")
-	})
+	a.openMenuOn(t, 6, a.lineContaining(t, space), "new group...")
 	a.clickAt(t, 8, a.lineContaining(t, "new group..."))
 	a.waitForScreen(t, "the group prompt", func(s string) bool {
-		return strings.Contains(s, "empty to ungroup")
+		return strings.Contains(s, "new group — name")
 	})
 	a.send(t, group+"\r")
 	time.Sleep(300 * time.Millisecond)

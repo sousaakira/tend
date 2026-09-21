@@ -631,9 +631,9 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		return true, nil
 	case row.Action == ui.ActionOpenMenu:
 		t.mu.Lock()
-		ws := t.workspace
+		ws, groups := t.workspace, t.hasGroupsLocked()
 		t.mu.Unlock()
-		t.openMenu(ui.SpaceMenu(ws, x, y))
+		t.openMenu(ui.SpaceMenu(ws, groups, x, y))
 		return true, nil
 	case row.Action == ui.ActionToggleGrouped:
 		t.mu.Lock()
