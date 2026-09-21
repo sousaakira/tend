@@ -46,6 +46,16 @@ type Preview struct {
 	err     error
 	modTime time.Time
 
+	// markdown is shown rendered unless raw; an image is drawn, at the size
+	// it was last drawn for.
+	markdown bool
+	raw      bool
+	image    bool
+	drawn    [][]span
+	drawnFor [2]int
+	imgW     int
+	imgH     int
+
 	top, left int
 	wrap      bool
 	mark      int
@@ -65,13 +75,24 @@ func NewPreview(path string, line int, opener Opener) *Preview {
 }
 
 func (p *Preview) load(path string, line int) {
-	*p = Preview{opener: p.opener, cols: p.cols, rows: p.rows, wrap: p.wrap, path: path, mark: line}
+	*p = Preview{opener: p.opener, cols: p.cols, rows: p.rows, wrap: p.wrap, raw: p.raw, path: path, mark: line}
 	info, err := os.Stat(path)
 	if err != nil {
 		p.err = err
 		return
 	}
 	p.modTime = info.ModTime()
+	if isImage(path) {
+		// Drawn when the size to draw it at is known, in Draw.
+		p.image = true
+		return
+	}
+	p.markdown = langFor(path) != nil && langFor(path).markdown
+	if p.markdown && line > 0 {
+		// A search result is a line of the source; rendered, it would not
+		// be there to light.
+		p.raw = true
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		p.err = err
@@ -109,8 +130,30 @@ func (p *Preview) Quit() bool { return p.quit }
 // body is how many rows the file gets: all but the title and the hints.
 func (p *Preview) body() int { return max(p.rows-2, 1) }
 
+// shown is the lines as drawn: the source with its colour, markdown
+// rendered, or the picture; and whether line numbers go beside them, which
+// they do only for the source.
+func (p *Preview) shown() ([][]span, bool) {
+	switch {
+	case p.image:
+		if p.drawnFor != [2]int{p.cols, p.rows} {
+			p.drawn, p.imgW, p.imgH, p.err = renderImage(p.path, p.cols-2, p.body())
+			p.drawnFor = [2]int{p.cols, p.rows}
+		}
+		return p.drawn, false
+	case p.markdown && !p.raw:
+		if p.drawnFor != [2]int{p.cols, p.rows} || p.drawn == nil {
+			p.drawn = renderMarkdown(p.lines, p.cols-2)
+			p.drawnFor = [2]int{p.cols, p.rows}
+		}
+		return p.drawn, false
+	}
+	return p.spans, true
+}
+
 func (p *Preview) scroll(delta int) {
-	p.top = min(max(p.top+delta, 0), max(len(p.lines)-p.body(), 0))
+	lines, _ := p.shown()
+	p.top = min(max(p.top+delta, 0), max(len(lines)-p.body(), 0))
 }
 
 // Key handles a key.
@@ -139,6 +182,12 @@ func (p *Preview) Key(k Key) {
 		}
 	case "w":
 		p.wrap, p.left = !p.wrap, 0
+	case "m":
+		// Markdown's source, or back to it read as it reads. The line asked
+		// for is a line of the source, so the source is where it is lit.
+		if p.markdown {
+			p.raw, p.top, p.drawn = !p.raw, 0, nil
+		}
 	case "r":
 		p.load(p.path, p.mark)
 	case "o":
@@ -195,9 +244,20 @@ func (p *Preview) Draw(g *vt.Grid) {
 	default:
 		p.drawLines(g)
 	}
+	if p.image && p.err == nil && p.imgW > 0 {
+		size := strconv.Itoa(p.imgW) + "×" + strconv.Itoa(p.imgH)
+		put(g, p.cols-1-len([]rune(size)), 0, size, styleDim, p.cols)
+	}
 
 	hint := "q close  o edit  w wrap"
-	if p.wrap {
+	switch {
+	case p.image:
+		hint = "q close  o open"
+	case p.markdown && !p.raw:
+		hint = "q close  o edit  m source"
+	case p.markdown:
+		hint = "q close  o edit  m rendered"
+	case p.wrap:
 		hint = "q close  o edit  w unwrap"
 	}
 	if p.message != "" {
@@ -208,23 +268,29 @@ func (p *Preview) Draw(g *vt.Grid) {
 }
 
 func (p *Preview) drawLines(g *vt.Grid) {
-	gutter := len(strconv.Itoa(len(p.lines))) + 1
+	lines, numbered := p.shown()
+	gutter := 0
+	if numbered {
+		gutter = len(strconv.Itoa(len(lines))) + 1
+	}
 	width := p.cols - gutter - 1
 	y := 1
-	for i := p.top; i < len(p.lines) && y < p.rows-1; i++ {
-		num := strconv.Itoa(i + 1)
-		numStyle := styleDim
-		lit := i+1 == p.mark
-		if lit {
-			numStyle = vt.Style{FG: vt.IndexedColor(3), Attrs: vt.AttrBold | vt.AttrReverse}
-			fill(g, y, gutter, p.cols, vt.Style{Attrs: vt.AttrReverse | vt.AttrDim})
+	for i := p.top; i < len(lines) && y < p.rows-1; i++ {
+		lit := numbered && i+1 == p.mark
+		if numbered {
+			num := strconv.Itoa(i + 1)
+			numStyle := styleDim
+			if lit {
+				numStyle = vt.Style{FG: vt.IndexedColor(3), Attrs: vt.AttrBold | vt.AttrReverse}
+				fill(g, y, gutter, p.cols, vt.Style{Attrs: vt.AttrReverse | vt.AttrDim})
+			}
+			put(g, gutter-len(num), y, num, numStyle, p.cols)
 		}
-		put(g, gutter-len(num), y, num, numStyle, p.cols)
 		// The spans, cut from the left when scrolled sideways, and wrapped
 		// onto the rows below when wrapping is on.
 		col, skip := 0, p.left
 		x := gutter + 1
-		for _, s := range p.spans[i] {
+		for _, s := range lines[i] {
 			style := s.style
 			if lit {
 				style.Attrs |= vt.AttrBold

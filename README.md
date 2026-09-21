@@ -83,8 +83,9 @@ keys.
 
 - **files** — the project as a tree, with git's letter beside each changed
   file. Enter opens a file in `$EDITOR` in a tab of its own; space, or a
-  click, previews it read-only beside the main pane with syntax colour
-  (`tend view` is that preview on its own). `s` stages a file or a folder;
+  click, previews it read-only beside the main pane with syntax colour —
+  markdown rendered (`m` for the source), PNG, JPEG and GIF drawn in the
+  terminal (`tend view` is that preview on its own). `s` stages a file or a folder;
   `m` or a right-click is the menu: new file or folder, rename, delete (type
   yes), copy the path, open with the system's app, reveal, change folder, a
   file's history. `/` or `ctrl+p` finds a file by name.

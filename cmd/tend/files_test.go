@@ -314,7 +314,8 @@ func TestThePanelPreviewsBesideTheMainPaneAndReusesIt(t *testing.T) {
 
 	a.send(t, "k ")
 	a.waitForScreen(t, "brandnew.md in the same pane", func(s string) bool {
-		return strings.Contains(s, "1 # new") && !strings.Contains(s, "1 one")
+		// Markdown, so rendered: "# new" reads as the heading NEW.
+		return strings.Contains(s, "NEW") && !strings.Contains(s, "1 one")
 	})
 	if got := strings.Count(a.lines()[1], "┌"); got != panes {
 		t.Errorf("%d panes after the second preview, %d after the first", got, panes)
