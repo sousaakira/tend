@@ -548,14 +548,13 @@ Ported (see "Ported, and checked"). Left:
 
 Keys are rebindable (see "Ported, and checked"). Left:
 
-- **Sidebar tokens**: `rows_by_agent` keys are not checked against the known
-  agents (herdr refuses an unknown one; here it never matches). There are no
-  workspace metadata reports, so a `$name` in a space row is always empty.
+- **Sidebar tokens**: there are no workspace metadata reports, so a `$name`
+  in a space row is always empty.
 - **Tab bar**: datetime uses a strftime written for tend covering the
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.
-- A title set with `tend terminal title set` is held in the server's memory
-  only, so a `tend handoff` or a restart forgets it.
+- A title set with `tend terminal title set` survives a handoff but not a
+  restart: it is not in the state file.
 - **The rest of the themes**: the backgrounds are drawn for the bars, menus,
   panels and the sidebar's entry in view (`panel_bg`, `accent`,
   `active_row_bg`), but not the finer surfaces — inactive tabs on

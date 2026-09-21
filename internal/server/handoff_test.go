@@ -105,6 +105,7 @@ func TestHandoffKeepsTheAgentsConversation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	old.SetWindowTitle("deploying")
 	if _, err := old.ReportAgentSession(pane, "tend:claude", "claude",
 		agent.SessionRefFromReport("tend:claude", "claude", "conversation-42", ""), nil); err != nil {
 		t.Fatal(err)
@@ -125,6 +126,9 @@ func TestHandoffKeepsTheAgentsConversation(t *testing.T) {
 		t.Fatalf("CommitHandoff: %v", err)
 	}
 
+	if got := next.snapshot().WindowTitle; got != "deploying" {
+		t.Errorf("window title after the handoff = %q, want the script's", got)
+	}
 	got, ok, err := next.AgentSession(pane)
 	if err != nil || !ok || got.Session.ID != "conversation-42" || got.Agent != "claude" {
 		t.Errorf("after the handoff the pane's conversation is %+v, %v, %v; want conversation-42", got, ok, err)

@@ -66,6 +66,9 @@ type HandoffManifest struct {
 	// absent from a server older than that socket — whose replacement then
 	// opens one itself.
 	APIListener bool `json:"api_listener,omitempty"`
+	// WindowTitle is a title a script set (tend terminal title set), which
+	// lives only in the server and would otherwise end with the old one.
+	WindowTitle string `json:"window_title,omitempty"`
 }
 
 // HandoffPane is one pane's live half, written down.
@@ -171,6 +174,7 @@ func (s *Server) BeginHandoff() (*Handoff, error) {
 	s.mu.Lock()
 	h.Manifest.Version = HandoffVersion
 	h.Manifest.Session = s.session.Snapshot(dirs)
+	h.Manifest.WindowTitle = s.windowTitle
 	s.mu.Unlock()
 	return h, nil
 }
@@ -314,6 +318,7 @@ func NewFromHandoff(cfg Config, m HandoffManifest, files []*os.File, ready func(
 		return nil, err
 	}
 	s.session = restored
+	s.windowTitle = m.WindowTitle
 
 	adopted := make(map[session.PaneID]bool, len(m.Panes))
 	runtimes := make([]*paneRuntime, 0, len(m.Panes))

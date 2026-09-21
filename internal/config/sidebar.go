@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/sousaakira/tend/internal/detect"
 )
 
 // What each row of the sidebar shows: herdr's [ui.sidebar.agents] and
@@ -399,7 +401,21 @@ func checkSidebar(s Sidebar) error {
 	if err := checkRows("ui.sidebar.agents.rows", s.Agents.Rows, AgentTokenNames); err != nil {
 		return err
 	}
+	var known map[string]bool
+	if len(s.Agents.RowsByAgent) > 0 {
+		// herdr refuses an id it does not know; here the ids are the bundled
+		// detection manifests', which is what a pane's agent is called.
+		known = map[string]bool{}
+		if catalog, err := detect.Bundled(); err == nil {
+			for _, id := range catalog.IDs() {
+				known[id] = true
+			}
+		}
+	}
 	for agent, rows := range s.Agents.RowsByAgent {
+		if len(known) > 0 && !known[agent] {
+			return fmt.Errorf("unknown agent id %q in ui.sidebar.agents.rows_by_agent", agent)
+		}
 		if err := checkRows("ui.sidebar.agents.rows_by_agent."+agent, rows, AgentTokenNames); err != nil {
 			return err
 		}

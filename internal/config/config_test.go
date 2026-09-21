@@ -478,6 +478,7 @@ rows = [["workspace"], ["$jj_status"]]
 		"bad colour":      "[ui.sidebar.spaces]\nrows = [[{ token = \"workspace\", fg = \"blue\" }]]\n",
 		"two conditions":  "[ui.sidebar.spaces]\nrows = [[{ token = \"$x\", rules = [{ gt = 1, lt = 2 }] }]]\n",
 		"unknown key":     "[ui.sidebar.spaces]\nrow_gaps = 1\n",
+		"unknown agent":   "[ui.sidebar.agents.rows_by_agent]\nclaudee = [[\"agent\"]]\n",
 	} {
 		if _, err := LoadFile(writeConfig(t, body)); err == nil {
 			t.Errorf("%s: expected an error", name)
