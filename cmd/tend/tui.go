@@ -454,7 +454,7 @@ func (t *tui) ensureSession() error {
 			return err
 		}
 	}
-	_, _, err = t.client.NewTab(ws, "tab 1", proto.PaneSpec{Command: t.config.Shell()})
+	_, _, err = t.client.NewTab(ws, "tab 1", proto.PaneSpec{Command: t.paneShell()})
 	return err
 }
 
@@ -1277,7 +1277,7 @@ func (t *tui) command(action ui.Action) error {
 		if cmd == ui.CommandSplitRows {
 			dir = "rows"
 		}
-		created, err := t.client.SplitPane(focus, dir, proto.PaneSpec{Command: t.config.Shell()})
+		created, err := t.client.SplitPane(focus, dir, proto.PaneSpec{Command: t.paneShell()})
 		if err != nil {
 			return err
 		}

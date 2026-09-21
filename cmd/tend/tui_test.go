@@ -2780,3 +2780,47 @@ func TestBareTendStartsWhenTheRuntimeDirectoryIsGone(t *testing.T) {
 		t.Errorf("the runtime directory is %o, want 700", perm)
 	}
 }
+
+// TestANewTabOnAnotherMachineRunsThatMachinesShell: found on a real host, a
+// client sent its own shell (/usr/bin/zsh) with every new pane, and on a
+// machine without zsh every new tab failed. The server now picks its own
+// shell when the client names none, which a remote client does. Here the
+// client's shell does not exist at all and the far side's is /bin/sh.
+func TestANewTabOnAnotherMachineRunsThatMachinesShell(t *testing.T) {
+	bin := buildBinary(t)
+	near, far := t.TempDir(), t.TempDir()
+	stand := filepath.Join(t.TempDir(), "fake-ssh")
+	script := "#!/bin/sh\nshift; shift\nSHELL=/bin/sh TEND_RUNTIME_DIR=" + far + " exec " + bin + " \"$@\"\n"
+	if err := os.WriteFile(stand, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	p, err := pty.Start(bin, []string{"--remote", "user@farhost", "--session", "far"}, pty.Options{
+		Size: pty.Size{Cols: 100, Rows: 16},
+		Env: append(os.Environ(),
+			"TEND_RUNTIME_DIR="+near,
+			"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"),
+			"TEND_SSH="+stand,
+			"SHELL=/nowhere/zsh",
+			"TERM=xterm-256color",
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(100, 16, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stop := exec.Command(bin, "kill", "-s", "far", "-server")
+		stop.Env = append(os.Environ(), "TEND_RUNTIME_DIR="+far)
+		_ = stop.Run()
+		waitForSocketGone(filepath.Join(far, "far.sock"))
+	})
+
+	a.waitForScreen(t, "the far session", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a second tab", func(s string) bool { return strings.Contains(s, "tab 2") })
+	a.sendUntil(t, "echo $((40+2))-there\n", "the new tab's shell", func(s string) bool {
+		return strings.Contains(s, "42-there")
+	})
+}

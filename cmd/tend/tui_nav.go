@@ -153,7 +153,7 @@ func (t *tui) newWorkspaceIn(group string) error {
 			return err
 		}
 	}
-	if _, _, err := t.client.NewTab(ws, t.nextName("tab", 0), proto.PaneSpec{Command: t.config.Shell()}); err != nil {
+	if _, _, err := t.client.NewTab(ws, t.nextName("tab", 0), proto.PaneSpec{Command: t.paneShell()}); err != nil {
 		return err
 	}
 	t.mu.Lock()
@@ -311,7 +311,7 @@ func (t *tui) newTabHere() error {
 	name := t.nextName("tab", len(t.tabsLocked()))
 	t.mu.Unlock()
 
-	tab, _, err := t.client.NewTab(ws, name, proto.PaneSpec{Command: t.config.Shell()})
+	tab, _, err := t.client.NewTab(ws, name, proto.PaneSpec{Command: t.paneShell()})
 	if err != nil {
 		return err
 	}
@@ -920,4 +920,15 @@ func (t *tui) waitingLocked() int {
 		}
 	}
 	return n
+}
+
+// paneShell is the command a new pane runs: this machine's shell for a
+// session here, and nothing — the server's own — for a session on another
+// machine, whose shells this client knows nothing about. A server too old
+// to choose one gets this machine's, as before.
+func (t *tui) paneShell() []string {
+	if t.host != "" && t.serverHas(proto.FeatureServerShell) {
+		return nil
+	}
+	return t.config.Shell()
 }

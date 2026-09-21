@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // version is stamped at build time from git; see the Makefile. The fallback
@@ -19,6 +20,7 @@ var version = "development build"
 const usage = `tend — terminal runtime for coding agents
 
 usage: tend [command] [options]
+       tend --remote <ssh-target> [--session <name>]
 
 with no command, tend opens a session — starting a server for it if there is
 not one already — and draws it.
@@ -60,16 +62,55 @@ commands that need no server:
 run "tend <command> -h" for a command's options.
 `
 
+// launchArgs reads herdr's way of starting: `tend --remote <ssh-target>
+// [--session <name>]`, and `tend --session <name>`, each as `--flag value` or
+// `--flag=value`. They mean attach, to that machine and that session; with
+// no arguments at all, tend attaches to the default session here. As in
+// herdr, they go only with the default launch, not with a command.
+func launchArgs(args []string) ([]string, error) {
+	if len(args) == 0 {
+		return []string{"attach"}, nil
+	}
+	if !strings.HasPrefix(args[0], "--remote") && !strings.HasPrefix(args[0], "--session") {
+		return args, nil
+	}
+	out := []string{"attach"}
+	for i := 0; i < len(args); i++ {
+		name, value, inline := strings.Cut(args[i], "=")
+		var flag string
+		switch name {
+		case "--remote":
+			flag = "-ssh"
+		case "--session":
+			flag = "-s"
+		default:
+			return nil, fmt.Errorf("--remote and --session go only with the default launch; %q is not one of them", args[i])
+		}
+		if !inline {
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+				return nil, fmt.Errorf("%s needs a value", name)
+			}
+			i++
+			value = args[i]
+		}
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("%s needs a value", name)
+		}
+		out = append(out, flag, value)
+	}
+	return out, nil
+}
+
 func main() {
 	// Bare "tend" opens a session, starting a server if there is none. Asking
 	// someone to run a daemon before they can use the thing is a step that
 	// exists only because of how it is built.
-	args := os.Args[1:]
-	if len(args) == 0 {
-		args = []string{"attach"}
+	args, err := launchArgs(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tend: %v\n", err)
+		os.Exit(2)
 	}
 
-	var err error
 	switch cmd := args[0]; cmd {
 	case "update":
 		err = runUpdate(args[1:])

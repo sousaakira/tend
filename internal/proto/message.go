@@ -196,6 +196,9 @@ const (
 	FeatureFocusRequest = "focus-request"
 	// FeatureAgentView: the snapshot carries agent.view.set's view.
 	FeatureAgentView = "agent-view"
+	// FeatureServerShell: a pane asked for with no command runs the server's
+	// shell, so a client on another machine need not name one.
+	FeatureServerShell = "server-shell"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
@@ -203,7 +206,7 @@ const (
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
-	FeatureFocusRequest, FeatureAgentView,
+	FeatureFocusRequest, FeatureAgentView, FeatureServerShell,
 }
 
 // --- session ---------------------------------------------------------------

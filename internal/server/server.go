@@ -685,7 +685,13 @@ func (s *Server) CloseWorkspace(id session.WorkspaceID) error {
 // session lock.
 func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	if len(spec.Command) == 0 {
-		return errors.New("server: pane has no command")
+		// Nothing asked for: the shell of the machine the pane runs on. A
+		// client on another machine does not know what that is — it sent its
+		// own /usr/bin/zsh to a host without zsh, and every new tab failed.
+		spec.Command = s.shell()
+		if p, ok := s.session.Pane(id); ok {
+			p.Command = spec.Command
+		}
 	}
 	if s.handingOff {
 		return ErrHandingOff

@@ -276,7 +276,7 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		if item.Action == ui.MenuSplitDown {
 			dir = "rows"
 		}
-		created, err := t.client.SplitPane(m.Pane, dir, proto.PaneSpec{Command: t.config.Shell()})
+		created, err := t.client.SplitPane(m.Pane, dir, proto.PaneSpec{Command: t.paneShell()})
 		if err != nil {
 			return err
 		}

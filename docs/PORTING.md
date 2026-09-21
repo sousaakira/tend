@@ -649,7 +649,10 @@ agent's:
   it, have not been tried against a real sshd yet. Checked against one
   (root@10.8.0.110): `tend ls -ssh`, `tend new -ssh`, and the automation
   commands over `-ssh`, which is where a bug was found and fixed (they read
-  the flag and answered from the local session).
+  the flag and answered from the local session); and `tend --remote host`
+  (herdr's launch form) attaching, drawing, a new tab, and detaching, where a
+  second was found and fixed (the client sent its own shell, which the host
+  did not have).
 - Copy mode does not refuse a motion over content that changed underneath, as
   herdr does (`stale_content`).
 

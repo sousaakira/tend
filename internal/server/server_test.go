@@ -152,11 +152,31 @@ func TestNewTabRollsBackAFailedStart(t *testing.T) {
 	}
 }
 
-func TestNewTabRejectsEmptyCommand(t *testing.T) {
-	s := newServer(t)
+// TestAPaneWithNoCommandRunsTheServersShell: a client on another machine
+// names no command, and the pane runs the shell of the machine it is on. It
+// used to be refused, and a client that named its own shell instead sent one
+// the far machine did not have.
+func TestAPaneWithNoCommandRunsTheServersShell(t *testing.T) {
+	cfg := handoffConfig()
+	cfg.Shell = []string{"/bin/sh"}
+	s, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
 	ws, _ := s.NewWorkspace("main")
-	if _, _, err := s.NewTab(ws, "x", PaneSpec{}); err == nil {
-		t.Error("a pane with no command should fail")
+	_, pane, err := s.NewTab(ws, "x", PaneSpec{})
+	if err != nil {
+		t.Fatalf("a pane with no command: %v", err)
+	}
+	var command []string
+	s.Session(func(sess *session.Session) {
+		if p, ok := sess.Pane(pane); ok {
+			command = p.Command
+		}
+	})
+	if len(command) != 1 || command[0] != "/bin/sh" {
+		t.Errorf("the pane records %v, want the server's shell", command)
 	}
 }
 
