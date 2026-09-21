@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -56,6 +57,20 @@ type Manifest struct {
 	Actions []Action `toml:"actions,omitempty" json:"actions,omitempty"`
 	Events  []Hook   `toml:"events,omitempty" json:"events,omitempty"`
 	Panes   []Pane   `toml:"panes,omitempty" json:"panes,omitempty"`
+	// LinkHandlers claim links clicked in a pane (ctrl+click): the first
+	// whose pattern matches, over plugins in id order, runs its action.
+	LinkHandlers []LinkHandler `toml:"link_handlers,omitempty" json:"link_handlers,omitempty"`
+}
+
+// LinkHandler is herdr's link handler: a regular expression over the URL
+// clicked, and the action of the same plugin to run for it, which is told
+// the URL in TEND_PLUGIN_CLICKED_URL.
+type LinkHandler struct {
+	ID        string   `toml:"id" json:"id"`
+	Title     string   `toml:"title" json:"title"`
+	Pattern   string   `toml:"pattern" json:"pattern"`
+	Action    string   `toml:"action" json:"action"`
+	Platforms []string `toml:"platforms,omitempty" json:"platforms,omitempty"`
 }
 
 // Step is a command with no name of its own: a build, or something to run when
@@ -218,6 +233,35 @@ func (m *Manifest) check() ([]string, error) {
 		if !knownEvents[h.On] {
 			warnings = append(warnings, fmt.Sprintf(
 				"this build has no event called %q, so that hook never runs", h.On))
+		}
+	}
+
+	// herdr's checks: an id, a title, a pattern that compiles, and an action
+	// the plugin has.
+	seen = map[string]bool{}
+	for i, h := range m.LinkHandlers {
+		if err := checkID(fmt.Sprintf("link handler %d", i+1), h.ID); err != nil {
+			return nil, err
+		}
+		if seen[h.ID] {
+			return nil, fmt.Errorf("plugin: two link handlers are called %q", h.ID)
+		}
+		seen[h.ID] = true
+		if strings.TrimSpace(h.Title) == "" {
+			return nil, fmt.Errorf("plugin: link handler %q has no title", h.ID)
+		}
+		if strings.TrimSpace(h.Pattern) == "" {
+			return nil, fmt.Errorf("plugin: link handler %q has no pattern", h.ID)
+		}
+		if _, err := regexp.Compile(h.Pattern); err != nil {
+			return nil, fmt.Errorf("plugin: link handler %q: %v", h.ID, err)
+		}
+		has := false
+		for _, a := range m.Actions {
+			has = has || a.ID == h.Action
+		}
+		if !has {
+			return nil, fmt.Errorf("plugin: link handler %q runs action %q, which the plugin does not have", h.ID, h.Action)
 		}
 	}
 

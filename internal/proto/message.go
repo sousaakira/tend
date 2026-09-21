@@ -72,6 +72,9 @@ const (
 	// MethodPaneDock opens a pane along the left edge of a pane's tab, the
 	// tab's full height: the file explorer's place.
 	MethodPaneDock = "pane.dock"
+	// MethodPaneLinkActivate hands a URL clicked in a pane to the plugin that
+	// claims it, if one does: herdr's pane link activation.
+	MethodPaneLinkActivate = "pane.link_activate"
 )
 
 // Request is a call from a client.
@@ -141,6 +144,7 @@ var KnownMethods = []string{
 	MethodWorkspaceMove,
 	MethodCommandRun,
 	MethodPaneDock,
+	MethodPaneLinkActivate,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -470,6 +474,17 @@ type PaneDockParams struct {
 	// left, which is a panel on the wrong side rather than no panel.
 	Right bool     `json:"right,omitempty"`
 	Pane  PaneSpec `json:"pane"`
+}
+
+// PaneLinkParams is a URL clicked in a pane.
+type PaneLinkParams struct {
+	Pane uint64 `json:"pane"`
+	URL  string `json:"url"`
+}
+
+// PaneLinkResult says whether a plugin took the link.
+type PaneLinkResult struct {
+	Handled bool `json:"handled"`
 }
 
 // PaneSplitResult reports the new pane.

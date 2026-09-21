@@ -142,3 +142,31 @@ func (s *Server) commandEnv(pane session.PaneID) ([]string, string) {
 	}
 	return env, dir
 }
+
+// ActivateLink hands a URL clicked in a pane to the plugin that claims it,
+// herdr's invoke_plugin_link_handler_for_url: the first enabled plugin, in
+// id order, with a link handler whose pattern matches, runs that handler's
+// action in the background with the URL in its environment. It reports
+// whether one did; when none does, the client opens the URL itself.
+func (s *Server) ActivateLink(from session.PaneID, url string) (bool, error) {
+	host := s.cfg.Plugins
+	if host == nil || url == "" {
+		return false, nil
+	}
+	installed, handler, action, ok := host.Registry.LinkHandler(url)
+	if !ok {
+		return false, nil
+	}
+	inv := host.Invocation(installed, action.Command)
+	inv.ActionID = action.ID
+	inv.Context = s.pluginContext(from)
+	inv.ClickedURL, inv.LinkHandlerID = url, handler.ID
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		if result := host.RunPlugin(s.context(), inv); result.Err != "" {
+			s.logf("plugin %s: link handler %s: %s", installed.ID, handler.ID, result.Err)
+		}
+	}()
+	return true, nil
+}

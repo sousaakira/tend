@@ -325,6 +325,11 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 				return err
 			}
 		}
+		// ctrl+click on a link is the link's, before the program under it
+		// or a selection has it, as in herdr.
+		if t.clickLink(ev) {
+			return nil
+		}
 		if ev.Button == mouseRight {
 			if m, ok := t.menuFor(ev.X, ev.Y); ok {
 				t.openMenu(m)
@@ -385,6 +390,7 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if t.hoverMenu(ev.X, ev.Y) {
 			return nil
 		}
+		t.hoverLink(ev)
 		if pane := t.paneAt(ev.X, ev.Y); pane != 0 {
 			_, err := t.forwardMouse(pane, ev, false)
 			return err

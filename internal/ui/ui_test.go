@@ -9,6 +9,8 @@ import (
 
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/vt"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // gridText renders a grid as lines, so a whole screenful can be asserted as
@@ -2244,5 +2246,34 @@ func TestTheWorktreePopupFiltersAndHitsItsEntries(t *testing.T) {
 	}
 	if i, ok := w.SelectedEntry(); !ok || i != 2 {
 		t.Errorf("the selection falls to what the filter leaves: %d", i)
+	}
+}
+
+// TestLinkAtFindsWebURLsAsHerdrDoes: herdr's own cases — a closing bracket
+// the URL opened stays, one it did not goes, a full stop goes, a markdown
+// link's text is not the link, and file:// is not a web URL. If it
+// regresses, a ctrl+click opens "https://example.com/docs)," or nothing.
+func TestLinkAtFindsWebURLsAsHerdrDoes(t *testing.T) {
+	cases := []struct {
+		row, at string
+		want    string
+	}{
+		{"see https://example.com/a(b)c.", "example", "https://example.com/a(b)c"},
+		{"[docs](https://example.com/docs),", "example", "https://example.com/docs"},
+		{"[docs](https://example.com/docs)", "docs", ""},
+		{"open file:///tmp/report", "file", ""},
+		{"go to http://localhost:8080/x?y=1!", "localhost", "http://localhost:8080/x?y=1"},
+		{"日本 https://例え.jp/パス end", "jp", "https://例え.jp/パス"},
+	}
+	for _, c := range cases {
+		col := runewidth.StringWidth(c.row[:strings.Index(c.row, c.at)])
+		got, ok := LinkAt(c.row, col)
+		if got.URL != c.want || ok != (c.want != "") {
+			t.Errorf("LinkAt(%q at %q) = %q %v, want %q", c.row, c.at, got.URL, ok, c.want)
+		}
+	}
+	span, _ := LinkAt("see https://example.com/a(b)c.", 6)
+	if span.Start != 4 || span.End != 28 {
+		t.Errorf("columns %d-%d, want 4-28", span.Start, span.End)
 	}
 }

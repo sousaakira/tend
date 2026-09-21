@@ -172,6 +172,8 @@ type tui struct {
 	// motionOn is whether the terminal is reporting every pointer move, as
 	// last asked by the paint goroutine, which alone touches it.
 	motionOn bool
+	// linkHover is the link underlined under the pointer, ctrl held.
+	linkHover *ui.LinkHover
 	// worktreeOpen is herdr's open-worktree popup while it is up.
 	worktreeOpen *worktreeOpenState
 	// toast is the notification card shown, and toastQueue those waiting.
@@ -963,6 +965,7 @@ func (t *tui) buildFrame() ui.Frame {
 		Menu:      t.menu,
 		Navigator: t.navigatorFrameLocked(),
 		Toast:     t.toastFrameLocked(),
+		LinkHover: t.linkHover,
 
 		WorktreeOpen: t.worktreeOpenFrameLocked(),
 		Selection:    t.sel,

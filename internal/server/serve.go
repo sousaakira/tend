@@ -62,6 +62,7 @@ var Methods = []string{
 	proto.MethodWorkspaceMove,
 	proto.MethodCommandRun,
 	proto.MethodPaneDock,
+	proto.MethodPaneLinkActivate,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -457,6 +458,17 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		return proto.PaneSplitResult{Pane: uint64(pane)}, nil
+
+	case proto.MethodPaneLinkActivate:
+		var p proto.PaneLinkParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		handled, err := c.srv.ActivateLink(session.PaneID(p.Pane), p.URL)
+		if err != nil {
+			return nil, err
+		}
+		return proto.PaneLinkResult{Handled: handled}, nil
 
 	case proto.MethodPaneDock:
 		var p proto.PaneDockParams

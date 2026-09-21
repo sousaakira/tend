@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -290,6 +291,37 @@ func (r *Registry) Action(id string) (Installed, Action, error) {
 		return found, action, nil
 	}
 	return Installed{}, Action{}, fmt.Errorf("plugin: %d plugins have an action called %q", count, id)
+}
+
+// LinkHandler finds what claims a URL: over the enabled plugins in id
+// order, the first handler for this platform whose pattern matches and
+// whose action is for this platform too — herdr's find_plugin_link_handler.
+func (r *Registry) LinkHandler(url string) (Installed, LinkHandler, Action, bool) {
+	plugins := r.Enabled()
+	sort.Slice(plugins, func(a, b int) bool { return plugins[a].ID < plugins[b].ID })
+	for _, p := range plugins {
+		for _, h := range p.LinkHandlers {
+			if !platformAllowed(h.Platforms) {
+				continue
+			}
+			var action Action
+			found := false
+			for _, a := range p.Actions {
+				if a.ID == h.Action && platformAllowed(a.Platforms) {
+					action, found = a, true
+				}
+			}
+			if !found {
+				continue
+			}
+			re, err := regexp.Compile(h.Pattern)
+			if err != nil || !re.MatchString(url) {
+				continue
+			}
+			return p, h, action, true
+		}
+	}
+	return Installed{}, LinkHandler{}, Action{}, false
 }
 
 // Pane finds a pane offered by a plugin. The name may be "plugin:pane" or just

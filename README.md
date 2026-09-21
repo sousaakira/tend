@@ -117,6 +117,10 @@ screen, each pane with its agent's state. `/` searches by name or directory,
 `b` `w` `i` `d` keep only blocked, working, idle or done agents (`a` shows all
 again), space opens a space, Enter goes there.
 
+ctrl+click on a web link a pane printed opens it in the browser on your own
+machine (over `--remote` too), unless a plugin's link handler claims it;
+with ctrl held, the link under the pointer is underlined.
+
 The mouse works throughout. Click a tab to switch to it, `+` to make one,
 click a pane to focus it, drag a border to resize, scroll to look back. In the
 agent list, clicking a row goes there — a pane, a tab, or a whole space. A pane

@@ -372,6 +372,14 @@ func (c *Client) DockPane(beside uint64, share float64, right bool, spec proto.P
 	return out.Pane, err
 }
 
+// ActivateLink offers a URL clicked in a pane to the plugins, and reports
+// whether one took it.
+func (c *Client) ActivateLink(pane uint64, url string) (bool, error) {
+	var out proto.PaneLinkResult
+	err := c.Call(proto.MethodPaneLinkActivate, proto.PaneLinkParams{Pane: pane, URL: url}, &out)
+	return out.Handled, err
+}
+
 // ClosePane closes one pane.
 func (c *Client) ClosePane(pane uint64) error {
 	return c.Call(proto.MethodPaneClose, proto.PaneCloseParams{Pane: pane}, nil)

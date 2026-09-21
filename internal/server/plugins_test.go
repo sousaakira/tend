@@ -274,3 +274,49 @@ command = ["./fail.sh"]
 		t.Error("a filter by plugin should leave other plugins' runs out")
 	}
 }
+
+// TestALinkHandlerTakesTheLinksItsPatternMatches: a URL clicked in a pane
+// goes to the plugin whose link handler matches it, whose action runs told
+// the URL and the handler; a URL nobody claims is left for the client to
+// open. If it regresses, a plugin that opens issue links in its own view
+// never sees one.
+func TestALinkHandlerTakesTheLinksItsPatternMatches(t *testing.T) {
+	root, _ := pluginDir(t, `
+id = "issues"
+name = "issues"
+version = "0.1.0"
+
+[[actions]]
+id = "open-issue"
+title = "Open issue"
+command = ["./link.sh"]
+
+[[link_handlers]]
+id = "github-issue"
+title = "GitHub issue"
+pattern = "^https://github\\.com/[^/]+/[^/]+/issues/[0-9]+$"
+action = "open-issue"
+`)
+	log := filepath.Join(root, "link.log")
+	script := "#!/bin/sh\nprintf '%s %s\\n' \"$TEND_PLUGIN_CLICKED_URL\" \"$TEND_PLUGIN_LINK_HANDLER_ID\" >>" + log + "\n"
+	if err := os.WriteFile(filepath.Join(root, "link.sh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	host := hostFor(t, root)
+	s, err := build(Config{DetectInterval: 10 * time.Millisecond, DefaultSize: pty.Size{Cols: 80, Rows: 24}, Plugins: host})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.startLoops()
+	t.Cleanup(func() { _ = s.Close() })
+
+	handled, err := s.ActivateLink(0, "https://github.com/sousaakira/tend/issues/42")
+	if err != nil || !handled {
+		t.Fatalf("handled %v, err %v", handled, err)
+	}
+	waitForFile(t, log, "https://github.com/sousaakira/tend/issues/42 github-issue")
+
+	if handled, _ := s.ActivateLink(0, "https://example.com/"); handled {
+		t.Error("a URL no pattern matches should be left to the client")
+	}
+}

@@ -289,3 +289,33 @@ func TestGithubSourcesAreHerdrsShorthandOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestLinkHandlersAreCheckedAsHerdrChecksThem: a title, a pattern that
+// compiles, and an action the plugin has; a bad one refuses the manifest.
+// If it regresses, a typo in a pattern is found at click time, silently.
+func TestLinkHandlersAreCheckedAsHerdrChecksThem(t *testing.T) {
+	base := "id = \"p\"\nversion = \"1\"\n[[actions]]\nid = \"go\"\ncommand = [\"true\"]\n"
+	cases := map[string]string{
+		"a pattern that does not compile": "[[link_handlers]]\nid = \"h\"\ntitle = \"H\"\npattern = \"(\"\naction = \"go\"\n",
+		"an action it does not have":      "[[link_handlers]]\nid = \"h\"\ntitle = \"H\"\npattern = \".\"\naction = \"nope\"\n",
+		"no title":                        "[[link_handlers]]\nid = \"h\"\npattern = \".\"\naction = \"go\"\n",
+	}
+	for what, extra := range cases {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, ManifestName), []byte(base+extra), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := Load(dir); err == nil {
+			t.Errorf("%s: the manifest should be refused", what)
+		}
+	}
+	dir := t.TempDir()
+	good := base + "[[link_handlers]]\nid = \"h\"\ntitle = \"H\"\npattern = \"^https://\"\naction = \"go\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ManifestName), []byte(good), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, _, err := Load(dir)
+	if err != nil || len(m.LinkHandlers) != 1 {
+		t.Errorf("a good handler: %v %+v", err, m.LinkHandlers)
+	}
+}

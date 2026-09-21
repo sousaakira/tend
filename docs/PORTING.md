@@ -491,8 +491,17 @@ The host is ported (see "Ported, and checked"). Left:
   are ported (herdr's GitHub shorthand only; clone, preview, confirm, build,
   keep under tend's state directory), and so is `plugin.log.list` (`tend
   plugin log`, the last 200 runs). Left: the marketplace, popups as a
-  placement, `link_handlers`, `min_herdr_version`
-  enforcement (tend's builds have no ordering to compare against).
+  placement, `min_herdr_version` enforcement (tend's builds have no
+  ordering to compare against). `link_handlers` are ported: a regex over
+  the URL and an action of the plugin, checked as herdr checks them, the
+  first match over plugins in id order run with TEND_PLUGIN_CLICKED_URL and
+  TEND_PLUGIN_LINK_HANDLER_ID (pane.link_activate); links themselves are
+  herdr's ctrl+click and ctrl+hover, web URLs only, trimmed by herdr's
+  rules, found in the client's own copy of the screen, opened on the
+  client's machine when no plugin takes them. Not ported: OSC 8 hyperlinks,
+  which tend's terminal core does not keep per cell; and the hover shows
+  only while the terminal reports motion, which tend asks for only when
+  something wants it.
 - herdr: `plugin_command.rs`, `plugin_paths.rs`, `cli/plugin.rs`,
   `persist/plugin_registry.rs`, `app/api/plugins/`, `api/schema/plugins.rs`;
   user docs `plugins.mdx`, `marketplace.mdx`.

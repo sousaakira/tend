@@ -36,6 +36,10 @@ const (
 	EnvPluginEvent     = "TEND_PLUGIN_EVENT"
 	EnvPluginEventJSON = "TEND_PLUGIN_EVENT_JSON"
 	EnvPluginContext   = "TEND_PLUGIN_CONTEXT_JSON"
+	// EnvPluginClickedURL and EnvPluginLinkHandlerID tell a link handler's
+	// action what was clicked and which of its handlers claimed it.
+	EnvPluginClickedURL    = "TEND_PLUGIN_CLICKED_URL"
+	EnvPluginLinkHandlerID = "TEND_PLUGIN_LINK_HANDLER_ID"
 )
 
 // RunTimeout is how long a plugin command may take before it is killed.
@@ -92,6 +96,9 @@ type Invocation struct {
 	Event     string
 	EventJSON string
 	Context   Context
+	// ClickedURL and LinkHandlerID are set when a link handler runs.
+	ClickedURL    string
+	LinkHandlerID string
 
 	Timeout time.Duration
 }
@@ -169,6 +176,12 @@ func (inv Invocation) environ() []string {
 	}
 	if inv.EventJSON != "" {
 		env = append(env, EnvPluginEventJSON+"="+inv.EventJSON)
+	}
+	if inv.ClickedURL != "" {
+		env = append(env, EnvPluginClickedURL+"="+inv.ClickedURL)
+	}
+	if inv.LinkHandlerID != "" {
+		env = append(env, EnvPluginLinkHandlerID+"="+inv.LinkHandlerID)
 	}
 	if data, err := json.Marshal(inv.Context); err == nil {
 		env = append(env, EnvPluginContext+"="+string(data))

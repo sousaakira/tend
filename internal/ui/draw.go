@@ -371,6 +371,8 @@ type Frame struct {
 	Menu *Menu
 	// Navigator is herdr's navigator popup (prefix+g), when it is up.
 	Navigator *Navigator
+	// LinkHover is a link under the pointer with ctrl held.
+	LinkHover *LinkHover
 	// Toast is the notification card shown, if any.
 	Toast *Toast
 	// WorktreeOpen is herdr's open-worktree popup, when it is up.
@@ -531,6 +533,7 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	// text that is already drawn.
 	drawSelection(dst, f)
 	drawHighlights(dst, f)
+	drawLinkHover(dst, f)
 
 	// Last, so they sit over the panes rather than under them. The menu is
 	// last of all: it is opened on top of whatever is already showing.
