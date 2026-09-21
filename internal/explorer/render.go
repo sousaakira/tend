@@ -68,6 +68,9 @@ func (m *Model) Draw(g *vt.Grid) (cx, cy int, visible bool) {
 	case modeMenu:
 		m.drawMenu(g)
 		return 0, 0, false
+	case modeHistory:
+		m.drawHistory(g)
+		return 0, 0, false
 	}
 
 	m.drawHeader(g)
@@ -289,6 +292,7 @@ var helpLines = []string{
 	"anywhere",
 	"  1 2 3   files, search, changes",
 	"  B       switch branch (or click it)",
+	"  L       history: commits, stashes, tags",
 	"  P       sync: pull, push (or ⟳)",
 	"  /       find a file by name",
 	"  r       refresh",

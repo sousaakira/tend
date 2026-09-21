@@ -41,7 +41,7 @@ func menuLabels(items []menuItem) string {
 // staged, and empty space only takes creating and the folder actions.
 func TestTheMenuOffersWhatTheTargetTakes(t *testing.T) {
 	file, dir := &Node{Name: "a.go"}, &Node{Name: "src", Dir: true}
-	if got := menuLabels(menuEntries(file, true)); !strings.Contains(got, "Open with default app|Stage changes|Copy path") {
+	if got := menuLabels(menuEntries(file, true)); !strings.Contains(got, "Open with default app|Stage changes|File history|Copy path") {
 		t.Errorf("file: %s", got)
 	}
 	if got := menuLabels(menuEntries(dir, false)); strings.Contains(got, "Open with default app") || strings.Contains(got, "Stage") {

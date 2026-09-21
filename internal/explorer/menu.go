@@ -32,6 +32,7 @@ const (
 	actDelete
 	actReveal
 	actChangeFolder
+	actFileHistory
 )
 
 type menuItem struct {
@@ -50,6 +51,9 @@ func menuEntries(target *Node, inRepo bool) []menuItem {
 	}
 	if target != nil && inRepo {
 		items = append(items, menuItem{actStage, "Stage changes"})
+		if !target.Dir {
+			items = append(items, menuItem{actFileHistory, "File history"})
+		}
 	}
 	if target != nil {
 		items = append(items,
@@ -231,6 +235,8 @@ func (m *Model) runMenu(action menuAction, target *Node) {
 		m.fail(openWithSystem(dir))
 	case actStage:
 		m.stagePath(target)
+	case actFileHistory:
+		m.openHistory(histCommits, m.tree.repoPath(m.git, target.Rel))
 	case actCopyPath, actCopyRelative:
 		path := m.tree.Path(target)
 		if action == actCopyRelative {

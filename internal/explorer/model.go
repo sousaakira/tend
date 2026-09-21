@@ -43,6 +43,7 @@ const (
 	modeBranch
 	modeMenu
 	modePrompt
+	modeHistory
 )
 
 // Opener opens a file for editing somewhere other than here: in tend, an
@@ -96,6 +97,10 @@ type Model struct {
 
 	menu   contextMenu
 	prompt prompt
+	hist   history
+	// viewerBack is where q in the viewer goes: the list the thing shown
+	// was chosen from.
+	viewerBack mode
 
 	branches   branchPicker
 	job        Job
@@ -231,6 +236,10 @@ func (m *Model) listRows() int {
 	if m.view == ViewSearch && m.mode == modeList {
 		return max(m.rows-searchListTop-1, 1)
 	}
+	if m.mode == modeHistory {
+		// The title, then the list, then what the selection is and the keys.
+		return max(m.rows-4, 1)
+	}
 	return max(m.rows-3, 1)
 }
 
@@ -333,6 +342,8 @@ func (m *Model) Key(k Key) {
 		m.branchKey(k)
 	case modeMenu:
 		m.menuKey(k)
+	case modeHistory:
+		m.historyKey(k)
 	case modePrompt:
 		m.promptKey(k)
 	default:
@@ -378,6 +389,8 @@ func (m *Model) listKey(k Key, pending string) {
 		m.say("refreshed", false)
 	case "B":
 		m.openBranches()
+	case "L":
+		m.openHistory(histCommits, "")
 	case "P":
 		m.startSync()
 	case "?":
@@ -670,7 +683,7 @@ func (m *Model) viewerKey(k Key) {
 	v := &m.viewer
 	switch k.Name {
 	case "q", "esc", "ctrl+c", "backspace":
-		m.mode = modeList
+		m.mode, m.viewerBack = m.viewerBack, modeList
 	case "up", "k":
 		v.top--
 	case "down", "j", "enter":

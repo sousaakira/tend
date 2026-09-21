@@ -232,6 +232,9 @@ func (m *Model) Mouse(ev Mouse) {
 	case modeMenu:
 		m.menuMouse(ev)
 		return
+	case modeHistory:
+		m.historyMouse(ev)
+		return
 	case modePrompt:
 		return
 	case modeHelp, modeCommit:
