@@ -68,6 +68,20 @@ type PaneSnapshot struct {
 	// wants to come back there, not to where the shell was opened.
 	Dir   string `json:"dir,omitempty"`
 	Agent string `json:"agent,omitempty"`
+	// Session names the agent's own conversation, when a hook told tend
+	// which one it was in. It is what lets a restored pane carry on rather
+	// than start over; see internal/agent's Resume.
+	Session *AgentSession `json:"agent_session,omitempty"`
+}
+
+// AgentSession is a conversation as the agent names it. It is written down
+// here rather than in internal/agent because the snapshot is what survives a
+// restart, and this package is what a snapshot is made of.
+type AgentSession struct {
+	Source string `json:"source"`
+	Agent  string `json:"agent"`
+	ID     string `json:"id,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 // LayoutSnapshot is the split tree. A leaf names a pane; anything else has
@@ -84,6 +98,12 @@ type LayoutSnapshot struct {
 // dirs gives each pane's current directory, for the panes whose process could
 // be asked. A pane missing from it keeps the directory it started in.
 func (s *Session) Snapshot(dirs map[PaneID]string) Snapshot {
+	return s.SnapshotWith(dirs, nil)
+}
+
+// SnapshotWith also records each pane's agent conversation, for the panes
+// where one is known.
+func (s *Session) SnapshotWith(dirs map[PaneID]string, sessions map[PaneID]AgentSession) Snapshot {
 	snap := Snapshot{
 		Version:       SnapshotVersion,
 		Active:        s.active,
@@ -111,9 +131,13 @@ func (s *Session) Snapshot(dirs map[PaneID]string) Snapshot {
 				if now := dirs[id]; now != "" {
 					dir = now
 				}
-				ts.Panes = append(ts.Panes, PaneSnapshot{
+				pane := PaneSnapshot{
 					ID: uint64(p.ID), Title: p.Title, Command: p.Command, Dir: dir, Agent: p.Agent,
-				})
+				}
+				if conversation, ok := sessions[id]; ok {
+					pane.Session = &conversation
+				}
+				ts.Panes = append(ts.Panes, pane)
 			}
 			ws.Tabs = append(ws.Tabs, ts)
 		}

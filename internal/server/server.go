@@ -238,6 +238,9 @@ type PaneSpec struct {
 	// history is what a restored pane had said before, fed to its terminal
 	// ahead of the new process so the past is above the prompt.
 	history []byte
+	// resume is the conversation a restored agent is being started back in,
+	// so the pane knows it before its hook says so again.
+	resume *agent.PersistedSession
 
 	// Size is the pane's initial terminal size. Zero uses the server default.
 	Size pty.Size
@@ -655,6 +658,9 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	}
 
 	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback, spec.Command[0], spec.Agent, s.knownAgent)
+	if spec.resume != nil {
+		rt.arbiter.RestoreSession(*spec.resume)
+	}
 	if len(spec.history) > 0 {
 		// Before the reader starts, so the old output is above the new
 		// process's first line rather than mixed into it.

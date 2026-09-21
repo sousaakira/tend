@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/session"
 )
@@ -225,5 +226,68 @@ func TestStateFilesArePrivate(t *testing.T) {
 	}
 	if info, _ := os.Stat(filepath.Dir(state)); info.Mode().Perm() != 0o700 {
 		t.Errorf("the state directory is %o, want 700", info.Mode().Perm())
+	}
+}
+
+// TestARestoredAgentComesBackToItsConversation: restoring the place and not
+// the conversation gives the user an agent that has forgotten everything,
+// sitting in the directory where it used to know. The hook says which
+// conversation it is in; this is what that is for.
+func TestARestoredAgentComesBackToItsConversation(t *testing.T) {
+	dir := t.TempDir()
+	stateFile := filepath.Join(dir, "session.json")
+
+	// A stand-in for claude on PATH, so the resume runs something this test
+	// controls: starting the real one from a test would be a surprise, and
+	// what is under test is the command, not the agent.
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "claude"),
+		[]byte("#!/bin/sh\nprintf 'resumed: %s\\n' \"$*\"\nsleep 30\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// A pane pretending to be claude, and a hook's report of its session.
+	first := persistentServer(t, stateFile)
+	ws, _ := first.NewWorkspace("main")
+	_, pane, err := first.NewTab(ws, "t", PaneSpec{
+		Command: []string{"/bin/sh", "-c", "printf 'started: %s\\n' \"$*\"; sleep 30"},
+		Agent:   "claude",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.ReportAgentSession(pane, "tend:claude", "claude",
+		agent.SessionRefFromReport("tend:claude", "claude", "conversation-42", ""), nil); err != nil {
+		t.Fatal(err)
+	}
+	first.saveStructure()
+	_ = first.Close()
+
+	// The state file carries it, and the restored pane runs the resume.
+	second := persistentServer(t, stateFile)
+	waitFor(t, "the restored pane", func() bool { return len(second.Statuses()) == 1 })
+	st := second.Statuses()[0]
+	if st.Agent != "claude" {
+		t.Errorf("the restored pane is %q", st.Agent)
+	}
+	var command []string
+	second.Session(func(sess *session.Session) {
+		if p, ok := sess.Pane(st.ID); ok {
+			command = p.Command
+		}
+	})
+	if len(command) < 3 || command[0] != "claude" || command[1] != "--resume" || command[2] != "conversation-42" {
+		t.Errorf("the restored pane records %v, want claude --resume conversation-42", command)
+	}
+	// And that is what ran, not only what was written down.
+	waitFor(t, "the resumed agent to say so", func() bool {
+		text, _ := second.ScreenText(st.ID)
+		return strings.Contains(text, "resumed: --resume conversation-42")
+	})
+	// And it still knows which conversation that is, before any hook reports
+	// again — which is what lets the next restore work too.
+	if p, ok, _ := second.AgentSession(st.ID); !ok || p.Session.ID != "conversation-42" {
+		t.Errorf("the restored pane's session = %+v, %v", p, ok)
 	}
 }

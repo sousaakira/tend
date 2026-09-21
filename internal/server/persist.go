@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/session"
 	"github.com/sousaakira/tend/internal/vt"
 )
@@ -117,6 +118,30 @@ func (s *Server) restartPaneLocked(p session.PaneSnapshot, past paneHistory) {
 		history: []byte(past.ANSI),
 	}
 
+	// An agent whose conversation is known is started back in it. Restoring
+	// the place and not the conversation gives the user an agent that has
+	// forgotten everything, sitting in the directory where it used to know.
+	if p.Session != nil {
+		persisted := agent.PersistedSession{
+			Source: p.Session.Source, Agent: p.Session.Agent,
+			Session: agent.SessionRef{ID: p.Session.ID, Path: p.Session.Path},
+		}
+		if argv, ok := agent.Resume(persisted); ok {
+			spec.Command = argv
+			spec.Agent = p.Session.Agent
+			spec.resume = &persisted
+		}
+	}
+
+	// The record follows what is actually running: leaving the old command in
+	// it would have the next snapshot save a command the pane is not running,
+	// and the restore after that would resume from the wrong thing.
+	if p.Session != nil && len(spec.Command) > 0 {
+		if pane, ok := s.session.Pane(id); ok {
+			pane.Command = spec.Command
+		}
+	}
+
 	err := s.startLocked(id, spec)
 	if err != nil && spec.Dir != "" {
 		spec.Dir = ""
@@ -189,8 +214,22 @@ func (s *Server) saveStructure() {
 		}
 	}
 
+	// The conversations each pane's agent is in, so a restored pane can
+	// carry one on rather than start over.
+	sessions := make(map[session.PaneID]session.AgentSession, len(runtimes))
+	for id, rt := range runtimes {
+		rt.mu.Lock()
+		p, ok := rt.arbiter.Session()
+		rt.mu.Unlock()
+		if ok {
+			sessions[id] = session.AgentSession{
+				Source: p.Source, Agent: p.Agent, ID: p.Session.ID, Path: p.Session.Path,
+			}
+		}
+	}
+
 	s.mu.Lock()
-	snap := s.session.Snapshot(dirs)
+	snap := s.session.SnapshotWith(dirs, sessions)
 	last := s.lastSaved
 	s.mu.Unlock()
 

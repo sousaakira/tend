@@ -180,6 +180,13 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   rather than the defaults. Binding a key something else has is allowed and
   reported. One table feeds the parser, the help and the listing, so they
   cannot drift.
+- **Agent session resume** (herdr's `agent_resume.rs`): when a hook has said
+  which conversation an agent is in, that reference is written into the state
+  file, and a restored pane starts with the flag that continues it —
+  `claude --resume <id>`, `codex resume <id>`, `omp --resume=<path>`, one per
+  agent, herdr's table. Only the integration tend ships for that agent may
+  name one, and the reference is refused if it is empty, has control
+  characters, or is a path where an id belongs: it goes onto a command line.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -399,10 +406,16 @@ Keys are rebindable (see "Ported, and checked"). Left:
   the pane. herdr reads key events with modifiers through crossterm.
 - herdr's remaining default keys, listed under item 7.
 
-### 12. Agent session resume — medium
+### 12. Agent session resume — done for a restored pane
 
-- herdr: `agent_resume.rs` (859) — resumes the agent's own session when a pane
-  is restored. Depends on item 1.
+Ported (see "Ported, and checked"). Left:
+
+- herdr's deduplication (`dedupe_key`): two panes restored into the same
+  conversation. tend restores each pane with what its own hook reported.
+- Resuming from the launch command (`persisted_session_from_launch_args`):
+  herdr notices `codex resume <id>` typed by hand and remembers it.
+- `agent.start` does not take a session to resume; a script that wants one
+  passes the flag itself.
 
 ### 13. Kitty graphics — medium
 
