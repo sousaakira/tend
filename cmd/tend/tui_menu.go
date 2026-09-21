@@ -229,6 +229,12 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	case ui.MenuPickGroup:
 		return t.moveSpaceToGroup(m.Workspace, item.Arg)
 
+	case ui.MenuFiles:
+		if m.Pane != 0 {
+			t.focusPane(m.Pane)
+		}
+		return t.toggleFiles()
+
 	case ui.MenuFold:
 		t.toggleGroup(m.Group)
 		return nil

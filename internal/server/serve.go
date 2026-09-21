@@ -61,6 +61,7 @@ var Methods = []string{
 	proto.MethodTabMove,
 	proto.MethodWorkspaceMove,
 	proto.MethodCommandRun,
+	proto.MethodPaneDock,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -452,6 +453,21 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		pane, err := c.srv.SplitPane(session.PaneID(p.Target), dir, paneSpec(p.Pane))
+		if err != nil {
+			return nil, err
+		}
+		return proto.PaneSplitResult{Pane: uint64(pane)}, nil
+
+	case proto.MethodPaneDock:
+		var p proto.PaneDockParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		spec := paneSpec(p.Pane)
+		// A docked pane is a panel: it goes when its program does, and its
+		// title is the name it was given, not whatever the program sets.
+		spec.CloseOnExit, spec.Named = true, spec.Title != ""
+		pane, err := c.srv.DockPane(session.PaneID(p.Beside), p.Share, spec)
 		if err != nil {
 			return nil, err
 		}

@@ -145,6 +145,22 @@ func (n *node) split(target, fresh PaneID, dir Direction, before bool) (*node, b
 	return n, true
 }
 
+// dock puts fresh along the left edge of the whole tree, the full height of
+// the tab, with share of its width. A root that is already a row of columns
+// takes it as a first column, the others giving up width in proportion, so
+// docking does not nest a columns split inside another.
+func (n *node) dock(fresh PaneID, share float64) *node {
+	if n != nil && !n.isLeaf() && n.dir == Columns {
+		for i := range n.sizes {
+			n.sizes[i] *= 1 - share
+		}
+		n.kids = insertNode(n.kids, 0, leaf(fresh))
+		n.sizes = insertFloat(n.sizes, 0, share)
+		return n
+	}
+	return &node{dir: Columns, kids: []*node{leaf(fresh), n}, sizes: []float64{share, 1 - share}}
+}
+
 // closePane removes a pane and returns the new root, which is nil once the
 // last pane is gone.
 //

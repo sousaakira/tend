@@ -364,6 +364,14 @@ func (c *Client) SplitPane(target uint64, direction string, spec proto.PaneSpec)
 	return out.Pane, err
 }
 
+// DockPane opens a pane along the left edge of beside's tab, taking share
+// of its width.
+func (c *Client) DockPane(beside uint64, share float64, spec proto.PaneSpec) (uint64, error) {
+	var out proto.PaneSplitResult
+	err := c.Call(proto.MethodPaneDock, proto.PaneDockParams{Beside: beside, Share: share, Pane: spec}, &out)
+	return out.Pane, err
+}
+
 // ClosePane closes one pane.
 func (c *Client) ClosePane(pane uint64) error {
 	return c.Call(proto.MethodPaneClose, proto.PaneCloseParams{Pane: pane}, nil)

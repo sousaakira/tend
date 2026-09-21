@@ -397,6 +397,25 @@ func (s *Session) SplitPane(target PaneID, dir Direction, spec PaneSpec) (*Pane,
 	return p, nil
 }
 
+// DockPane opens a pane along the left edge of a tab, the tab's full
+// height, taking share of its width (clamped to between a tenth and a
+// half). It is how a panel such as the file explorer sits beside everything
+// in the tab rather than beside one pane of it, which is all SplitPane can
+// do. The new pane takes the focus, as a split's does.
+func (s *Session) DockPane(tab TabID, share float64, spec PaneSpec) (*Pane, error) {
+	t, ok := s.Tab(tab)
+	if !ok {
+		return nil, fmt.Errorf("%w: %d", ErrNoSuchTab, tab)
+	}
+	share = math.Min(math.Max(share, 0.1), 0.5)
+	p := s.newPane(spec)
+	t.root = t.root.dock(p.ID, share)
+	t.panes[p.ID] = p
+	t.active = p.ID
+	s.index[p.ID] = t
+	return p, nil
+}
+
 // ClosePane removes a pane.
 //
 // Closing the last pane of a tab closes the tab, and the last tab of a

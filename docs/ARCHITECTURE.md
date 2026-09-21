@@ -49,6 +49,7 @@ Concretely, for `internal/vt` and the render loop:
 | `internal/proto` | Client/server wire messages |
 | `internal/client` | TUI client |
 | `internal/ui` | Pure rendering |
+| `internal/explorer` | The files panel (`tend files`): tree, git, diff, search |
 | `cmd/tend` | CLI entry point |
 
 ## Terminal core
@@ -412,6 +413,20 @@ have what it creates is a button nobody finds.
 Every row of the agent list is clickable, headings included. A line that looks
 clickable and is not is worse than one that is not drawn, so a space heading
 goes to that space and a tab heading to that tab.
+
+### The files panel
+
+The file explorer is a program, `tend files`, run in a pane docked along the
+left of the tab (`pane.dock`, the tab's full height, where a split could only
+sit beside one pane). Being a pane rather than part of the client is what makes
+it right over ssh: it runs where the server and the files are, and the client
+only draws it. It names its binary through `TEND_BIN_PATH`, which the server
+puts in every pane, so the panel is the server's build even when the client is
+another. It asks git in git's porcelain formats, reads a directory only when it
+is opened, reads the disk again every two seconds so an agent's new files show
+up, and opens files through the automation socket: a tab running `$EDITOR`,
+closing with it, and focused by a focus request because each client decides
+what it looks at.
 
 ### Reading a chunk of input
 

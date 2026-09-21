@@ -45,8 +45,10 @@ const (
 	// taking the space out of the group it is in.
 	MenuMoveToGroup = "menu-move-to-group"
 	MenuPickGroup   = "menu-pick-group"
-	MenuMoveBack    = "menu-move-back"
-	MenuMoveOn      = "menu-move-on"
+	// MenuFiles opens or closes the file explorer panel, prefix+f.
+	MenuFiles    = "menu-files"
+	MenuMoveBack = "menu-move-back"
+	MenuMoveOn   = "menu-move-on"
 )
 
 // MenuItem is one line of a menu.
@@ -159,6 +161,7 @@ func PaneMenu(pane uint64, x, y int, closable bool) Menu {
 		{Label: "zoom", Action: MenuZoom},
 		{Label: "rename pane", Action: MenuRenamePane},
 		{Label: "rename tab", Action: MenuRename},
+		{Label: "files panel", Action: MenuFiles},
 	}
 	if closable {
 		items = append(items, MenuItem{Label: "close pane", Action: MenuClose})

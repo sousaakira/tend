@@ -69,6 +69,9 @@ const (
 	// the panes are: in the background, in a pane that closes when it is
 	// done, or as a plugin action.
 	MethodCommandRun = "command.run"
+	// MethodPaneDock opens a pane along the left edge of a pane's tab, the
+	// tab's full height: the file explorer's place.
+	MethodPaneDock = "pane.dock"
 )
 
 // Request is a call from a client.
@@ -137,6 +140,7 @@ var KnownMethods = []string{
 	MethodTabMove,
 	MethodWorkspaceMove,
 	MethodCommandRun,
+	MethodPaneDock,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -453,6 +457,16 @@ type PaneSplitParams struct {
 	// reliably confuses people.
 	Direction string   `json:"direction"`
 	Pane      PaneSpec `json:"pane"`
+}
+
+// PaneDockParams docks a new pane beside everything in Beside's tab. Share
+// is its fraction of the tab's width. A pane with no directory given starts
+// in the one Beside is in now. A docked pane closes when its program ends,
+// and keeps the title it is given.
+type PaneDockParams struct {
+	Beside uint64   `json:"beside"`
+	Share  float64  `json:"share"`
+	Pane   PaneSpec `json:"pane"`
 }
 
 // PaneSplitResult reports the new pane.

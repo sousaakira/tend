@@ -567,6 +567,41 @@ func (s *Server) SplitPane(target session.PaneID, dir session.Direction, spec Pa
 	return pane.ID, nil
 }
 
+// DockPane opens a pane along the left edge of beside's tab and starts a
+// process in it. With no directory given it starts where beside is now —
+// where the user cd'd to, not where the pane was opened — which for the file
+// explorer is the project being worked on.
+func (s *Server) DockPane(beside session.PaneID, share float64, spec PaneSpec) (session.PaneID, error) {
+	if spec.Dir == "" {
+		s.mu.Lock()
+		rt := s.runtimes[beside]
+		s.mu.Unlock()
+		// After the lock: asking the terminal reads /proc, which is I/O.
+		if rt != nil {
+			spec.Dir = rt.pty.Cwd()
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return 0, ErrClosed
+	}
+	tab, ok := s.session.TabOf(beside)
+	if !ok {
+		return 0, fmt.Errorf("%w: %d", session.ErrNoSuchPane, beside)
+	}
+	pane, err := s.session.DockPane(tab.ID, share, spec.record())
+	if err != nil {
+		return 0, err
+	}
+	if err := s.startLocked(pane.ID, spec); err != nil {
+		_ = s.session.ClosePane(pane.ID)
+		return 0, err
+	}
+	return pane.ID, nil
+}
+
 // ClosePane stops a pane's process and removes it from the session.
 func (s *Server) ClosePane(id session.PaneID) error {
 	s.mu.Lock()

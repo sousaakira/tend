@@ -84,6 +84,9 @@ const (
 	// about, herdr's open_notification_target. Unbound by default, as in
 	// herdr; keys.bind gives it a key.
 	CommandOpenNotification
+	// CommandFiles opens the file explorer docked on the left of the tab, goes
+	// to it when it is open, and closes it when it is where the focus is.
+	CommandFiles
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
@@ -181,6 +184,8 @@ func (c Command) String() string {
 		return "open-notification"
 	case CommandLiteralPrefix:
 		return "literal-prefix"
+	case CommandFiles:
+		return "files"
 	default:
 		return "none"
 	}
@@ -207,6 +212,7 @@ var Keys = []struct {
 	{"z", CommandZoom, "zoom pane"},
 	{"[", CommandScroll, "copy mode"},
 	{"e", CommandEditScrollback, "history in $EDITOR"},
+	{"f", CommandFiles, "files and git, docked left"},
 	{"HJKL", CommandSwapRight, "swap pane"},
 	{"r", CommandResizeMode, "resize (hjkl, esc)"},
 	{"c", CommandNewTab, "new tab"},
@@ -305,6 +311,7 @@ func DefaultBindings() map[string]Command {
 		"a":         CommandToggleAgents,
 		"g":         CommandNavigate, "w": CommandNavigate,
 		"e": CommandEditScrollback,
+		"f": CommandFiles,
 		"m": CommandMenu,
 		",": CommandRenameTab,
 		".": CommandRenameSpace,
@@ -321,7 +328,7 @@ func DefaultBindings() map[string]Command {
 // names are what Command.String produces, so the file and the code cannot
 // drift apart.
 func ParseCommand(name string) (Command, bool) {
-	for cmd := CommandNone; cmd <= CommandOpenNotification; cmd++ {
+	for cmd := CommandNone; cmd <= CommandFiles; cmd++ {
 		if cmd != CommandNone && cmd.String() == name {
 			return cmd, true
 		}

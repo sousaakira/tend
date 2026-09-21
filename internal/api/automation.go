@@ -276,6 +276,9 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			Command     []string `json:"command"`
 			Dir         string   `json:"dir"`
 			Agent       string   `json:"agent"`
+			// CloseOnExit is tend's: the tab goes with its program, for one
+			// opened to run a single thing (the file explorer's editor).
+			CloseOnExit bool `json:"close_on_exit"`
 		}
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
@@ -288,6 +291,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		spec.CloseOnExit = p.CloseOnExit
 		tab, pane, err := a.srv.NewTab(session.WorkspaceID(ws), p.Name, spec)
 		if err != nil {
 			return nil, tabErr(p.WorkspaceID, err)

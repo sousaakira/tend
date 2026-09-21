@@ -60,6 +60,7 @@ is not one already, and draws it.
 | `a` | show every agent, grouped |
 | `g` | pick one and jump to it |
 | `,` `.` | rename this tab, this space |
+| `f` | the files panel: the project, git, a diff, a search |
 | `d` | detach, leaving everything running |
 
 A **space** holds tabs, a tab holds panes. Tabs belong to their space, so
@@ -69,6 +70,13 @@ A **space** holds tabs, a tab holds panes. Tabs belong to their space, so
 grouped by space and tab, with what it is doing. `ctrl+b g` walks it and Enter
 jumps — which is the point, since the agent that stopped is rarely the one you
 are looking at.
+
+`ctrl+b f` docks the files panel on the left of the tab: the project as a
+tree with git's letter beside each changed file, the changes with their diffs
+(stage with `s`, commit with `c`), and `/` to find any file by name. Enter
+opens a file in `$EDITOR` in a tab of its own. It runs on the machine the
+session is on, so over `--remote` it shows the server's project. `ctrl+b f`
+again goes to it, and once more puts it away.
 
 The mouse works throughout. Click a tab to switch to it, `+` to make one,
 click a pane to focus it, drag a border to resize, scroll to look back. In the

@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -918,5 +919,56 @@ func TestRestoreRefusesWhatItCannotTrust(t *testing.T) {
 	empty, err := Restore(New().Snapshot(nil))
 	if err != nil || len(empty.Workspaces()) != 0 {
 		t.Errorf("an empty session = %v, %v", empty, err)
+	}
+}
+
+// TestDockPaneRunsTheFullHeightOfTheLeftEdge: a docked panel sits beside
+// the whole tab, not beside one pane of it. If it regresses, opening the file
+// explorer in a tab of stacked panes squeezes it into one of them.
+func TestDockPaneRunsTheFullHeightOfTheLeftEdge(t *testing.T) {
+	s, _, tab, first := fixture(t)
+	if _, err := s.SplitPane(first.ID, Rows, PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	dock, err := s.DockPane(tab.ID, 0.25, PaneSpec{Title: "files"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+
+	area := Rect{W: 100, H: 40}
+	var got Rect
+	for _, pr := range tab.Layout(area) {
+		if pr.Pane == dock.ID {
+			got = pr.Rect
+		}
+	}
+	if got.X != 0 || got.Y != 0 || got.H != 40 || got.W < 20 || got.W > 30 {
+		t.Errorf("docked pane at %+v, want the left quarter at full height", got)
+	}
+	if tab.ActivePane() != dock.ID {
+		t.Error("docking should focus the new pane")
+	}
+}
+
+// TestDockPaneBesideColumnsDoesNotNest: a tab already in columns takes the
+// panel as its first column, and the others keep their proportions.
+func TestDockPaneBesideColumnsDoesNotNest(t *testing.T) {
+	s, _, tab, first := fixture(t)
+	if _, err := s.SplitPane(first.ID, Columns, PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DockPane(tab.ID, 0.2, PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+	if tab.root.dir != Columns || len(tab.root.kids) != 3 {
+		t.Fatalf("root = %d kids in %v, want three columns", len(tab.root.kids), tab.root.dir)
+	}
+	if a, b := tab.root.sizes[1], tab.root.sizes[2]; math.Abs(a-b) > 1e-9 || math.Abs(a-0.4) > 1e-9 {
+		t.Errorf("the two panes should share what is left evenly: %v", tab.root.sizes)
+	}
+	if _, err := s.DockPane(999, 0.2, PaneSpec{}); !errors.Is(err, ErrNoSuchTab) {
+		t.Errorf("docking into no tab: %v", err)
 	}
 }

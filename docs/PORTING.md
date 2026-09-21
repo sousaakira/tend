@@ -367,6 +367,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Forced selection | none inside a mouse-holding program | alt+drag selects a block anywhere | fallback for programs that hold the mouse and do nothing with a drag |
 | Clipboard | OSC 52 only | local tool (`wl-copy`/`xclip`/`xsel`/`pbcopy`) when not over ssh, plus OSC 52 always | the owner's terminal refuses OSC 52 |
 | Space groups | only a repository's worktrees, grouped automatically | named groups of any spaces: "new group..." on a space makes one, "move to group..." (once there is a group) lists them, or leaves one, and a space dragged onto a group's heading or among its spaces joins it | the owner asked for spaces to be put together by hand |
+| Files panel | none built in; the owner used the third-party `herdr-sidebar` plugin | `tend files`, docked on the left by prefix+f or the pane menu: tree with git letters, changes with diff, stage, commit, discard (twice), find a file by name, open in `$EDITOR` in a tab | tend's own, in the one binary, running where the files are. Not persisted: whether it closes with its program (a restored panel stays as a finished pane after `q`) |
 | Handoff transport | pty descriptors sent as `SCM_RIGHTS` over a socket; the new server binds the socket afresh | descriptors inherited by the child (`exec.Cmd.ExtraFiles`) at fixed numbers, the **listening socket included** | inheritance needs no protocol, and handing the listener over means the socket file is never removed and recreated — there is no instant with nobody listening |
 | Focus, scroll and zoom over the API | `pane.focus`, `agent.focus`, `pane.scroll`, `pane.zoom`, `pane.current` are server methods | `pane.focus` and `tab.focus` ask every attached client to show the pane, and each client moves itself (the answer says how many were asked); scroll, zoom and `pane.current` are not offered | in tend these are client state (AGENTS.md: what one person is looking at stays in the client), so the server can ask but not set, and cannot answer for a client that may not be attached |
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
@@ -476,6 +477,8 @@ The host is ported (see "Ported, and checked"). Left:
   `HERDR_PLUGIN_STATE_DIR` where tend sets `TEND_*`. tend does not export
   herdr-named variables (AGENTS.md: no herdr name in the product). Not run
   against tend yet.
+  The owner chose a built-in panel over running it: `tend files` (prefix+f),
+  see "Different from herdr on purpose". The plugin stays unported.
 - `tend plugin install owner/repo[/subdir] [-ref] [-yes]` and `uninstall`
   are ported (herdr's GitHub shorthand only; clone, preview, confirm, build,
   keep under tend's state directory), and so is `plugin.log.list` (`tend

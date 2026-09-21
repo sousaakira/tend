@@ -1406,6 +1406,9 @@ func (t *tui) command(action ui.Action) error {
 		// Focus is on the pane, not the place, so it went with the pane.
 		return t.refresh()
 
+	case ui.CommandFiles:
+		return t.toggleFiles()
+
 	case ui.CommandEditScrollback:
 		if focus == 0 {
 			return nil
