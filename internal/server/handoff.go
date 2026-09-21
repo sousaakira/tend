@@ -81,6 +81,12 @@ type HandoffPane struct {
 	// Resume is terminal output that, written to an empty terminal, leaves it
 	// in the state the old one was in: scrollback, both screens, modes, cursor.
 	Resume []byte `json:"resume"`
+	// AgentSession is the conversation the pane's agent is in. Without it the
+	// new server knows none, and the next time it writes the state file it
+	// writes over the one the old server saved: a restart after a handoff
+	// then starts the agent fresh instead of carrying the conversation on.
+	// Optional, so a manifest from a build without it still reads.
+	AgentSession *agent.PersistedSession `json:"agent_session,omitempty"`
 }
 
 // Handoff is one attempt, from the moment the readers stop.
@@ -252,7 +258,7 @@ func (rt *paneRuntime) handoffPane() HandoffPane {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	cols, rows := rt.screen.Size()
-	return HandoffPane{
+	hp := HandoffPane{
 		ID:       uint64(rt.id),
 		Pid:      rt.pty.Pid(),
 		Cols:     uint16(cols),
@@ -261,6 +267,10 @@ func (rt *paneRuntime) handoffPane() HandoffPane {
 		Explicit: rt.explicit,
 		Resume:   vt.RenderResume(rt.screen, handoffHistory),
 	}
+	if p, ok := rt.arbiter.Session(); ok {
+		hp.AgentSession = &p
+	}
+	return hp
 }
 
 // NewFromHandoff starts a server that continues another's session.
@@ -330,6 +340,9 @@ func NewFromHandoff(cfg Config, m HandoffManifest, files []*os.File, ready func(
 			size = s.cfg.DefaultSize
 		}
 		rt := newPaneRuntime(id, term, size, manifest, s.cfg.Scrollback, p.Command, p.Explicit, s.knownAgent)
+		if p.AgentSession != nil {
+			rt.arbiter.RestoreSession(*p.AgentSession)
+		}
 		rt.write(p.Resume)
 		s.runtimes[id] = rt
 		s.titles[id] = ""

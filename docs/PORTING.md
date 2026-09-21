@@ -375,8 +375,6 @@ an agent may name one, by id, except pi and omp which resume from a path.
 - The arbiter leaves out herdr's bookkeeping for suppressed and stale
   full-lifecycle sessions, its window after an observed process exit, and
   agent names (`terminal/state.rs`)
-- The session reference is held in memory only: it is not in the state file or
-  the handoff manifest yet, which queue item 12 needs
 - Windows `.ps1` assets and Windows path branches
 - Comment-preserving JSONC rewrites (see divergence table)
 - herdr's kimi min-version gate (`enforce_agent_version`) and a few
@@ -434,11 +432,12 @@ Ported (see "Ported, and checked"). Left:
 - `trust_repository` (`safe.directory`) for repositories owned by another user.
 - The `worktree.*` events.
 
-### 7. Moving and swapping — done, except moving a pane elsewhere
+### 7. Moving and swapping — done over the API; the mouse and a few keys are not
 
 Ported (see "Ported, and checked"). Left:
 
-- `pane.move`: a pane into another tab or space. The swap stays within a tab.
+- Moving a pane into another tab or space is `pane.move` over the socket;
+  there is no key or menu for it yet.
 - `workspace.move_block`: moving a group of spaces as one.
 - Dragging a tab or a space with the mouse.
 - **The rest of herdr's default keys.** tend's prefix keys are tmux's where

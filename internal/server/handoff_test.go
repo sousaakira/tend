@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/session"
 )
@@ -89,6 +90,45 @@ func TestHandoffKeepsTheProgramRunning(t *testing.T) {
 		text, _ := next.ScreenText(pane)
 		return strings.Contains(text, "said:hello:"+pid)
 	})
+}
+
+// TestHandoffKeepsTheAgentsConversation: the conversation a hook named for a
+// pane goes across with the pane. If it regresses, the new server writes a
+// state file without it, and the restart after a handoff starts the agent
+// fresh instead of resuming it — the loss shows up days later, on a reboot.
+func TestHandoffKeepsTheAgentsConversation(t *testing.T) {
+	old := newServer(t)
+	ws, _ := old.NewWorkspace("main")
+	_, pane, err := old.NewTab(ws, "t", PaneSpec{
+		Command: []string{"/bin/sh", "-c", "sleep 30"}, Agent: "claude",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.ReportAgentSession(pane, "tend:claude", "claude",
+		agent.SessionRefFromReport("tend:claude", "claude", "conversation-42", ""), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := old.BeginHandoff()
+	if err != nil {
+		t.Fatalf("BeginHandoff: %v", err)
+	}
+	files := h.Files
+	h.Files = nil
+	next, err := NewFromHandoff(handoffConfig(), h.Manifest, files, func() error { return nil })
+	if err != nil {
+		t.Fatalf("NewFromHandoff: %v", err)
+	}
+	t.Cleanup(func() { _ = next.Close() })
+	if err := old.CommitHandoff(h); err != nil {
+		t.Fatalf("CommitHandoff: %v", err)
+	}
+
+	got, ok, err := next.AgentSession(pane)
+	if err != nil || !ok || got.Session.ID != "conversation-42" || got.Agent != "claude" {
+		t.Errorf("after the handoff the pane's conversation is %+v, %v, %v; want conversation-42", got, ok, err)
+	}
 }
 
 // TestAbortedHandoffLosesNothing covers the replacement failing to start. If
