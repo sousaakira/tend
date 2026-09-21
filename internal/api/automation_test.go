@@ -292,3 +292,45 @@ func TestALayoutCanBeSavedAndBuiltAgain(t *testing.T) {
 		t.Errorf("the rebuilt tab has %d panes, want 3", len(inPanes))
 	}
 }
+
+// TestMovingAPaneToAnotherTabDoesNotRestartIt: moving a running agent must
+// leave it running. Closing and reopening would lose whatever it was doing,
+// which is the reason to move rather than reopen.
+func TestMovingAPaneToAnotherTabDoesNotRestartIt(t *testing.T) {
+	h := start(t)
+
+	// A pane whose process can be recognised afterwards.
+	made := result(t, call(t, h, MethodPaneSplit, map[string]any{
+		"pane_id": PaneID(h.pane), "command": []string{"/bin/sh", "-c", "sleep 30"},
+	}))
+	pane, _ := made["pane"].(map[string]any)
+	moving := text(pane["pane_id"])
+	pid := pane["pid"]
+
+	spaces := result(t, call(t, h, MethodWorkspaceCreate, map[string]any{"name": "elsewhere"}))
+	ws, _ := spaces["workspace"].(map[string]any)
+	made = result(t, call(t, h, MethodTabCreate, map[string]any{
+		"workspace_id": text(ws["workspace_id"]), "name": "there",
+		"command": []string{"/bin/sh", "-c", "sleep 30"},
+	}))
+	root, _ := made["root_pane"].(map[string]any)
+
+	if res := result(t, call(t, h, MethodPaneMove, map[string]any{
+		"pane_id": moving, "target_pane_id": text(root["pane_id"]), "direction": "down",
+	})); res["type"] != "ok" {
+		t.Fatalf("move = %v", res)
+	}
+
+	got := result(t, call(t, h, MethodPaneGet, map[string]any{"pane_id": moving}))
+	info, _ := got["pane"].(map[string]any)
+	if info["pid"] != pid {
+		t.Errorf("the pane's process changed: %v, was %v", info["pid"], pid)
+	}
+	tabs := result(t, call(t, h, MethodTabList, map[string]any{"workspace_id": text(ws["workspace_id"])}))
+	list, _ := tabs["tabs"].([]any)
+	tab, _ := list[0].(map[string]any)
+	panes, _ := tab["panes"].([]any)
+	if len(panes) != 2 {
+		t.Errorf("the tab it moved to has %d panes, want 2", len(panes))
+	}
+}

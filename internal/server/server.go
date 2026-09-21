@@ -751,6 +751,12 @@ func (s *Server) SwapPaneToward(id session.PaneID, side session.Side, area sessi
 	return other, err
 }
 
+// MovePane takes a pane out of its tab and puts it beside another, which may
+// be in another tab or another space. Nothing restarts.
+func (s *Server) MovePane(id, beside session.PaneID, dir session.Direction) error {
+	return s.rearrange(func(sess *session.Session) error { return sess.MovePane(id, beside, dir) })
+}
+
 // MoveTab puts a tab at index, or delta places along when delta is set.
 func (s *Server) MoveTab(id session.TabID, index, delta int) error {
 	return s.rearrange(func(sess *session.Session) error {

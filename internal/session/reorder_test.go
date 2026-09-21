@@ -120,3 +120,51 @@ func TestMovingASpaceKeepsTheActiveOneActive(t *testing.T) {
 		t.Errorf("active = %s, want c", s.ActiveWorkspace().Name)
 	}
 }
+
+// TestMovingAPaneToAnotherTabKeepsIt: a running agent moved to another tab
+// must be the same pane afterwards. Remaking it would mean restarting what is
+// in it, which is the one thing moving is for avoiding.
+func TestMovingAPaneToAnotherTabKeepsIt(t *testing.T) {
+	s := New()
+	w := s.AddWorkspace("main")
+	first, a, err := s.AddTab(w.ID, "one", PaneSpec{Command: []string{"agent"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.SplitPane(a.ID, Columns, PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, c, err := s.AddTab(w.ID, "two", PaneSpec{Command: []string{"sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.MovePane(a.ID, c.ID, Rows); err != nil {
+		t.Fatalf("MovePane: %v", err)
+	}
+	if got := len(first.Panes()); got != 1 || first.Panes()[0] != b.ID {
+		t.Errorf("the tab it left holds %v", first.Panes())
+	}
+	moved, ok := second.Pane(a.ID)
+	if !ok {
+		t.Fatal("the pane is not in the tab it moved to")
+	}
+	if moved.Command[0] != "agent" {
+		t.Errorf("the pane was remade: %v", moved.Command)
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The last pane of a tab moving away closes the tab it left.
+	if err := s.MovePane(b.ID, a.ID, Columns); err != nil {
+		t.Fatalf("second MovePane: %v", err)
+	}
+	if _, ok := s.Tab(first.ID); ok {
+		t.Error("the emptied tab is still there")
+	}
+	if err := s.CheckInvariants(); err != nil {
+		t.Fatal(err)
+	}
+}

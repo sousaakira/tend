@@ -228,6 +228,9 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a file and opens `$EDITOR` on it in a pane of its own — herdr's
   `EditScrollback`. The file is removed by the command that opened it, so
   nothing has to remember it.
+- **Moving a pane elsewhere**: `pane.move` takes a pane out of its tab and
+  puts it beside another, in any tab or space, without remaking it — the
+  process goes on running. A tab emptied by the move closes.
 - **Layouts**: `tend layout save [tab] [-o file]` writes a tab's shape and
   what each pane runs; `tend layout apply <file>` builds it again in a space
   of its own. `layout.export` and `layout.apply` over the socket. tend's tree
@@ -323,7 +326,7 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
-- `pane.move|neighbor|edges|zoom|process_info`,
+- `pane.neighbor|edges|zoom|process_info`,
   `agent.explain|rename|view.*`, `worktree.*`, `plugin.*`, `command.invoke`,
   `notification.show`, graphics, `pane.report_metadata`.
 - A published schema (`herdr api schema`, `schemars`), which plugins read.

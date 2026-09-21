@@ -62,6 +62,7 @@ const (
 	MethodEventsWait = "events.wait"
 	// MethodEventsSubscribe is in subscribe.go, where the stream is.
 
+	MethodPaneMove      = "pane.move"
 	MethodPaneSwap      = "pane.swap"
 	MethodTabMove       = "tab.move"
 	MethodWorkspaceMove = "workspace.move"
@@ -568,6 +569,36 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			return nil, err
 		}
 		return a.eventsWait(p.Kinds, p.PaneID, p.TimeoutMs)
+
+	case MethodPaneMove:
+		var p struct {
+			PaneID       string `json:"pane_id"`
+			TargetPaneID string `json:"target_pane_id"`
+			Direction    string `json:"direction"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		beside, err := a.pane(p.TargetPaneID)
+		if err != nil {
+			return nil, err
+		}
+		dir := session.Columns
+		switch p.Direction {
+		case "", "right", "columns":
+		case "down", "rows":
+			dir = session.Rows
+		default:
+			return nil, fail("invalid_params", "direction %q is not right or down", p.Direction)
+		}
+		if err := a.srv.MovePane(id, beside, dir); err != nil {
+			return nil, moveErr(err)
+		}
+		return ok2(), nil
 
 	case MethodPaneSwap:
 		var p struct {

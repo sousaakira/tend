@@ -1,6 +1,9 @@
 package session
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Moving things around without making them again: two panes trade places,
 // a tab or a space moves along its row. None of this touches a process — a
@@ -160,4 +163,76 @@ func moveItem[T any](items []T, from, to int) []T {
 	out = append(out, rest[:to]...)
 	out = append(out, item)
 	return append(out, rest[to:]...)
+}
+
+// MovePane takes a pane out of its tab and puts it beside another, which may
+// be in a different tab or a different space.
+//
+// The pane itself is not remade: its record, and so the process behind it,
+// goes on being the same pane with the same id. That is the whole point —
+// moving a running agent to another tab must not restart it.
+func (s *Session) MovePane(id, beside PaneID, dir Direction) error {
+	from, ok := s.index[id]
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchPane, id)
+	}
+	to, ok := s.index[beside]
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchPane, beside)
+	}
+	if id == beside {
+		return ErrNoMove
+	}
+	if from == to && len(from.panes) == 1 {
+		return ErrNoMove // the only pane of a tab, moved within it
+	}
+
+	pane := from.panes[id]
+	// Out first, so a move within one tab cannot put a pane beside itself.
+	root, closed := from.root.closePane(id)
+	if !closed {
+		return fmt.Errorf("%w: %d", ErrNoSuchPane, id)
+	}
+	from.root = root
+	delete(from.panes, id)
+	delete(s.index, id)
+	if from.active == id {
+		if remaining := from.Panes(); len(remaining) > 0 {
+			from.active = remaining[0]
+		}
+	}
+
+	next, split := to.root.split(beside, id, dir, false)
+	if !split {
+		// Put it back rather than losing a running pane to a layout that
+		// disagreed with the index.
+		from.root = restoreInto(from.root, id)
+		from.panes[id] = pane
+		s.index[id] = from
+		return fmt.Errorf("%w: %d", ErrNoSuchPane, beside)
+	}
+	to.root = next
+	to.panes[id] = pane
+	to.active = id
+	s.index[id] = to
+
+	if from != to && from.root == nil {
+		// The tab it left is empty now.
+		_, _ = s.CloseTab(from.ID)
+	}
+	return nil
+}
+
+// restoreInto puts a pane back into a tree that has just lost it, which is
+// only ever the undo of a move that could not be completed.
+func restoreInto(root *node, id PaneID) *node {
+	if root == nil {
+		return leaf(id)
+	}
+	first := root.panes(nil)
+	if len(first) == 0 {
+		return leaf(id)
+	}
+	next, _ := root.split(first[0], id, Columns, false)
+	return next
 }
