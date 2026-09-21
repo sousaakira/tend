@@ -109,10 +109,14 @@ type Pane struct {
 // UI configures the interface.
 type UI struct {
 	Mouse bool `toml:"mouse"`
-	// Sidebar shows the spaces and agents down the left edge. On by default:
-	// knowing which agent needs you is the reason to run tend, and a list
-	// behind a keystroke is one most people never press.
-	Sidebar bool `toml:"sidebar"`
+	// Sidebar is what the sidebar's rows show, or, written as a boolean,
+	// tend's older way of saying whether it is shown. See sidebar.go.
+	Sidebar Sidebar `toml:"sidebar"`
+	// SidebarStartCollapsed hides the sidebar at start: herdr's key. Nil
+	// defers to the old boolean, and then to shown — knowing which agent
+	// needs you is the reason to run tend, and a list behind a keystroke is
+	// one most people never press.
+	SidebarStartCollapsed *bool `toml:"sidebar_start_collapsed"`
 	// Grouped lists agents under their tab rather than flat.
 	Grouped bool  `toml:"grouped"`
 	Theme   Theme `toml:"theme"`
@@ -157,12 +161,25 @@ type Server struct {
 	Persist bool `toml:"persist"`
 }
 
+// SidebarShown is whether the sidebar starts shown: herdr's
+// sidebar_start_collapsed if the file says, tend's older boolean if that is
+// what it says, and shown otherwise.
+func (c Config) SidebarShown() bool {
+	if c.UI.SidebarStartCollapsed != nil {
+		return !*c.UI.SidebarStartCollapsed
+	}
+	if c.UI.Sidebar.Shown != nil {
+		return *c.UI.Sidebar.Shown
+	}
+	return true
+}
+
 // Defaults returns the configuration tend uses when told nothing.
 func Defaults() Config {
 	return Config{
 		Keys:      Keys{Prefix: "ctrl+b"},
 		Pane:      Pane{Scrollback: 5000},
-		UI:        UI{Mouse: true, Sidebar: true, WindowTitle: DefaultWindowTitle, TabBarSeparator: " "},
+		UI:        UI{Mouse: true, WindowTitle: DefaultWindowTitle, TabBarSeparator: " "},
 		Server:    Server{DetectInterval: "150ms", Persist: true},
 		Worktrees: Worktrees{Directory: "~/.tend/worktrees"},
 		Notify:    Notify{Toasts: "tend"},
@@ -215,11 +232,16 @@ func parse(data, path string) (Config, error) {
 	if err != nil {
 		return Defaults(), fmt.Errorf("config: %s: %w", path, err)
 	}
-	if undecoded := md.Undecoded(); len(undecoded) > 0 {
-		keys := make([]string, 0, len(undecoded))
-		for _, k := range undecoded {
-			keys = append(keys, k.String())
+	var keys []string
+	for _, k := range md.Undecoded() {
+		// ui.sidebar reads itself (Sidebar.UnmarshalTOML) and refuses its
+		// own unknown keys; the decoder does not see that it did.
+		if len(k) >= 2 && k[0] == "ui" && k[1] == "sidebar" {
+			continue
 		}
+		keys = append(keys, k.String())
+	}
+	if len(keys) > 0 {
 		return Defaults(), fmt.Errorf("config: %s: unknown setting(s): %s",
 			path, strings.Join(keys, ", "))
 	}
@@ -248,6 +270,9 @@ func (c Config) validate() error {
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
+	}
+	if err := checkSidebar(c.UI.Sidebar); err != nil {
+		return err
 	}
 	if err := checkCommandKeys(c.Keys.Command); err != nil {
 		return err
@@ -441,11 +466,27 @@ scrollback = 5000
 # Click to focus a pane, drag a divider to resize, scroll to look back.
 mouse = true
 
-# Show the spaces and agents down the left edge.
-sidebar = true
+# Start with the spaces and agents down the left edge put away.
+sidebar_start_collapsed = false
 
 # List agents under their tab rather than flat.
 grouped = false
+
+# What the sidebar's rows show. Agent tokens: state_icon, state_text,
+# machine, workspace, tab, pane, agent, terminal_title,
+# terminal_title_stripped. Space tokens: state_icon, state_text, workspace,
+# branch, git_status. A value a hook reported is $name. A token can be styled,
+# { token = "workspace", fg = "#89b4fa", bold = true, dim = false }, and given
+# rules on its text: rules = [{ gt = 80, fg = "#f38ba8" }, { equals = "", hide = true }].
+# (These tables go after the rest of [ui]; they are shown here to be found.)
+# [ui.sidebar.agents]
+# row_gap = 0
+# rows = [["state_icon", "machine", "workspace", "tab"], ["agent"]]
+# [ui.sidebar.agents.rows_by_agent]
+# claude = [["state_icon", "workspace", "tab"], ["terminal_title_stripped"], ["agent"]]
+# [ui.sidebar.spaces]
+# row_gap = 0
+# rows = [["state_icon", "workspace"], ["branch", "git_status"]]
 
 # The title tend writes to the terminal it runs in, which is what window
 # managers show in title, tab and group bars. Tokens are {hostname},

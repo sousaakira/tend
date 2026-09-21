@@ -408,37 +408,22 @@ func (t *tui) spaceRowsLocked() []ui.SidebarRow {
 
 // spaceRowLocked is one space, at the given depth.
 func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
+	state := t.spaceStateLocked(w)
 	return ui.SidebarRow{
-		Kind:      ui.SidebarSpace,
-		Label:     orDash(w.Name),
-		Detail:    branchLabel(w),
+		Kind:  ui.SidebarSpace,
+		Label: orDash(w.Name),
+		Lines: ui.ResolveSpaceRows(t.config.UI.Sidebar.SpaceRows(), ui.SpaceTokenValues{
+			StateText: state, Workspace: orDash(w.Name), Branch: w.Branch,
+			Ahead: w.Ahead, Behind: w.Behind,
+		}),
+		Gap:       t.config.UI.Sidebar.Spaces.RowGap,
 		Group:     w.Group,
 		Depth:     depth,
 		Workspace: w.ID,
-		State:     t.spaceStateLocked(w),
+		State:     state,
 		Running:   true,
 		Active:    w.ID == t.workspace,
 	}
-}
-
-// branchLabel is what goes under a space: its branch, and how far it has
-// drifted from the branch it follows.
-//
-// The arrows are only shown when there is something to show. "↑0 ↓0" is the
-// ordinary state of every checkout, and a column of it would train the eye to
-// skip exactly where the exception appears.
-func branchLabel(w proto.WorkspaceInfo) string {
-	label := w.Branch
-	if label == "" {
-		return ""
-	}
-	if w.Ahead > 0 {
-		label += " ↑" + itoaInt(w.Ahead)
-	}
-	if w.Behind > 0 {
-		label += " ↓" + itoaInt(w.Behind)
-	}
-	return label
 }
 
 // groupMembersLocked returns a group's spaces in session order.
@@ -496,21 +481,11 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 					// to show.
 					continue
 				}
-				// What a hook asked to have shown, when one did: the name
-				// the agent goes by and the values beside it — the model,
-				// what is left of its context. The agent's own name is the
-				// fallback, which is what most panes have.
-				detail := p.Agent
-				if p.Display != "" {
-					detail = p.Display
-				}
-				for _, token := range p.Tokens {
-					detail += " · " + token.Value
-				}
 				entries = append(entries, ui.SidebarRow{
 					Kind:      ui.SidebarAgent,
 					Label:     agentLabel(w, tab),
-					Detail:    detail,
+					Lines:     t.agentLinesLocked(w, tab, p),
+					Gap:       t.config.UI.Sidebar.Agents.RowGap,
 					Pane:      id,
 					Tab:       tab.ID,
 					Workspace: w.ID,
@@ -534,6 +509,40 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 		}
 	}
 	return rows
+}
+
+// agentLinesLocked lays an agent's entry out as the settings say, herdr's
+// agent_rows: what each token says, from the session. The caller holds the
+// lock.
+func (t *tui) agentLinesLocked(w proto.WorkspaceInfo, tab proto.TabInfo, p proto.PaneInfo) [][]ui.SidebarToken {
+	v := ui.AgentTokenValues{
+		StateText: p.State,
+		// The machine is named only when it is another one: every row saying
+		// this laptop's name is a column of noise.
+		Machine:   t.host,
+		Workspace: orDash(w.Name),
+		Tab:       tab.Name,
+		Agent:     p.Agent,
+		Custom:    make(map[string]string, len(p.Tokens)),
+	}
+	if label := p.StateLabels[p.State]; label != "" {
+		v.StateText = label // what a hook calls this state for this pane
+	}
+	if p.Display != "" {
+		v.Agent = p.Display
+	}
+	// One title goes over the wire: the user's name when there is one, the
+	// program's own otherwise.
+	if p.Named {
+		v.Pane = p.Title
+	} else {
+		v.TerminalTitle = p.Title
+		v.TerminalTitleStripped = strippedTerminalTitle(p.Title)
+	}
+	for _, token := range p.Tokens {
+		v.Custom[token.Key] = token.Value
+	}
+	return ui.ResolveAgentRows(t.config.UI.Sidebar.AgentRows(p.Agent), v)
 }
 
 // agentLabel names where an agent is, since what it is goes underneath.

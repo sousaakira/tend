@@ -49,9 +49,11 @@ var settingRows = []settingRow{
 		},
 	},
 	{
-		label: "sidebar", section: "ui", key: "sidebar",
-		choices: []settingChoice{{"on", "true"}, {"off", "false"}},
-		value:   func(c config.Config) string { return config.Bool(c.UI.Sidebar) },
+		// herdr's key, not tend's older `sidebar = true`: [ui.sidebar] is
+		// also the table of what the rows show, and a file cannot have both.
+		label: "sidebar", section: "ui", key: "sidebar_start_collapsed",
+		choices: []settingChoice{{"on", "false"}, {"off", "true"}},
+		value:   func(c config.Config) string { return config.Bool(!c.SidebarShown()) },
 	},
 	{
 		label: "agent list", section: "ui", key: "grouped",

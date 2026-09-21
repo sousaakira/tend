@@ -491,12 +491,19 @@ func TestSavingAndRebuildingALayoutFromTheShell(t *testing.T) {
 
 // TestWhatAHookSaysAboutAnAgentReachesTheSidebar is the point of metadata: a
 // list that says only "working" is a list that makes you open the pane to find
-// out anything.
+// out anything. The name a hook gives the agent replaces its own, and a value
+// it reports is shown where the sidebar's rows put a $token for it, which is
+// how herdr shows them.
 func TestWhatAHookSaysAboutAnAgentReachesTheSidebar(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	cfg := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(cfg, []byte("[ui.sidebar.agents]\nrows = [[\"state_icon\", \"workspace\"], [\"agent\", \"$ctx\"]]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEND_CONFIG", cfg)
 	bin := buildBinary(t)
-	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh", "TEND_CONFIG="+cfg)
 
 	// A session with an agent in it, and a client watching.
 	prog := fakeAgentBin(t, "claude", "printf 'esc to interrupt\\n'; sleep 60")
@@ -578,8 +585,11 @@ func TestMakingAWorktreeFromTheSpaceMenu(t *testing.T) {
 	// Typed over the generated name.
 	a.send(t, "\x15feature/menu\r")
 
-	a.waitForScreen(t, "the worktree as a space", func(s string) bool {
-		return strings.Contains(s, "feature/menu")
+	// In the sidebar, not anywhere on screen: the status line says
+	// "making feature/menu…" before the checkout exists, and a wait that
+	// message satisfies raced the git it was waiting for.
+	a.waitForScreen(t, "the worktree as a space", func(string) bool {
+		return strings.Contains(a.sidebarText(), "feature/menu")
 	})
 	if _, err := os.Stat(filepath.Join(worktrees, "project", "feature-menu", ".git")); err != nil {
 		t.Errorf("no checkout was made: %v", err)

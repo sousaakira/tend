@@ -54,7 +54,7 @@ func TestTheSettingsScreenChangesTheFileAndTheSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(written), "sidebar = false") {
+	if !strings.Contains(string(written), "sidebar_start_collapsed = true") {
 		t.Errorf("the file was not changed:\n%s", written)
 	}
 	if !strings.Contains(string(written), "# mine") {

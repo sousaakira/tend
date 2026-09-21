@@ -118,7 +118,7 @@ func runAttach(args []string) error {
 			fmt.Fprintf(os.Stderr, "%s keys.command: %s\n", tag(), note)
 		}
 	}
-	t.sidebar = cfg.UI.Sidebar
+	t.sidebar = cfg.SidebarShown()
 	t.grouped = cfg.UI.Grouped
 	return t.run()
 }

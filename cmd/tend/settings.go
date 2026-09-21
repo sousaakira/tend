@@ -32,7 +32,7 @@ func (t *tui) reloadSettings() error {
 	t.config = cfg
 	t.theme = ui.ThemeFor(cfg.UI.Theme, t.hostLight)
 	t.titleTemplate = mustTitle(cfg.UI.WindowTitle)
-	t.sidebar = cfg.UI.Sidebar
+	t.sidebar = cfg.SidebarShown()
 	t.grouped = cfg.UI.Grouped
 	t.toasts = cfg.Toasts()
 	t.notifyFocused = cfg.Notify.Focused

@@ -79,6 +79,12 @@ type SidebarRow struct {
 	State   string
 	Running bool
 
+	// Lines is the entry laid out as token rows ([ui.sidebar.*]), used in
+	// place of Label and Detail when it is set; Gap is the blank lines after
+	// the entry (row_gap).
+	Lines [][]SidebarToken
+	Gap   int
+
 	// Active marks what is currently shown; Selected marks the navigation
 	// cursor. They are separate because moving the cursor must not move the
 	// view — reading down the list has not left the pane being worked in.
@@ -88,6 +94,9 @@ type SidebarRow struct {
 
 // height is how many screen lines the row occupies.
 func (r SidebarRow) height() int {
+	if len(r.Lines) > 0 {
+		return len(r.Lines) + r.Gap
+	}
 	if r.Detail != "" {
 		return 2
 	}
@@ -506,6 +515,10 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 
 	x := writeString(dst, 0, y, cursor, style, limit)
 	x = writeString(dst, x, y, indent(r.Depth), style, limit)
+	if len(r.Lines) > 0 {
+		drawTokenEntry(dst, r, x, y, limit, style, mark, theme)
+		return
+	}
 	x = writeString(dst, x, y, stateCircle(r), mark, limit)
 	writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
 
@@ -520,6 +533,36 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 		// with the tree is harder to read down than one that does not.
 		at := 3 + 2*r.Depth
 		writeString(dst, at, y+1, truncate(r.Detail, limit-at), detail, limit)
+	}
+}
+
+// drawTokenEntry draws an entry laid out as token rows. The first row starts
+// after the cursor and indent, the rest line up under the name as a detail
+// line does; an entry in view is a band across all of its rows.
+func drawTokenEntry(dst *vt.Grid, r SidebarRow, x, y, limit int, style, mark vt.Style, theme Theme) {
+	st := tokenStyles{
+		icon:      mark,
+		iconText:  strings.TrimSpace(stateCircle(r)),
+		stateText: theme.StateStyle(r.State, r.Running),
+		primary:   style,
+		secondary: theme.SidebarDetail,
+		value:     theme.SidebarDetail,
+		separator: theme.SidebarDetail,
+		ahead:     theme.Idle,
+		behind:    theme.Blocked,
+	}
+	if r.Active {
+		st.stateText, st.secondary, st.value, st.separator, st.ahead, st.behind =
+			style, style, style, style, style, style
+	}
+	for i, line := range r.Lines {
+		at := 3 + 2*r.Depth
+		if i == 0 {
+			at = x + 1 // the space before the mark, as the plain row has
+		} else if r.Active {
+			fill(dst, y+i, 0, limit, style)
+		}
+		drawTokenLine(dst, line, at, y+i, limit, st)
 	}
 }
 

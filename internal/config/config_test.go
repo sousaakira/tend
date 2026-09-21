@@ -231,7 +231,7 @@ func TestPathRespectsOverride(t *testing.T) {
 // TestSidebarDefaultsOn: the list of what needs attention is the reason to
 // run tend, so it is not behind a keystroke nobody presses.
 func TestSidebarDefaultsOn(t *testing.T) {
-	if !Defaults().UI.Sidebar {
+	if !Defaults().SidebarShown() {
 		t.Error("the sidebar should be on by default")
 	}
 	if Defaults().UI.Grouped {
@@ -242,8 +242,13 @@ func TestSidebarDefaultsOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.UI.Sidebar {
+	if c.SidebarShown() {
 		t.Error("sidebar = false should turn it off")
+	}
+	// herdr's key wins over tend's old one when both are there.
+	both, err := LoadFile(writeConfig(t, "[ui]\nsidebar = false\nsidebar_start_collapsed = false\n"))
+	if err != nil || !both.SidebarShown() {
+		t.Errorf("sidebar_start_collapsed = false should show it: %v", err)
 	}
 	if !c.UI.Grouped {
 		t.Error("grouped = true should group")
@@ -415,6 +420,64 @@ command = "make test"
 		"no command": "[[keys.command]]\nkey = \"g\"\n",
 		"no key":     "[[keys.command]]\ncommand = \"x\"\n",
 		"bad type":   "[[keys.command]]\nkey = \"g\"\ncommand = \"x\"\ntype = \"window\"\n",
+	} {
+		if _, err := LoadFile(writeConfig(t, body)); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+// TestSidebarRowsReadAsHerdrWritesThem: herdr's [ui.sidebar.*] tables load
+// — plain tokens, $custom ones, styled ones with rules — beside tend's own
+// settings, and a token that does not exist is refused.
+func TestSidebarRowsReadAsHerdrWritesThem(t *testing.T) {
+	c, err := LoadFile(writeConfig(t, `[ui]
+sidebar_start_collapsed = false
+
+[ui.sidebar.agents]
+rows = [["state_icon", { token = "workspace", fg = "#89b", bold = true }], ["agent", { token = "$ctx", rules = [{ gt = 80, fg = "#f38ba8" }, { equals = "0", hide = true }] }]]
+row_gap = 1
+
+[ui.sidebar.agents.rows_by_agent]
+claude = [["terminal_title_stripped"]]
+
+[ui.sidebar.spaces]
+rows = [["workspace"], ["$jj_status"]]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := c.UI.Sidebar
+	if !c.SidebarShown() || s.Agents.RowGap != 1 || len(s.AgentRows("codex")) != 2 {
+		t.Fatalf("agents = %+v", s.Agents)
+	}
+	if got := s.AgentRows("claude"); len(got) != 1 || got[0][0].Name != "terminal_title_stripped" {
+		t.Errorf("claude's rows = %+v", got)
+	}
+	ws := s.AgentRows("codex")[0][1]
+	if ws.Name != "workspace" || ws.Style.FG == nil || *ws.Style.FG != (RGB{0x88, 0x99, 0xbb}) || ws.Style.Bold == nil {
+		t.Errorf("styled token = %+v", ws)
+	}
+	ctx := s.AgentRows("codex")[1][1]
+	if style, shown := ctx.StyleFor("91"); !shown || style.FG == nil || *style.FG != (RGB{0xf3, 0x8b, 0xa8}) {
+		t.Errorf("91 should take the gt rule's colour: %+v %v", style, shown)
+	}
+	if _, shown := ctx.StyleFor("0"); shown {
+		t.Error("0 should be hidden by its rule")
+	}
+	if style, shown := ctx.StyleFor("12"); !shown || style.FG != nil {
+		t.Error("12 matches no rule and keeps the token's style")
+	}
+	if got := Defaults().UI.Sidebar.SpaceRows(); len(got) != 2 || got[1][1].Name != "git_status" {
+		t.Errorf("default space rows = %+v", got)
+	}
+
+	for name, body := range map[string]string{
+		"unknown token":   "[ui.sidebar.agents]\nrows = [[\"weather\"]]\n",
+		"space-only name": "[ui.sidebar.agents]\nrows = [[\"branch\"]]\n",
+		"bad colour":      "[ui.sidebar.spaces]\nrows = [[{ token = \"workspace\", fg = \"blue\" }]]\n",
+		"two conditions":  "[ui.sidebar.spaces]\nrows = [[{ token = \"$x\", rules = [{ gt = 1, lt = 2 }] }]]\n",
+		"unknown key":     "[ui.sidebar.spaces]\nrow_gaps = 1\n",
 	} {
 		if _, err := LoadFile(writeConfig(t, body)); err == nil {
 			t.Errorf("%s: expected an error", name)

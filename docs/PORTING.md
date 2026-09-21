@@ -217,6 +217,17 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   given to a command takes it from a default binding, and that is reported;
   `tend keys` and the help list them. The scrollback editor (`ctrl+b e`) is
   now the same kind of visit: zoomed, and closed with the editor.
+- **Sidebar rows as tokens** (herdr's `config/sidebar.rs`,
+  `config/sidebar/rules.rs`, `ui/sidebar/tokens.rs`): `[ui.sidebar.agents]`
+  (`rows`, `rows_by_agent`, `row_gap`) and `[ui.sidebar.spaces]` with
+  herdr's built-in tokens, `$name` for values a hook reported, styled tokens
+  (`fg`, `bold`, `dim`) and rules (`equals`, `contains`, `starts_with`,
+  `gt`, `lt`, `ignore_case`, `hide`), herdr's defaults and limits, and its
+  way of fitting a row: fixed parts kept, text shared out, rightmost kept
+  when not all fit. A hook's values now show where a `$token` puts them, as
+  in herdr, rather than always after the agent's name. `[ui] sidebar = true`
+  (tend's older key) still reads; whether the column starts shown is herdr's
+  `sidebar_start_collapsed`, which the settings screen now writes.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -502,9 +513,11 @@ Ported (see "Ported, and checked"). Left:
 
 Keys are rebindable (see "Ported, and checked"). Left:
 
-- **Sidebar rows as tokens** (`config/sidebar.rs`, 729 lines, and
-  `ui/sidebar/tokens.rs`): herdr lets the user say what each row shows and in
-  what style. tend's rows are fixed.
+- **Sidebar tokens**: `rows_by_agent` keys are not checked against the known
+  agents (herdr refuses an unknown one; here it never matches). There are no
+  workspace metadata reports, so a `$name` in a space row is always empty.
+  `status_indicators = "symbols"` and `agent_panel_sort = "priority"` are
+  not ported.
 - **Tab bar**: datetime uses a strftime written for tend covering the
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.

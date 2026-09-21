@@ -2,6 +2,8 @@ package ui
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -1772,5 +1774,78 @@ func TestAutoSwitchPicksTheThemeForTheTerminal(t *testing.T) {
 	}
 	if ThemeFor(config.Theme{Name: "nord"}, true) != ThemeFrom(config.Theme{Name: "nord"}) {
 		t.Error("without auto_switch the terminal's scheme should not matter")
+	}
+}
+
+// TestSidebarTokenRowsResolveAndFit: a layout says which tokens, the session
+// says what they hold, an empty one is left out, a rule can hide one, and a
+// row too long for the column shares what room there is — herdr's rules. If
+// it regresses, a configured sidebar shows empty separators, a hidden value,
+// or runs off the column.
+func TestSidebarTokenRowsResolveAndFit(t *testing.T) {
+	rows := [][]config.SidebarToken{
+		{{Name: "state_icon"}, {Name: "machine"}, {Name: "workspace"}, {Name: "tab"}},
+		{{Name: "agent"}, {Name: "$ctx"}, {Name: "$gone"}},
+		{{Name: "pane"}},
+	}
+	lines := ResolveAgentRows(rows, AgentTokenValues{
+		Workspace: "api", Tab: "build", Agent: "claude",
+		Custom: map[string]string{"ctx": "23%"},
+	})
+	if len(lines) != 2 {
+		t.Fatalf("%d lines, want 2: an empty row is dropped", len(lines))
+	}
+	if len(lines[0]) != 3 {
+		t.Errorf("first row = %+v, want the empty machine left out", lines[0])
+	}
+
+	f := Frame{Sidebar: true, Agents: SidebarSection{Rows: []SidebarRow{{
+		Kind: SidebarAgent, Label: "x", State: "working", Running: true, Lines: lines,
+	}}}}
+	dst := vt.NewGrid(80, 12, 0)
+	Draw(dst, f, DefaultTheme())
+	text := gridText(dst)
+	joined := strings.Join(text, "\n")
+	if !strings.Contains(joined, "○ api · build") || !strings.Contains(joined, "claude · 23%") {
+		t.Errorf("the entry is not laid out as configured:\n%s", joined)
+	}
+
+	// Too long for the column: the text shares the room, each cut short.
+	long := ResolveAgentRows([][]config.SidebarToken{{{Name: "state_icon"}, {Name: "workspace"}, {Name: "tab"}}},
+		AgentTokenValues{Workspace: strings.Repeat("w", 30), Tab: strings.Repeat("t", 30)})
+	f.Agents.Rows[0].Lines = long
+	dst = vt.NewGrid(80, 12, 0)
+	Draw(dst, f, DefaultTheme())
+	for _, line := range gridText(dst) {
+		if strings.Contains(line, "www") {
+			sidebar := []rune(line)[:SidebarWidth]
+			if !strings.Contains(string(sidebar), "ttt") || !strings.Contains(string(sidebar), "│") {
+				t.Errorf("row %q should hold both, cut, inside the column", string(sidebar))
+			}
+		}
+	}
+}
+
+// TestASidebarRuleHidesOrRecoloursAToken covers herdr's rules through
+// resolution: the first matching rule decides, hide leaves the token out.
+func TestASidebarRuleHidesOrRecoloursAToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(path, []byte(`[ui.sidebar.agents]
+rows = [["agent", { token = "$ctx", rules = [{ equals = "0%", hide = true }, { gt = 80, bold = true }] }]]
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := c.UI.Sidebar.AgentRows("claude")
+	hidden := ResolveAgentRows(rows, AgentTokenValues{Agent: "claude", Custom: map[string]string{"ctx": "0%"}})
+	if len(hidden[0]) != 1 {
+		t.Errorf("0%% should be hidden: %+v", hidden)
+	}
+	bold := ResolveAgentRows(rows, AgentTokenValues{Agent: "claude", Custom: map[string]string{"ctx": "91"}})
+	if len(bold[0]) != 2 || bold[0][1].Style.Bold == nil || !*bold[0][1].Style.Bold {
+		t.Errorf("91 should be bold: %+v", bold)
 	}
 }
