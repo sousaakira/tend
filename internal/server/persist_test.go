@@ -293,3 +293,35 @@ func TestARestoredAgentComesBackToItsConversation(t *testing.T) {
 		t.Errorf("the restored pane's session = %+v, %v", p, ok)
 	}
 }
+
+// TestANamedPaneKeepsItsNameAcrossARestart: a pane called "api" is called
+// "api" tomorrow. Losing the name to a restart makes naming panes something
+// nobody bothers with twice.
+func TestANamedPaneKeepsItsNameAcrossARestart(t *testing.T) {
+	stateFile := filepath.Join(t.TempDir(), "session.json")
+
+	first := persistentServer(t, stateFile)
+	ws, _ := first.NewWorkspace("main")
+	_, pane, err := first.NewTab(ws, "t", shell("sleep 30"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.RenamePane(pane, "api"); err != nil {
+		t.Fatal(err)
+	}
+	first.saveStructure()
+	_ = first.Close()
+
+	second := persistentServer(t, stateFile)
+	waitFor(t, "the restored pane", func() bool { return len(second.Statuses()) == 1 })
+	var title string
+	var named bool
+	second.Session(func(sess *session.Session) {
+		if p, ok := sess.Pane(pane); ok {
+			title, named = p.Title, p.Named
+		}
+	})
+	if title != "api" || !named {
+		t.Errorf("after restarting, the pane is %q (named %v), want api", title, named)
+	}
+}

@@ -229,6 +229,8 @@ type PaneSpec struct {
 	Dir     string
 	Env     []string
 	Title   string
+	// Named marks a title the user gave rather than one a program reported.
+	Named bool
 
 	// Agent names the detection manifest. Empty means infer it from the
 	// command; a command that matches nothing simply gets no detector, since
@@ -687,6 +689,7 @@ func (spec PaneSpec) record() session.PaneSpec {
 		Command: spec.Command,
 		Dir:     spec.Dir,
 		Title:   spec.Title,
+		Named:   spec.Named,
 		Agent:   spec.Agent,
 	}
 }

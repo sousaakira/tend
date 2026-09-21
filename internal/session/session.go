@@ -60,8 +60,10 @@ type Pane struct {
 type PaneSpec struct {
 	Command []string
 	Dir     string
-	Title   string
-	Agent   string
+	// Named marks a title the user gave rather than one a program reported.
+	Named bool
+	Title string
+	Agent string
 }
 
 // Tab is one layout of panes.
@@ -347,6 +349,7 @@ func (s *Session) newPane(spec PaneSpec) *Pane {
 	return &Pane{
 		ID:      PaneID(s.nextPane),
 		Title:   spec.Title,
+		Named:   spec.Named,
 		Command: spec.Command,
 		Dir:     spec.Dir,
 		Agent:   spec.Agent,

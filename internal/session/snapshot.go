@@ -60,8 +60,11 @@ type TabSnapshot struct {
 
 // PaneSnapshot is what is needed to start a pane again.
 type PaneSnapshot struct {
-	ID      uint64   `json:"id"`
-	Title   string   `json:"title,omitempty"`
+	ID    uint64 `json:"id"`
+	Title string `json:"title,omitempty"`
+	// Named marks a title the user gave, which is kept: a pane called "api"
+	// is called "api" after a restart, not whatever its new shell reports.
+	Named   bool     `json:"named,omitempty"`
 	Command []string `json:"command,omitempty"`
 	// Dir is where the pane was when the snapshot was taken, which is not
 	// where it started: somebody who has spent an hour three directories down
@@ -132,7 +135,8 @@ func (s *Session) SnapshotWith(dirs map[PaneID]string, sessions map[PaneID]Agent
 					dir = now
 				}
 				pane := PaneSnapshot{
-					ID: uint64(p.ID), Title: p.Title, Command: p.Command, Dir: dir, Agent: p.Agent,
+					ID: uint64(p.ID), Title: p.Title, Named: p.Named,
+					Command: p.Command, Dir: dir, Agent: p.Agent,
 				}
 				if conversation, ok := sessions[id]; ok {
 					pane.Session = &conversation
@@ -194,7 +198,8 @@ func Restore(snap Snapshot) (*Session, error) {
 					return nil, fmt.Errorf("session: snapshot names pane %d twice, or not at all", ps.ID)
 				}
 				t.panes[id] = &Pane{
-					ID: id, Title: ps.Title, Command: ps.Command, Dir: ps.Dir, Agent: ps.Agent,
+					ID: id, Title: ps.Title, Named: ps.Named,
+					Command: ps.Command, Dir: ps.Dir, Agent: ps.Agent,
 					State: detect.StateUnknown,
 				}
 				s.index[id] = t

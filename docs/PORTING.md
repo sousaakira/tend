@@ -497,8 +497,6 @@ agent's:
   notice's restart has not been exercised over it.
 - Copy mode does not refuse a motion over content that changed underneath, as
   herdr does (`stale_content`).
-- The pane title a user gives is kept in the session but not in the state
-  file, so a restart loses the name and the program's own title returns.
 
 ---
 

@@ -114,6 +114,7 @@ func (s *Server) restartPaneLocked(p session.PaneSnapshot, past paneHistory) {
 		Command: p.Command,
 		Dir:     p.Dir,
 		Title:   p.Title,
+		Named:   p.Named,
 		Agent:   p.Agent,
 		history: []byte(past.ANSI),
 	}
