@@ -13,6 +13,7 @@ import (
 
 	"github.com/sousaakira/tend/internal/client"
 	"github.com/sousaakira/tend/internal/config"
+	"github.com/sousaakira/tend/internal/notify"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/session"
 	"github.com/sousaakira/tend/internal/ui"
@@ -83,7 +84,17 @@ func runAttach(args []string) error {
 		input:    make(chan []byte, 64),
 		lostConn: make(chan struct{}, 1),
 		resync:   make(chan struct{}, 1),
-		folded:   make(map[string]bool),
+		notices:  make(map[uint64]paneNotice),
+		toasts:   cfg.Toasts(),
+		notifier: notify.New(),
+		sound: &notify.Player{
+			Enabled: cfg.Sound.Enabled,
+			Done:    expandHome(cfg.Sound.Done),
+			Request: expandHome(cfg.Sound.Request),
+			Bell:    bell,
+		},
+		notifyFocused: cfg.Notify.Focused,
+		folded:        make(map[string]bool),
 	}
 	t.keys.PrefixKey = prefix
 	t.sidebar = cfg.UI.Sidebar
@@ -173,6 +184,15 @@ type tui struct {
 	scrollOffset int
 	scrollDepth  int
 	scrollScreen *vt.Screen
+	// notices is what was last announced about each pane, so an agent that
+	// flickers between states is not announced every time.
+	notices map[uint64]paneNotice
+	// toasts, notifier and sound are how this client says an agent needs
+	// attention, from the settings.
+	toasts        string
+	notifyFocused bool
+	notifier      *notify.Notifier
+	sound         *notify.Player
 	// lastFocus is the pane that was focused before this one, for prefix+;.
 	// It is noticed while drawing rather than set at every place focus
 	// changes: there are eight of those, and the ninth would forget.
@@ -554,6 +574,9 @@ func (t *tui) Event(ev proto.Event) {
 			}
 		}()
 	case proto.EventPaneState:
+		// Said before the resync below, which is a round trip: what is worth
+		// announcing is in the event itself.
+		t.announce(ev)
 		// A pane's agent and its state live in the session, not in the bytes
 		// the pane produced, so redrawing from what the client already has
 		// would show the old answer forever. This is what the agent list is

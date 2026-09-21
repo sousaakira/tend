@@ -25,6 +25,29 @@ type Config struct {
 	UI        UI        `toml:"ui"`
 	Server    Server    `toml:"server"`
 	Worktrees Worktrees `toml:"worktrees"`
+	Notify    Notify    `toml:"notify"`
+	Sound     Sound     `toml:"sound"`
+}
+
+// Notify configures being told that an agent needs you.
+type Notify struct {
+	// Toasts is "terminal" (ask the terminal to raise a notification),
+	// "tend" (say so on the status bar only) or "off". herdr's default is
+	// off; tend's is the status bar, which costs nothing and is already
+	// where the waiting count is.
+	Toasts string `toml:"toasts"`
+	// Focused notifies about the pane being looked at too. Off by default:
+	// being told about what is on screen is noise.
+	Focused bool `toml:"focused"`
+}
+
+// Sound configures the noise made when an agent finishes or needs answering.
+type Sound struct {
+	Enabled bool `toml:"enabled"`
+	// Done and Request are sound files. Empty rings the terminal's bell,
+	// which is all tend has without bundling audio of its own.
+	Done    string `toml:"done"`
+	Request string `toml:"request"`
 }
 
 // Worktrees configures where new worktrees go.
@@ -90,6 +113,7 @@ func Defaults() Config {
 		UI:        UI{Mouse: true, Sidebar: true},
 		Server:    Server{DetectInterval: "150ms", Persist: true},
 		Worktrees: Worktrees{Directory: "~/.tend/worktrees"},
+		Notify:    Notify{Toasts: "tend"},
 	}
 }
 
@@ -154,6 +178,11 @@ func (c Config) validate() error {
 	}
 	if _, err := c.DetectInterval(); err != nil {
 		return err
+	}
+	switch c.Notify.Toasts {
+	case "", "tend", "terminal", "off":
+	default:
+		return fmt.Errorf("notify.toasts is %q; use \"tend\", \"terminal\" or \"off\"", c.Notify.Toasts)
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
@@ -224,6 +253,15 @@ func (c Config) Shell() []string {
 }
 
 // Scrollback returns how many lines of history a pane keeps.
+// Toasts is how notifications are delivered, validated.
+func (c Config) Toasts() string {
+	switch c.Notify.Toasts {
+	case "terminal", "off":
+		return c.Notify.Toasts
+	}
+	return "tend"
+}
+
 func (c Config) Scrollback() int {
 	if c.Pane.Scrollback <= 0 {
 		return 5000
@@ -325,4 +363,21 @@ persist = true
 # Where "tend worktree create" puts a new checkout, as
 # <directory>/<repository>/<branch>.
 directory = "~/.tend/worktrees"
+
+[notify]
+# How to say that an agent finished or needs answering:
+#   "tend"     a line on the status bar
+#   "terminal" ask the terminal to raise a notification (ghostty, kitty,
+#              iTerm2, WezTerm; others take none and fall back to the line)
+#   "off"      nothing
+toasts = "tend"
+# Notify about the pane you are looking at too. Off, because being told about
+# what is already on screen is noise.
+focused = false
+
+[sound]
+# Make a sound as well. With no file named, this is the terminal bell.
+enabled = false
+# done = "~/sounds/done.wav"
+# request = "~/sounds/request.wav"
 `

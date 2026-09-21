@@ -54,6 +54,16 @@ func (s State) String() string {
 	}
 }
 
+// StateFromString reads a state's name, for the client, which receives states
+// over the wire as the words String produces.
+func StateFromString(s string) State {
+	state, err := parseState(s)
+	if err != nil {
+		return StateUnknown
+	}
+	return state
+}
+
 func parseState(s string) (State, error) {
 	switch s {
 	case "idle":

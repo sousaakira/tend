@@ -158,6 +158,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   are, and `ctrl+b w` opens the space picker beside the `g` tend already had.
   herdr leaves `LastPane`, `PreviousAgent` and `NextAgent` unbound by default;
   `;`, `<` and `>` are tend's choice.
+- **Notifications and sound** (herdr's `terminal_notify.rs`, `sound.rs`,
+  `app/actions.rs` toast rules): an agent that becomes blocked "needs
+  attention", one that was working and went idle "finished", and nothing else
+  is said — herdr's rule. `[notify] toasts` is `"tend"` (status line, the
+  default), `"terminal"` (OSC 9, or kitty's OSC 99, wrapped for tmux, with the
+  same backend detection and text sanitising as herdr) or `"off"`; the focused
+  pane says nothing unless `focused = true`. `[sound]` plays a file through
+  paplay/aplay/afplay/ffplay/play, or rings the terminal bell when none is
+  named.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -327,12 +336,21 @@ Ported (see "Ported, and checked"). Left:
 - `FocusAgent(index)`: jump to the nth agent. herdr binds no key to it either.
 - Filtering by typing in the picker; tend's walks the list.
 
-### 9. Notifications and sound — medium
+### 9. Notifications and sound — done, minus the parts that need assets
 
-- herdr: `client/shell/notifications.rs`, `notification_policy.rs`, `sound.rs`
-  (482), `config/sound.rs`; API `notification.show`; key
-  `OpenNotificationTarget`.
-- tend today: the "N waiting" count on the status bar, and nothing else.
+Ported (see "Ported, and checked"). Left, and deliberately:
+
+- **Bundled sounds.** herdr ships two mp3s and decodes them itself (`sound.rs`
+  is 482 lines mostly for that). tend carries no assets, so a sound is a file
+  the user names and the bell otherwise. Changing this means bundling audio.
+- **System notifications** (herdr's `ToastDelivery::System`): a desktop
+  notification through the OS rather than the terminal.
+- Per-agent sound overrides (`[sound.agents]`), notification queueing and
+  dismissal, `notification.show` over the API, and `OpenNotificationTarget`
+  (a key that jumps to whatever the last notification was about).
+- herdr re-checks a "finished" notification against a later snapshot before
+  showing it (`notification_policy.rs`); tend uses a cooldown instead, which
+  is written down beside the rule.
 
 ### 10. Settings UI, onboarding, live reload — medium
 
