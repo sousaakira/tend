@@ -664,6 +664,8 @@ type Event struct {
 
 	State string `json:"state,omitempty"`
 	Rule  string `json:"rule,omitempty"`
+	// Agent is who a state event is about.
+	Agent string `json:"agent,omitempty"`
 	Err   string `json:"error,omitempty"`
 	// Data is the text of a clipboard event. JSON carries it as base64.
 	Data []byte `json:"data,omitempty"`

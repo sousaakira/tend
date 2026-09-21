@@ -80,6 +80,10 @@ const (
 	// order the sidebar lists them.
 	CommandPrevAgent
 	CommandNextAgent
+	// CommandOpenNotification goes to the pane the last notification was
+	// about, herdr's open_notification_target. Unbound by default, as in
+	// herdr; keys.bind gives it a key.
+	CommandOpenNotification
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
@@ -173,6 +177,8 @@ func (c Command) String() string {
 		return "prev-agent"
 	case CommandNextAgent:
 		return "next-agent"
+	case CommandOpenNotification:
+		return "open-notification"
 	case CommandLiteralPrefix:
 		return "literal-prefix"
 	default:
@@ -315,7 +321,7 @@ func DefaultBindings() map[string]Command {
 // names are what Command.String produces, so the file and the code cannot
 // drift apart.
 func ParseCommand(name string) (Command, bool) {
-	for cmd := CommandNone; cmd <= CommandNextAgent; cmd++ {
+	for cmd := CommandNone; cmd <= CommandOpenNotification; cmd++ {
 		if cmd != CommandNone && cmd.String() == name {
 			return cmd, true
 		}
@@ -338,6 +344,7 @@ func CommandNames() []string {
 		CommandSplitRows, CommandFocusLeft, CommandFocusRight, CommandFocusUp,
 		CommandFocusDown, CommandSwapLeft, CommandSwapUp, CommandSwapDown,
 		CommandPrevAgent, CommandPrevSpace, CommandPrevTab, CommandFocusPrev,
+		CommandOpenNotification,
 	} {
 		if !seen[cmd] {
 			seen[cmd] = true

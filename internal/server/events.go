@@ -112,9 +112,12 @@ type Event struct {
 	Kind EventKind
 	Pane session.PaneID
 
-	// State and Rule are set on EventPaneState.
+	// State, Rule and Agent are set on EventPaneState. Agent is who the
+	// state is about, carried so a client can announce it before the
+	// session it re-reads has caught up.
 	State detect.State
 	Rule  string
+	Agent string
 
 	// Err is set on EventPaneExited when the process failed.
 	Err string

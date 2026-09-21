@@ -251,8 +251,11 @@ type tui struct {
 	// attention, from the settings.
 	toasts        string
 	notifyFocused bool
-	notifier      *notify.Notifier
-	sound         *notify.Player
+	// lastNotice is the pane the last announcement was about, which
+	// open-notification goes to.
+	lastNotice uint64
+	notifier   *notify.Notifier
+	sound      *notify.Player
 	// lastFocus is the pane that was focused before this one, for prefix+;.
 	// It is noticed while drawing rather than set at every place focus
 	// changes: there are eight of those, and the ninth would forget.
@@ -1419,6 +1422,16 @@ func (t *tui) command(action ui.Action) error {
 
 	case ui.CommandCustom:
 		return t.runCustomCommand(action.Arg)
+
+	case ui.CommandOpenNotification:
+		t.mu.Lock()
+		pane := t.lastNotice
+		t.mu.Unlock()
+		if pane == 0 {
+			t.setMessage("no notification to go to", false)
+			return nil
+		}
+		return t.jumpToPane(pane)
 	}
 	return nil
 }

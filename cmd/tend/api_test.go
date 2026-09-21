@@ -664,3 +664,47 @@ func TestAScriptCanAskTheClientToShowAPane(t *testing.T) {
 	run("api", "-s", "shown", "pane.focus", `{"pane_id":"p_1"}`)
 	a.waitForScreen(t, "the first tab again", func(s string) bool { return strings.Contains(s, "FIRST-TAB") })
 }
+
+// TestAKeyGoesToWhatTheLastNotificationWasAbout is herdr's
+// open_notification_target: bound with keys.bind, it jumps to the pane the
+// last announcement named, wherever it is. If it regresses, "claude needs
+// attention" says which agent and gives no way to get there.
+func TestAKeyGoesToWhatTheLastNotificationWasAbout(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	cfg := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(cfg, []byte("[keys.bind]\nopen-notification = \"O\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEND_CONFIG", cfg)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh", "TEND_CONFIG="+cfg)
+
+	p, err := pty.Start(bin, []string{"attach", "-s", "noticed"}, pty.Options{
+		Size: pty.Size{Cols: 100, Rows: 14}, Env: env,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(100, 14, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "noticed") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf 'AGENT-TAB\\n'\n", "the first tab", func(s string) bool {
+		return strings.Contains(s, "AGENT-TAB")
+	})
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "the second tab", func(s string) bool { return !strings.Contains(s, "AGENT-TAB") })
+
+	// The agent in the first tab needs an answer, as a hook would say.
+	cmd := exec.Command(bin, "api", "-s", "noticed", "pane.report_agent",
+		`{"pane_id":"p_1","source":"h","agent":"claude","state":"blocked","seq":1}`)
+	cmd.Env = env
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("report: %v\n%s", err, out)
+	}
+	a.waitForScreen(t, "the announcement", func(s string) bool { return strings.Contains(s, "needs attention") })
+
+	a.send(t, "\x02O")
+	a.waitForScreen(t, "the agent's tab", func(s string) bool { return strings.Contains(s, "AGENT-TAB") })
+}

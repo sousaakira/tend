@@ -524,9 +524,10 @@ Ported (see "Ported, and checked"). Left, and deliberately:
 - **Bundled sounds.** herdr ships two mp3s and decodes them itself (`sound.rs`
   is 482 lines mostly for that). tend carries no assets, so a sound is a file
   the user names and the bell otherwise. Changing this means bundling audio.
-- Per-agent sound overrides (`[sound.agents]`), notification queueing and
-  dismissal, and `OpenNotificationTarget` (a key that jumps to whatever the
-  last notification was about).
+- Notification queueing and dismissal: tend shows the latest on the status
+  line. (Per-agent sound — `[sound.agents]`, droid muted by default — and
+  `open-notification`, herdr's unbound `open_notification_target`, are
+  ported.)
 - herdr re-checks a "finished" notification against a later snapshot before
   showing it (`notification_policy.rs`); tend uses a cooldown instead, which
   is written down beside the rule.

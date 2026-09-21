@@ -485,3 +485,22 @@ rows = [["workspace"], ["$jj_status"]]
 		}
 	}
 }
+
+// TestSoundCanBeTurnedOffForOneAgent is herdr's [ui.sound.agents]: one agent
+// muted or unmuted, droid muted unless asked, and a value that is not one
+// refused.
+func TestSoundCanBeTurnedOffForOneAgent(t *testing.T) {
+	c, err := LoadFile(writeConfig(t, "[sound]\nenabled = true\n[sound.agents]\nclaude = \"off\"\ndroid = \"on\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Sound.AllowsAgent("claude") || !c.Sound.AllowsAgent("droid") || !c.Sound.AllowsAgent("codex") {
+		t.Errorf("agents = %v", c.Sound.Agents)
+	}
+	if Defaults().Sound.AllowsAgent("droid") {
+		t.Error("droid is muted by default, as in herdr")
+	}
+	if _, err := LoadFile(writeConfig(t, "[sound.agents]\nclaude = \"quiet\"\n")); err == nil {
+		t.Error("a setting that is not default, on or off should be refused")
+	}
+}

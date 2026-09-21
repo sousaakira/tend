@@ -1244,6 +1244,7 @@ func (s *Server) detectOnce() {
 				Pane:  w.rt.id,
 				State: obs.state,
 				Rule:  obs.rule,
+				Agent: obs.agent,
 			})
 		}
 	}

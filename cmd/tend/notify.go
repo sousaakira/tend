@@ -58,6 +58,11 @@ func (t *tui) announce(ev proto.Event) {
 			agent = p.Agent
 		}
 	}
+	if agent == "" {
+		// The event is ahead of the session this client last read: an agent
+		// whose first word is "I need you" would otherwise go unannounced.
+		agent = ev.Agent
+	}
 	for _, w := range t.snap.Workspaces {
 		for _, tab := range w.Tabs {
 			for _, id := range tab.Panes {
@@ -73,11 +78,14 @@ func (t *tui) announce(ev proto.Event) {
 	if agent == "" || !worth || (focused && !notifyFocused) {
 		return
 	}
+	t.mu.Lock()
+	t.lastNotice = ev.Pane // for open-notification
+	t.mu.Unlock()
 	switch kind {
 	case announceBlocked:
-		t.raise(agent+" needs attention", where, notify.SoundRequest)
+		t.raise(agent+" needs attention", where, t.soundFor(agent, notify.SoundRequest))
 	case announceFinished:
-		t.raise(agent+" finished", where, notify.SoundDone)
+		t.raise(agent+" finished", where, t.soundFor(agent, notify.SoundDone))
 	}
 }
 
@@ -137,6 +145,18 @@ func (t *tui) raise(title, body string, sound notify.Sound) {
 		}
 	}
 	t.sound.Play(sound)
+}
+
+// soundFor is the sound an agent's change makes, or none when the settings
+// mute that agent ([sound.agents], herdr's per-agent override).
+func (t *tui) soundFor(agent string, sound notify.Sound) notify.Sound {
+	t.mu.Lock()
+	allowed := t.config.Sound.AllowsAgent(agent)
+	t.mu.Unlock()
+	if !allowed {
+		return notify.SoundNone
+	}
+	return sound
 }
 
 // expandHome turns a leading ~ into the home directory, so a sound can be

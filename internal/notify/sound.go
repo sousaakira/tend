@@ -22,6 +22,8 @@ const (
 	SoundDone Sound = iota
 	// SoundRequest is an agent that is waiting to be answered.
 	SoundRequest
+	// SoundNone is silence: a change the settings mute.
+	SoundNone
 )
 
 // players are tried in order for a file the user named. Each is asked to play
@@ -60,7 +62,7 @@ type Player struct {
 // Play makes the sound for what happened. It returns at once: playing is
 // somebody else's process, and the session must not wait for it.
 func (p *Player) Play(sound Sound) {
-	if p == nil || !p.Enabled {
+	if p == nil || !p.Enabled || sound == SoundNone {
 		return
 	}
 	path := p.Done

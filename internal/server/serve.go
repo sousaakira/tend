@@ -242,6 +242,7 @@ func (c *clientConn) forward(ev Event) error {
 		out.Kind = proto.EventPaneState
 		out.State = ev.State.String()
 		out.Rule = ev.Rule
+		out.Agent = ev.Agent
 	case EventPaneExited:
 		out.Kind = proto.EventPaneExited
 		out.Err = ev.Err

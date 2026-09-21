@@ -69,6 +69,21 @@ type Sound struct {
 	// which is all tend has without bundling audio of its own.
 	Done    string `toml:"done"`
 	Request string `toml:"request"`
+	// Agents turns the sound on or off for one agent: "default", "on" or
+	// "off", herdr's [ui.sound.agents]. droid is muted unless it is turned
+	// on, as herdr has it.
+	Agents map[string]string `toml:"agents"`
+}
+
+// AllowsAgent reports whether an agent's changes make a sound.
+func (s Sound) AllowsAgent(agent string) bool {
+	switch s.Agents[agent] {
+	case "on":
+		return true
+	case "off":
+		return false
+	}
+	return agent != "droid"
 }
 
 // Worktrees configures where new worktrees go.
@@ -277,6 +292,13 @@ func (c Config) validate() error {
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
+	}
+	for agent, setting := range c.Sound.Agents {
+		switch setting {
+		case "default", "on", "off":
+		default:
+			return fmt.Errorf("sound.agents.%s is %q; use \"default\", \"on\" or \"off\"", agent, setting)
+		}
 	}
 	if err := checkSidebar(c.UI.Sidebar); err != nil {
 		return err

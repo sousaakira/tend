@@ -75,10 +75,14 @@ func TestTheHelpShowsTheKeysInEffect(t *testing.T) {
 
 // TestEveryCommandInTheHelpHasAKey: a command nobody can reach is a command
 // that does not exist, and the help promising one is a bug report waiting.
+//
+// open-notification is the exception, and herdr's: it ships unbound
+// (open_notification_target), and keys.bind is how it gets one.
 func TestEveryCommandInTheHelpHasAKey(t *testing.T) {
 	bindings := DefaultBindings()
+	unboundOnPurpose := map[string]bool{"open-notification": true}
 	for _, pair := range Bound(bindings) {
-		if pair[1] == "" {
+		if pair[1] == "" && !unboundOnPurpose[pair[0]] {
 			t.Errorf("%s has no key", pair[0])
 		}
 	}

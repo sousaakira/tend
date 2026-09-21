@@ -129,6 +129,6 @@ func (s *Server) hooked(id session.PaneID, fn func(*agent.Arbiter) bool) (bool, 
 	if detected {
 		s.publish(Event{Kind: EventAgentDetected, Pane: id})
 	}
-	s.publish(Event{Kind: EventPaneState, Pane: id, State: eff.State, Rule: rule})
+	s.publish(Event{Kind: EventPaneState, Pane: id, State: eff.State, Rule: rule, Agent: eff.Agent})
 	return accepted, nil
 }
