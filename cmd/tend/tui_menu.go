@@ -242,6 +242,25 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	case ui.MenuRename:
 		return t.renameFor(m)
 
+	case ui.MenuNewWorktree:
+		if err := t.showWorkspace(m.Workspace); err != nil {
+			return err
+		}
+		t.startPrompt(promptNewWorktree)
+		return nil
+
+	case ui.MenuOpenWorktree:
+		t.openWorktreeMenu(m.Workspace, m.X, m.Y)
+		return nil
+
+	case ui.MenuPickWorktree:
+		t.openWorktree(m.Workspace, item.Arg)
+		return nil
+
+	case ui.MenuRemoveWorktree:
+		t.removeWorktree(m.Workspace)
+		return nil
+
 	case ui.MenuRenamePane:
 		if m.Pane == 0 {
 			return nil

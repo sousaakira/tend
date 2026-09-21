@@ -1,6 +1,11 @@
 package main
 
-import "strings"
+import (
+	"strings"
+	"time"
+
+	"github.com/sousaakira/tend/internal/worktree"
+)
 
 // Renaming needs somewhere to type, and a prompt on the status line is the
 // smallest thing that works: it costs no space when it is not up, and it is
@@ -14,6 +19,9 @@ const (
 	promptRenameSpace
 	// promptRenamePane names one pane, which its program cannot overwrite.
 	promptRenamePane
+	// promptNewWorktree asks for the branch of a new worktree, with a
+	// generated one already in the box.
+	promptNewWorktree
 	// promptGroupSpace names the group a space belongs with. An empty answer
 	// takes it out of the one it is in, which is the only way to say that and
 	// the reason this prompt does not treat empty as cancelling.
@@ -46,6 +54,8 @@ func (t *tui) startPrompt(kind promptKind) {
 		if w, ok := t.workspaceLocked(); ok {
 			t.promptText = w.Name
 		}
+	case promptNewWorktree:
+		t.promptText = worktree.GeneratedBranch(uint64(time.Now().UnixNano()))
 	case promptRenamePane:
 		for _, p := range t.snap.Panes {
 			if p.ID == t.focus {
@@ -169,6 +179,11 @@ func (t *tui) commitPrompt() error {
 		if err := t.client.RenameWorkspace(ws, name); err != nil {
 			return err
 		}
+	case promptNewWorktree:
+		if ws == 0 {
+			return nil
+		}
+		t.createWorktree(ws, name)
 	case promptRenamePane:
 		if pane == 0 {
 			return nil
@@ -206,6 +221,8 @@ func (t *tui) promptLabelLocked() string {
 		return "rename space"
 	case promptRenamePane:
 		return "rename pane"
+	case promptNewWorktree:
+		return "new worktree — branch"
 	case promptGroupSpace:
 		return "group — empty to ungroup"
 	case promptRenameGroup:

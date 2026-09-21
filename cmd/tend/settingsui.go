@@ -1,11 +1,13 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/api"
 	"github.com/sousaakira/tend/internal/config"
 	sessionpkg "github.com/sousaakira/tend/internal/session"
+	"github.com/sousaakira/tend/internal/ui"
 )
 
 // The settings screen: herdr's `prefix+s`, a list of the few settings worth
@@ -220,26 +222,39 @@ func pad(s string, width int) string {
 	return s
 }
 
-// newWorktreeHere makes a worktree for the repository the focused space is in
-// and opens it as a space of its own: herdr's prefix+shift+g.
+// newWorktreeHere asks for a branch and makes a worktree for it, for the
+// repository the focused space is in: herdr's prefix+shift+g.
+//
+// The branch is asked for, as herdr asks, with a generated name already in the
+// box: most of the time the name does not matter and enter is the whole
+// answer, and when it does the user types over it.
+func (t *tui) newWorktreeHere() error {
+	t.mu.Lock()
+	workspace := t.workspace
+	t.mu.Unlock()
+	if workspace == 0 {
+		return nil
+	}
+	t.startPrompt(promptNewWorktree)
+	return nil
+}
+
+// createWorktree makes the worktree the prompt named.
 //
 // Through the automation socket, which is where worktrees live, rather than a
 // second implementation over the client protocol. It takes seconds — git has
 // to check the files out — so it runs off the input goroutine and says how it
 // went when it is done.
-func (t *tui) newWorktreeHere() error {
+func (t *tui) createWorktree(workspace uint64, branch string) {
 	t.mu.Lock()
-	workspace := t.workspace
 	session := t.session
 	t.mu.Unlock()
-	if workspace == 0 {
-		return nil
-	}
 
-	t.setMessage("making a worktree…", false)
+	t.setMessage("making "+branch+"…", false)
 	go func() {
 		result, err := apiCall(session, api.MethodWorktreeCreate, map[string]any{
 			"workspace_id": api.WorkspaceID(sessionpkg.WorkspaceID(workspace)),
+			"branch":       branch,
 		}, true)
 		if err != nil {
 			t.setMessage(err.Error(), true)
@@ -251,5 +266,106 @@ func (t *tui) newWorktreeHere() error {
 			t.setMessage(err.Error(), true)
 		}
 	}()
-	return nil
+}
+
+// openWorktreeMenu lists the repository's worktrees to open one.
+func (t *tui) openWorktreeMenu(workspace uint64, x, y int) {
+	t.mu.Lock()
+	session := t.session
+	t.mu.Unlock()
+
+	go func() {
+		result, err := apiCall(session, api.MethodWorktreeList, map[string]any{
+			"workspace_id": api.WorkspaceID(sessionpkg.WorkspaceID(workspace)),
+		}, false)
+		if err != nil {
+			t.setMessage(err.Error(), true)
+			return
+		}
+		list, _ := result["worktrees"].([]any)
+		var items []ui.MenuItem
+		for _, raw := range list {
+			wt, _ := raw.(map[string]any)
+			if wt["is_bare"] == true || wt["is_prunable"] == true {
+				continue
+			}
+			label := text(wt["branch"])
+			if label == "" {
+				label = text(wt["path"])
+			}
+			if text(wt["open_workspace_id"]) != "" {
+				label += "  (open)"
+			}
+			items = append(items, ui.MenuItem{
+				Label: label, Action: ui.MenuPickWorktree, Arg: text(wt["path"]),
+			})
+		}
+		if len(items) == 0 {
+			t.setMessage("this repository has no worktrees to open", false)
+			return
+		}
+		t.openMenu(ui.Menu{Title: "worktrees", Items: items, X: x, Y: y, Workspace: workspace})
+	}()
+}
+
+// openWorktree opens a worktree as a space, or goes to it when it is open.
+func (t *tui) openWorktree(workspace uint64, path string) {
+	t.mu.Lock()
+	session := t.session
+	t.mu.Unlock()
+
+	go func() {
+		result, err := apiCall(session, api.MethodWorktreeOpen, map[string]any{
+			"workspace_id": api.WorkspaceID(sessionpkg.WorkspaceID(workspace)),
+			"path":         path,
+		}, false)
+		if err != nil {
+			t.setMessage(err.Error(), true)
+			return
+		}
+		if err := t.refresh(); err != nil {
+			t.setMessage(err.Error(), true)
+			return
+		}
+		ws, _ := result["workspace"].(map[string]any)
+		if id, ok := parseWorkspaceID(text(ws["workspace_id"])); ok {
+			_ = t.showWorkspace(id)
+		}
+	}()
+}
+
+// removeWorktree removes the worktree a space is, and the space with it.
+//
+// Unforced, as herdr's first attempt is: git refuses when there are changes
+// that would be lost, and that refusal is passed on as it is — with the
+// command that would remove it anyway, which is a decision for the person who
+// knows what the changes are.
+func (t *tui) removeWorktree(workspace uint64) {
+	t.mu.Lock()
+	session := t.session
+	t.mu.Unlock()
+
+	id := api.WorkspaceID(sessionpkg.WorkspaceID(workspace))
+	go func() {
+		_, err := apiCall(session, api.MethodWorktreeRemove, map[string]any{"workspace_id": id}, true)
+		switch {
+		case err == nil:
+			t.setMessage("worktree removed", false)
+		case strings.Contains(err.Error(), "worktree_dirty"):
+			t.setMessage("it has changes that would be lost; tend worktree remove -force "+id, true)
+			return
+		default:
+			t.setMessage(err.Error(), true)
+			return
+		}
+		if err := t.refresh(); err != nil {
+			t.setMessage(err.Error(), true)
+		}
+	}()
+}
+
+// parseWorkspaceID reads "w_3".
+func parseWorkspaceID(s string) (uint64, bool) {
+	n, err := strconv.ParseUint(strings.TrimPrefix(s, "w_"), 10, 64)
+	return n, err == nil && n != 0
 }

@@ -32,14 +32,25 @@ const (
 	// somebody looking to reorder a tab will look.
 	// MenuRenamePane names the pane itself rather than its tab.
 	MenuRenamePane = "menu-rename-pane"
-	MenuMoveBack   = "menu-move-back"
-	MenuMoveOn     = "menu-move-on"
+	// The worktree actions, herdr's: make one for this space's repository,
+	// open one that exists, remove the one this space is.
+	MenuNewWorktree    = "menu-new-worktree"
+	MenuOpenWorktree   = "menu-open-worktree"
+	MenuRemoveWorktree = "menu-remove-worktree"
+	// MenuPickWorktree is an item in the list of worktrees, with the branch or
+	// path in Arg.
+	MenuPickWorktree = "menu-pick-worktree"
+	MenuMoveBack     = "menu-move-back"
+	MenuMoveOn       = "menu-move-on"
 )
 
 // MenuItem is one line of a menu.
 type MenuItem struct {
 	Label  string
 	Action string
+	// Arg carries what an item built at run time is about: which worktree a
+	// "open" item opens. Fixed menus leave it empty.
+	Arg string
 }
 
 // Menu is a popup anchored at the point it was opened on, acting on whichever
@@ -174,6 +185,9 @@ func SpaceMenu(workspace uint64, x, y int) Menu {
 			{Label: "new tab", Action: MenuNewTab},
 			{Label: "rename", Action: MenuRename},
 			{Label: "group...", Action: MenuGroup},
+			{Label: "new worktree...", Action: MenuNewWorktree},
+			{Label: "open worktree...", Action: MenuOpenWorktree},
+			{Label: "remove worktree", Action: MenuRemoveWorktree},
 			{Label: "move up", Action: MenuMoveBack},
 			{Label: "move down", Action: MenuMoveOn},
 			{Label: "close space", Action: MenuClose},

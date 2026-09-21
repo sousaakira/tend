@@ -228,6 +228,12 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a file and opens `$EDITOR` on it in a pane of its own — herdr's
   `EditScrollback`. The file is removed by the command that opened it, so
   nothing has to remember it.
+- **Worktrees from the client**: the space menu has "new worktree…", which
+  asks for the branch with a generated name already in the box (herdr's
+  create overlay), "open worktree…", which lists the repository's worktrees,
+  and "remove worktree", which refuses over changes that would be lost and
+  names the command that would remove it anyway. `ctrl+b G` is the same
+  prompt.
 - **Explaining detection** (herdr's `agent explain`): `tend agent explain
   <target> [-screen]` runs the pane's manifest over its screen now and reports
   every rule, which matched, and which decided — or which hook is answering
@@ -381,8 +387,8 @@ Copy mode is ported (see "Ported, and checked"). Left:
 
 Ported (see "Ported, and checked"). Left:
 
-- The overlays (`client/shell/worktrees.rs`, `worktree_overlays.rs`): picking
-  and creating worktrees from inside the client. Today it is the command line.
+- A list with the checkout path shown live as the branch is typed, which
+  herdr's create overlay has; tend's prompt shows the branch only.
 - A forced removal that git then refuses leaves the space closed. herdr
   restores the panes it shut down (`restore_shutdown_worktree_panes`).
 - `trust_repository` (`safe.directory`) for repositories owned by another user.
