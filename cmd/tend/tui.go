@@ -497,7 +497,11 @@ func (t *tui) layoutArea() ui.Rect {
 // layoutAreaLocked is the region panes are drawn in: the terminal minus the
 // tab bar above, the status bar below, and the agent list to the left.
 func (t *tui) layoutAreaLocked() ui.Rect {
-	top := ui.TabRows(len(t.tabsLocked()))
+	bar := ui.TabRows(t.tabBarFrameLocked())
+	top := bar
+	if t.config.UI.TabBarPosition == "bottom" {
+		top = 0 // the bar is below the panes, above the status line
+	}
 	// The gutter is the sidebar's width, or the two columns kept for the
 	// handle that brings it back. One helper answers for both, so the panes
 	// cannot be laid out over something that is drawn.
@@ -506,7 +510,17 @@ func (t *tui) layoutAreaLocked() ui.Rect {
 		X:    left,
 		Y:    top,
 		Cols: t.cols - left,
-		Rows: t.rows - top - ui.StatusRows,
+		Rows: t.rows - bar - ui.StatusRows,
+	}
+}
+
+// tabBarFrameLocked is as much of a frame as says where the tab bar is, for
+// the layout, which is worked out before a whole frame is.
+func (t *tui) tabBarFrameLocked() ui.Frame {
+	return ui.Frame{
+		Tabs:          make([]ui.Tab, len(t.tabsLocked())),
+		TabBarBottom:  t.config.UI.TabBarPosition == "bottom",
+		HideSingleTab: t.config.UI.HideTabBarWhenSingleTab,
 	}
 }
 
@@ -898,6 +912,8 @@ func (t *tui) buildFrame() ui.Frame {
 	}
 
 	frame.StatusSeparator = t.snap.TabBarSeparator
+	frame.TabBarBottom = t.config.UI.TabBarPosition == "bottom"
+	frame.HideSingleTab = t.config.UI.HideTabBarWhenSingleTab
 	for _, seg := range t.snap.TabBarRight {
 		switch {
 		case seg.Zoom && t.zoom:

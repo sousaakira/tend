@@ -211,6 +211,11 @@ type Frame struct {
 	// and StatusSeparator what goes between two entries.
 	Status          []StatusEntry
 	StatusSeparator string
+	// TabBarBottom puts the tab bar above the status bar rather than at the
+	// top, and HideSingleTab leaves it out while the space has one tab:
+	// herdr's tab_bar_position and hide_tab_bar_when_single_tab.
+	TabBarBottom  bool
+	HideSingleTab bool
 
 	Session   string
 	Workspace string
@@ -300,9 +305,24 @@ const StatusRows = 1
 // The bar is shown whenever there is a session, not only once there are two
 // tabs. It carries the button that makes a new one, and a button that appears
 // only after you already have what it creates is a button nobody finds.
-func TabRows(tabs int) int {
-	if tabs > 0 {
+//
+// HideSingleTab is the setting for people who never use tabs and would
+// rather have the row back, and it is off unless they ask for it.
+func TabRows(f Frame) int {
+	if n := len(f.Tabs); n > 0 && !(f.HideSingleTab && n == 1) {
 		return 1
+	}
+	return 0
+}
+
+// TabBarRow is the row the tab bar is drawn on, or -1 when it is not shown.
+// Drawing, hit-testing and the pane area all ask this one function.
+func TabBarRow(f Frame, rows int) int {
+	if TabRows(f) == 0 {
+		return -1
+	}
+	if f.TabBarBottom {
+		return rows - StatusRows - 1
 	}
 	return 0
 }
@@ -390,8 +410,8 @@ func tabLabel(tab Tab) string {
 }
 
 // TabAt reports what a click on the bar landed on.
-func TabAt(f Frame, x, y, cols int) (tab uint64, newTab bool, ok bool) {
-	if TabRows(len(f.Tabs)) == 0 || y != 0 || x < SidebarGutter(f, cols) {
+func TabAt(f Frame, x, y, cols, rows int) (tab uint64, newTab bool, ok bool) {
+	if row := TabBarRow(f, rows); row < 0 || y != row || x < SidebarGutter(f, cols) {
 		return 0, false, false
 	}
 	for _, seg := range TabSegments(f, cols) {
@@ -434,12 +454,13 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	drawPrompt(dst, f, theme)
 }
 
-// drawTabs draws the bar across the top.
+// drawTabs draws the tab bar.
 func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
-	if TabRows(len(f.Tabs)) == 0 {
+	y := TabBarRow(f, dst.Rows())
+	if y < 0 {
 		return
 	}
-	row := dst.Line(0)
+	row := dst.Line(y)
 	if row == nil {
 		return
 	}
@@ -454,7 +475,7 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 
 	for _, seg := range TabSegments(f, dst.Cols()) {
 		if seg.New {
-			writeString(dst, seg.Start, 0, NewTabLabel, theme.StatusKey, dst.Cols())
+			writeString(dst, seg.Start, y, NewTabLabel, theme.StatusKey, dst.Cols())
 			continue
 		}
 		tab := byID[seg.Tab]
@@ -467,27 +488,27 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 			// the bar exists to tell you.
 			style = theme.StatusAlert
 		}
-		writeString(dst, seg.Start, 0, tabLabel(tab), style, dst.Cols())
+		writeString(dst, seg.Start, y, tabLabel(tab), style, dst.Cols())
 	}
-	drawTabBarStatus(dst, f, theme)
+	drawTabBarStatus(dst, f, theme, y)
 }
 
 // drawTabBarStatus writes the right end of the tab bar.
-func drawTabBarStatus(dst *vt.Grid, f Frame, theme Theme) {
+func drawTabBarStatus(dst *vt.Grid, f Frame, theme Theme, y int) {
 	x, width := StatusArea(f, dst.Cols())
 	if width == 0 {
 		return
 	}
 	for i, e := range f.Status {
 		if i > 0 && f.StatusSeparator != "" {
-			writeString(dst, x, 0, f.StatusSeparator, theme.Status, dst.Cols())
+			writeString(dst, x, y, f.StatusSeparator, theme.Status, dst.Cols())
 			x += runewidth.StringWidth(f.StatusSeparator)
 		}
 		style := theme.Status
 		if e.Accent {
 			style = theme.StatusKey
 		}
-		writeString(dst, x, 0, e.Text, style, dst.Cols())
+		writeString(dst, x, y, e.Text, style, dst.Cols())
 		x += runewidth.StringWidth(e.Text)
 	}
 }

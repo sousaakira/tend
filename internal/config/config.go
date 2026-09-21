@@ -120,6 +120,10 @@ type UI struct {
 	// TabBarSeparator what goes between two of them. See tabbar.go.
 	TabBarRight     []TabBarEntry `toml:"tab_bar_right"`
 	TabBarSeparator string        `toml:"tab_bar_right_separator"`
+	// TabBarPosition is "top" or "bottom", and HideTabBarWhenSingleTab gives
+	// the row back while a space has one tab. Both herdr's.
+	TabBarPosition          string `toml:"tab_bar_position"`
+	HideTabBarWhenSingleTab bool   `toml:"hide_tab_bar_when_single_tab"`
 }
 
 // Theme names the colours. Name picks one of the palettes in ThemeNames; each
@@ -235,6 +239,11 @@ func (c Config) validate() error {
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
+	}
+	switch c.UI.TabBarPosition {
+	case "", "top", "bottom":
+	default:
+		return fmt.Errorf("ui.tab_bar_position is %q; use \"top\" or \"bottom\"", c.UI.TabBarPosition)
 	}
 	if err := checkTabBar(c.UI.TabBarRight); err != nil {
 		return err
@@ -416,6 +425,11 @@ grouped = false
 # braces. {hostname} is the machine the server runs on, even when attaching
 # from another one. Set to "" to leave the outer title alone.
 # window_title = "{hostname}: {workspace}"
+
+# Where the tab bar goes, "top" or "bottom" (above the status line), and
+# whether to leave it out while a space has only one tab.
+# tab_bar_position = "top"
+# hide_tab_bar_when_single_tab = false
 
 # What goes at the right end of the tab bar, in order. Types: zoom (ZOOM
 # while a pane is zoomed), hostname, datetime (format is strftime, "%H:%M"

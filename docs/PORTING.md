@@ -202,7 +202,9 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   in the focused pane's directory with `TEND_SOCKET_PATH`, `TEND_BIN_PATH` and
   `TEND_ACTIVE_{WORKSPACE,TAB,PANE}_ID`, in a process group killed on timeout
   or reload. The status gives way to the tabs on a bar narrower than herdr's
-  minimum strip.
+  minimum strip. `tab_bar_position = "bottom"` puts the bar above the status
+  line and `hide_tab_bar_when_single_tab` gives its row back while a space
+  has one tab; drawing, clicks and the pane area share one `TabBarRow`.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -492,8 +494,7 @@ Keys are rebindable (see "Ported, and checked"). Left:
 - **Sidebar rows as tokens** (`config/sidebar.rs`, 729 lines, and
   `ui/sidebar/tokens.rs`): herdr lets the user say what each row shows and in
   what style. tend's rows are fixed.
-- **Tab bar**: `hide_tab_bar_when_single_tab` and `tab_bar_position`
-  (top or bottom). Datetime uses a strftime written for tend covering the
+- **Tab bar**: datetime uses a strftime written for tend covering the
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.
 - A tab bar command runs in the directory the focused pane started in; herdr

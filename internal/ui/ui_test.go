@@ -1200,10 +1200,10 @@ func TestTabBarStartsWhereThePanesDo(t *testing.T) {
 	}
 
 	// A click on the sidebar's top row is not a click on a tab.
-	if _, _, ok := TabAt(f, 2, 0, 60); ok {
+	if _, _, ok := TabAt(f, 2, 0, 60, 20); ok {
 		t.Error("the sidebar's columns should not answer for the tab bar")
 	}
-	if _, _, ok := TabAt(f, SidebarWidth+2, 0, 60); !ok {
+	if _, _, ok := TabAt(f, SidebarWidth+2, 0, 60, 20); !ok {
 		t.Error("the first tab should be clickable where it is drawn")
 	}
 
@@ -1267,7 +1267,7 @@ func TestSidebarHandleTogglesFromEitherSide(t *testing.T) {
 	if got := SidebarGutter(hidden, 60); got != ShowHandleWidth {
 		t.Errorf("hidden gutter = %d, want room for the handle", got)
 	}
-	if _, _, ok := TabAt(hidden, 0, 0, 60); ok {
+	if _, _, ok := TabAt(hidden, 0, 0, 60, 20); ok {
 		t.Error("the handle's columns are not the tab bar's")
 	}
 	if at := strings.Index(lines[0], "tab 1"); at < ShowHandleWidth {
@@ -1656,5 +1656,38 @@ func TestTabBarStatusSitsRightOfTheTabsAndGivesWay(t *testing.T) {
 	Draw(narrow, f, DefaultTheme())
 	if strings.Contains(gridText(narrow)[0], "09:05") {
 		t.Error("on a narrow bar the status should give way to the tabs")
+	}
+}
+
+// TestTheTabBarCanMoveToTheBottomOrStepAside: tab_bar_position = "bottom"
+// draws the bar just above the status line and clicks find it there, and
+// hide_tab_bar_when_single_tab gives the row back while there is one tab and
+// not a moment longer. If either regresses the bar is drawn where clicks do
+// not reach it, or a second tab has nowhere to appear.
+func TestTheTabBarCanMoveToTheBottomOrStepAside(t *testing.T) {
+	f := Frame{Tabs: []Tab{{ID: 1, Name: "build", Active: true}}, TabBarBottom: true}
+	dst := vt.NewGrid(40, 10, 0)
+	Draw(dst, f, DefaultTheme())
+	lines := gridText(dst)
+	if row := TabBarRow(f, 10); row != 10-StatusRows-1 || !strings.Contains(lines[row], "build") {
+		t.Errorf("bottom bar on row %d:\n%s", row, strings.Join(lines, "\n"))
+	}
+	if strings.Contains(lines[0], "build") {
+		t.Error("a bottom bar was drawn at the top as well")
+	}
+	if _, _, ok := TabAt(f, 2, 10-StatusRows-1, 40, 10); !ok {
+		t.Error("a click on the bottom bar found no tab")
+	}
+	if _, _, ok := TabAt(f, 2, 0, 40, 10); ok {
+		t.Error("a click on the top row found the bottom bar's tab")
+	}
+
+	single := Frame{Tabs: []Tab{{ID: 1, Name: "build", Active: true}}, HideSingleTab: true}
+	if TabBarRow(single, 10) != -1 || TabRows(single) != 0 {
+		t.Error("one tab with hide_tab_bar_when_single_tab should have no bar")
+	}
+	single.Tabs = append(single.Tabs, Tab{ID: 2, Name: "review"})
+	if TabBarRow(single, 10) != 0 {
+		t.Error("a second tab should bring the bar back")
 	}
 }

@@ -151,3 +151,35 @@ tab_bar_right_separator = " / "
 		return strings.Contains(first, "ZOOM / prod / from-a-command")
 	})
 }
+
+// TestATabBarAtTheBottom: with tab_bar_position = "bottom" the panes take
+// the top row, the bar sits above the status line, and its "+" still makes a
+// tab. If it regresses, the panes are laid out over the bar or a click on it
+// goes to a pane.
+func TestATabBarAtTheBottom(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte("[ui]\nsidebar = false\ntab_bar_position = \"bottom\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, configPath)
+
+	const rows = 14
+	a := startSessionIn(t, 80, rows, t.TempDir())
+	a.waitForScreen(t, "a pane at the top and the bar at the bottom", func(s string) bool {
+		lines := strings.Split(s, "\n")
+		return len(lines) >= rows && strings.Contains(lines[0], "┌") &&
+			strings.Contains(lines[rows-2], "tab 1")
+	})
+
+	bar := a.lines()[rows-2]
+	plus := strings.LastIndex(bar, "+")
+	if plus < 0 {
+		t.Fatalf("no new-tab button on the bar: %q", bar)
+	}
+	// Mouse reports count from one.
+	a.clickAt(t, len([]rune(bar[:plus]))+1, rows-2+1)
+	a.waitForScreen(t, "a second tab", func(s string) bool {
+		lines := strings.Split(s, "\n")
+		return len(lines) >= rows && strings.Contains(lines[rows-2], "2")
+	})
+}

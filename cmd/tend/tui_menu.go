@@ -95,7 +95,7 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 		}
 		return ui.Menu{}, false
 	}
-	if tab, newTab, ok := ui.TabAt(frame, x, y, cols); ok && !newTab {
+	if tab, newTab, ok := ui.TabAt(frame, x, y, cols, rows); ok && !newTab {
 		return ui.TabMenu(tab, x, y), true
 	}
 	if pane := t.paneAt(x, y); pane != 0 {

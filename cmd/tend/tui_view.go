@@ -524,10 +524,10 @@ const mouseRight = 2
 func (t *tui) clickTabBar(x, y int) (bool, error) {
 	t.mu.Lock()
 	frame := t.buildFrame()
-	cols := t.cols
+	cols, rows := t.cols, t.rows
 	t.mu.Unlock()
 
-	tab, newTab, ok := ui.TabAt(frame, x, y, cols)
+	tab, newTab, ok := ui.TabAt(frame, x, y, cols, rows)
 	if !ok {
 		return false, nil
 	}
