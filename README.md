@@ -149,6 +149,12 @@ PANE  COMMAND  AGENT   STATE    TITLE
 ## install
 
 ```bash
+curl -fsSL https://sousaakira.github.io/tend/install.sh | sh
+```
+
+Or from a checkout:
+
+```bash
 make install     # into GOBIN, or ~/.local/bin
 make dist        # cross-compiled binaries for linux and macOS
 ```
