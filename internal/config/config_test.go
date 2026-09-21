@@ -504,3 +504,26 @@ func TestSoundCanBeTurnedOffForOneAgent(t *testing.T) {
 		t.Error("a setting that is not default, on or off should be refused")
 	}
 }
+
+// TestFilesSettingsAreChecked: the panel's icons and width are read with
+// their defaults and refused when they make no sense. If it regresses, a
+// typo in [files] is silently a panel with no icons.
+func TestFilesSettingsAreChecked(t *testing.T) {
+	c := Defaults()
+	if c.FilesWidth() != 32 || !c.FilesFollow() {
+		t.Errorf("defaults: width %d follow %v", c.FilesWidth(), c.FilesFollow())
+	}
+	c.Files.Icons = "material"
+	if err := c.validate(); err == nil || !strings.Contains(err.Error(), "files.icons") {
+		t.Errorf("a theme that is not one: %v", err)
+	}
+	c.Files.Icons, c.Files.Width = "nerd", 4
+	if err := c.validate(); err == nil || !strings.Contains(err.Error(), "files.width") {
+		t.Errorf("a width too small: %v", err)
+	}
+	off := false
+	c.Files.Width, c.Files.Follow = 40, &off
+	if err := c.validate(); err != nil || c.FilesFollow() || c.FilesWidth() != 40 {
+		t.Errorf("valid: %v follow %v width %d", err, c.FilesFollow(), c.FilesWidth())
+	}
+}

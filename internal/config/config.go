@@ -28,6 +28,35 @@ type Config struct {
 	Notify    Notify    `toml:"notify"`
 	Update    Update    `toml:"update"`
 	Sound     Sound     `toml:"sound"`
+	Files     Files     `toml:"files"`
+}
+
+// Files configures the files panel (prefix+f). The panel runs on the
+// session's machine and reads that machine's file; the width is the
+// client's, since it is how the client lays the tab out.
+type Files struct {
+	// Icons is "none", "nerd" (a Nerd Font's glyphs, herdr-sidebar's
+	// material theme) or "emoji" (which every terminal draws, two columns
+	// each).
+	Icons string `toml:"icons"`
+	// Width is how many columns the panel opens at.
+	Width int `toml:"width"`
+	// Follow moves the panel to the project the pane beside it is in.
+	// Nil is on.
+	Follow *bool `toml:"follow"`
+	// Hidden hides entries whose name starts with a dot.
+	Hidden bool `toml:"hidden"`
+}
+
+// FilesFollow is whether the panel follows the pane beside it.
+func (c Config) FilesFollow() bool { return c.Files.Follow == nil || *c.Files.Follow }
+
+// FilesWidth is the panel's opening width, in columns.
+func (c Config) FilesWidth() int {
+	if c.Files.Width <= 0 {
+		return 32
+	}
+	return c.Files.Width
 }
 
 // Update configures where `tend update` looks.
@@ -289,6 +318,14 @@ func (c Config) validate() error {
 	case "", "stable", "preview":
 	default:
 		return fmt.Errorf("update.channel is %q; use \"stable\" or \"preview\"", c.Update.Channel)
+	}
+	switch c.Files.Icons {
+	case "", "none", "nerd", "emoji":
+	default:
+		return fmt.Errorf("files.icons is %q; use \"none\", \"nerd\" or \"emoji\"", c.Files.Icons)
+	}
+	if c.Files.Width != 0 && (c.Files.Width < 16 || c.Files.Width > 120) {
+		return fmt.Errorf("files.width is %d; use 16 to 120 columns", c.Files.Width)
 	}
 	switch c.Notify.Toasts {
 	case "", "tend", "terminal", "system", "off":

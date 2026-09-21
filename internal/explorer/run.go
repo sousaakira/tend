@@ -127,8 +127,7 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 			// Not while a diff or a file is up: reading it again would move
 			// what is being read.
 			if m.mode == modeList {
-				m.Follow()
-				m.Refresh()
+				m.Tick()
 			}
 		}
 		draw()

@@ -65,6 +65,33 @@ var settingRows = []settingRow{
 		value:   func(c config.Config) string { return config.Bool(c.UI.Grouped) },
 	},
 	{
+		// The files panel's (prefix+f). An open panel takes these up at its
+		// next look, except the width, which is how it opens.
+		label: "files icons", section: "files", key: "icons",
+		choices: []settingChoice{{"none", `"none"`}, {"nerd font", `"nerd"`}, {"emoji", `"emoji"`}},
+		value: func(c config.Config) string {
+			if c.Files.Icons == "" {
+				return `"none"`
+			}
+			return config.Quote(c.Files.Icons)
+		},
+	},
+	{
+		label: "files follow", section: "files", key: "follow",
+		choices: []settingChoice{{"the pane beside", "true"}, {"stay put", "false"}},
+		value:   func(c config.Config) string { return config.Bool(c.FilesFollow()) },
+	},
+	{
+		label: "files dotfiles", section: "files", key: "hidden",
+		choices: []settingChoice{{"shown", "false"}, {"hidden", "true"}},
+		value:   func(c config.Config) string { return config.Bool(c.Files.Hidden) },
+	},
+	{
+		label: "files width", section: "files", key: "width",
+		choices: []settingChoice{{"28", "28"}, {"32", "32"}, {"40", "40"}, {"48", "48"}},
+		value:   func(c config.Config) string { return strconv.Itoa(c.FilesWidth()) },
+	},
+	{
 		label: "mouse", section: "ui", key: "mouse",
 		choices: []settingChoice{{"on", "true"}, {"off", "false"}},
 		value:   func(c config.Config) string { return config.Bool(c.UI.Mouse) },

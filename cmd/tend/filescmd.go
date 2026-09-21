@@ -4,10 +4,12 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"time"
 
 	"golang.org/x/term"
 
 	"github.com/sousaakira/tend/internal/api"
+	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/explorer"
 	"github.com/sousaakira/tend/internal/server"
 )
@@ -47,8 +49,29 @@ func runFiles(args []string) error {
 		Editor: *editor,
 	}
 	m := explorer.New(dir, opener)
-	if !*still {
-		m.FollowPanes(opener)
+	m.FollowPanes(opener)
+	settings := func() explorer.Settings {
+		cfg, err := config.Load()
+		if err != nil {
+			cfg = config.Defaults()
+		}
+		return explorer.Settings{Icons: cfg.Files.Icons, Hidden: cfg.Files.Hidden, Follow: cfg.FilesFollow() && !*still}
 	}
+	m.Configure(settings())
+	// Read again when the file changes, so a choice made on the settings
+	// screen shows in a panel already open.
+	path, _ := config.Path()
+	var seen time.Time
+	if info, err := os.Stat(path); err == nil {
+		seen = info.ModTime()
+	}
+	m.WatchSettings(func() (explorer.Settings, bool) {
+		info, err := os.Stat(path)
+		if err != nil || info.ModTime().Equal(seen) {
+			return explorer.Settings{}, false
+		}
+		seen = info.ModTime()
+		return settings(), true
+	})
 	return explorer.Run(m, os.Stdin, os.Stdout)
 }

@@ -13,11 +13,6 @@ import (
 // finds the one it opened.
 const filesTitle = "files"
 
-// filesCols is how wide the panel opens, in columns: enough for a nested
-// path and the git letter beside it, and little enough to leave the panes
-// their room.
-const filesCols = 32
-
 // filesCommand runs the tend the server runs, which a pane is told of in
 // TEND_BIN_PATH: the client's own path means nothing on a remote machine,
 // and "tend" may not be on the PATH a pane starts with.
@@ -56,9 +51,12 @@ func (t *tui) toggleFiles() error {
 		return nil
 	}
 
+	t.mu.Lock()
+	cols := t.config.FilesWidth()
+	t.mu.Unlock()
 	share := 0.25
 	if width := right - left; width > 0 {
-		share = float64(filesCols) / float64(width)
+		share = float64(cols) / float64(width)
 	}
 	created, err := t.client.DockPane(focus, share, proto.PaneSpec{Command: filesCommand, Title: filesTitle})
 	if err != nil {

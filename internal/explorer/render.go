@@ -189,6 +189,13 @@ func (m *Model) drawFiles(g *vt.Grid) {
 			}
 		}
 		x = put(g, x, y, marker, pick(selected, styleSel, styleDim), m.cols)
+		if icon := iconFor(n, m.settings.Icons); icon != "" {
+			iconStyle := styleNormal
+			if n.Dir {
+				iconStyle = vt.Style{FG: vt.IndexedColor(4)}
+			}
+			x = put(g, x, y, icon, pick(selected, styleSel, iconStyle), m.cols-3)
+		}
 		name := n.Name
 		if n.Link {
 			name += " →"

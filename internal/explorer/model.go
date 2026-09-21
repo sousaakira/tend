@@ -95,6 +95,10 @@ type Model struct {
 	neighbours Neighbours
 	follow     follower
 
+	settings      Settings
+	configured    bool
+	watchSettings func() (Settings, bool)
+
 	menu   contextMenu
 	prompt prompt
 	hist   history
@@ -149,6 +153,42 @@ func New(dir string, opener Opener) *Model {
 	m := &Model{tree: NewTree(root), git: g, opener: opener, now: time.Now, repoless: g.Top == ""}
 	m.Refresh()
 	return m
+}
+
+// Settings are the panel's choices from the settings file ([files]).
+type Settings struct {
+	Icons  string
+	Hidden bool
+	Follow bool
+}
+
+// Configure applies settings. Only what changed since the last is applied,
+// so a setting read again does not undo what the user toggled by key since.
+func (m *Model) Configure(s Settings) {
+	if s.Hidden != m.settings.Hidden || !m.configured {
+		m.tree.Hidden = s.Hidden
+		m.layout()
+		m.clamp()
+	}
+	m.settings, m.configured = s, true
+}
+
+// WatchSettings gives the panel a way to read its settings again, which it
+// does on the refresh timer; ok is false when nothing changed.
+func (m *Model) WatchSettings(fn func() (Settings, bool)) { m.watchSettings = fn }
+
+// Tick is what the refresh timer does: settings, following, the disk.
+func (m *Model) Tick() {
+	if m.watchSettings != nil {
+		if s, ok := m.watchSettings(); ok {
+			m.Configure(s)
+		}
+	}
+	// A panel no settings were given to follows, as the default is.
+	if m.settings.Follow || !m.configured {
+		m.Follow()
+	}
+	m.Refresh()
 }
 
 // FollowPanes makes the panel follow the directory of the pane beside it.

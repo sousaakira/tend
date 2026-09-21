@@ -72,29 +72,42 @@ grouped by space and tab, with what it is doing. `ctrl+b w` walks it and Enter
 jumps — which is the point, since the agent that stopped is rarely the one you
 are looking at.
 
-`ctrl+b f` docks the files panel on the left of the tab: the project as a
-tree with git's letter beside each changed file, the changes with their diffs
-(stage with `s`, commit with `c`), `/` to find any file by name, and
-`ctrl+f` to search the files' text (case, whole word, regex, include and
-exclude globs) and open the editor on the line found. It follows the pane
-beside it: when that pane's program moves to another project, the panel goes
-there too (`tend files -still` stays put). The line under its header is the
-branch: click it (or `B`) to switch branch, or to make a local one from a
-remote; `⟳` (or `P`) syncs — pull when behind, fast-forward only, push when
-ahead, publish a branch with no upstream to origin — in the background, and
-never asks for a password on the panel. In the changes view, `A` drafts the
-commit message with the local `claude` CLI (haiku), or from the file names
-without it, and puts it in the commit box to read before Enter. Enter
-opens a file in `$EDITOR` in a tab of its own; space, or a click, shows it
-read-only in a preview pane beside the main one, with syntax colour, kept for
-the next file (`tend view` is that preview on its own). In the tree, `s` stages a file or
-a whole folder, and `m` (or a right-click) is the menu: new file or folder,
-rename, delete (type yes), copy the path, open with the system's app, reveal
-in the file manager, change the folder shown, a file's history. `L` is the
-history: commits, stashes (apply, pop, drop) and tags, each shown with its
-diff. It runs on the machine the
-session is on, so over `--remote` it shows the server's project. `ctrl+b f`
-again goes to it, and once more puts it away.
+### the files panel
+
+`ctrl+b f` (or "files panel" on a pane's right-click menu) docks it on the
+left of the tab; again goes to it, and once more puts it away. It runs on the
+machine the session is on, so over `--remote` it shows the server's project,
+and it follows the pane beside it to whatever project that pane moves to
+(`tend files -still` stays put). `1` `2` `3` switch its views; `?` lists the
+keys.
+
+- **files** — the project as a tree, with git's letter beside each changed
+  file. Enter opens a file in `$EDITOR` in a tab of its own; space, or a
+  click, previews it read-only beside the main pane with syntax colour
+  (`tend view` is that preview on its own). `s` stages a file or a folder;
+  `m` or a right-click is the menu: new file or folder, rename, delete (type
+  yes), copy the path, open with the system's app, reveal, change folder, a
+  file's history. `/` or `ctrl+p` finds a file by name.
+- **search** — `ctrl+f` searches the files' text, with case, whole word,
+  regex, and include/exclude globs; Enter opens the editor on the line.
+- **changes** — staged and unstaged, each with its diff; `s` stages, `x x`
+  discards, `c` commits, `A` drafts the message with the local `claude`
+  (haiku), or from the file names without it.
+- **git bar** — the line under the header: click the branch (or `B`) to
+  switch, `⟳` (or `P`) to sync — pull when behind, fast-forward only, push
+  when ahead, publish a new branch to origin — without ever asking for a
+  password on the panel. `L` is the history: commits, stashes (apply, pop,
+  drop) and tags, each with its diff.
+
+Its settings are `[files]` in the settings file, and on the settings screen:
+
+```toml
+[files]
+icons = "nerd"   # "none" (default), "nerd" for a Nerd Font, or "emoji"
+width = 32       # columns it opens at
+follow = true    # follow the pane beside it
+hidden = false   # hide dotfiles
+```
 
 `ctrl+b g` is the navigator: every space, tab and pane in one list over the
 screen, each pane with its agent's state. `/` searches by name or directory,
