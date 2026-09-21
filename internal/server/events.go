@@ -42,6 +42,10 @@ const (
 	// that decorates a tab has to hear about the tab before it can.
 	EventTabCreated
 	EventWorkspaceCreated
+	// EventNotify carries something somebody wants the user told: a script,
+	// an agent's hook, a plugin. The server has no screen, so it passes it to
+	// whoever is looking.
+	EventNotify
 	// EventSessionChanged reports that the session's shape changed without a
 	// pane coming or going: panes swapped, a tab or a space moved or renamed.
 	// Clients that did not make the change learn of it only this way, and
@@ -74,6 +78,8 @@ func (k EventKind) String() string {
 		return "tab-created"
 	case EventWorkspaceCreated:
 		return "workspace-created"
+	case EventNotify:
+		return "notify"
 	case EventSessionChanged:
 		return "session-changed"
 	default:
@@ -95,6 +101,10 @@ type Event struct {
 
 	// Data is set on EventPaneClipboard: the text to be copied.
 	Data []byte
+
+	// Title and Body are set on EventNotify.
+	Title string
+	Body  string
 
 	// Tab and Workspace are set on the events about them.
 	Tab       session.TabID

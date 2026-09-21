@@ -573,6 +573,8 @@ const (
 	// EventSessionChanged says the session's shape changed with no pane
 	// opened or closed. It carries nothing: the client reads the session.
 	EventSessionChanged = "session-changed"
+	// EventNotify carries something to tell the user: a title and a body.
+	EventNotify = "notify"
 	// The events about what is focused and what was created. A client sends
 	// focus and every client hears it, which is how a second one follows
 	// along; a plugin hears them under herdr's names.
@@ -593,6 +595,9 @@ type Event struct {
 	Err   string `json:"error,omitempty"`
 	// Data is the text of a clipboard event. JSON carries it as base64.
 	Data []byte `json:"data,omitempty"`
+	// Title and Body are set on a notify event.
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body,omitempty"`
 	// Tab and Workspace are set on the events about them.
 	Tab       uint64 `json:"tab,omitempty"`
 	Workspace uint64 `json:"workspace,omitempty"`

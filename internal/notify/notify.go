@@ -12,7 +12,9 @@
 package notify
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -149,4 +151,50 @@ func wrapTmux(seq []byte) []byte {
 		out = append(out, b)
 	}
 	return append(out, "\x1b\\"...)
+}
+
+// System raises a desktop notification through whatever the machine has:
+// notify-send on Linux, osascript on macOS. herdr calls this delivery
+// "system" (`ToastDelivery::System`).
+//
+// It is a separate thing from the terminal's own notification. A terminal
+// notification goes to the window the user is looking at through; a desktop
+// one reaches them when that window is not on screen at all — which is the
+// case this exists for.
+func System(title, body string) error {
+	title, body = sanitize(title), sanitize(body)
+	tool, args := systemCommand(title, body)
+	if tool == "" {
+		return ErrNoSystemNotifier
+	}
+	cmd := exec.Command(tool, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+	return cmd.Run()
+}
+
+// ErrNoSystemNotifier means the machine has nothing to raise one with.
+var ErrNoSystemNotifier = errors.New("notify: no desktop notifier on this machine")
+
+// systemCommand picks the tool, or nothing.
+func systemCommand(title, body string) (string, []string) {
+	if path, err := exec.LookPath("notify-send"); err == nil {
+		args := []string{"--app-name=tend", title}
+		if body != "" {
+			args = append(args, body)
+		}
+		return path, args
+	}
+	if path, err := exec.LookPath("osascript"); err == nil {
+		script := "display notification " + quoteAppleScript(body) +
+			" with title " + quoteAppleScript(title)
+		return path, []string{"-e", script}
+	}
+	return "", nil
+}
+
+// quoteAppleScript makes a string literal AppleScript will take, with the two
+// characters that would end it removed: the text comes from an agent.
+func quoteAppleScript(s string) string {
+	s = strings.NewReplacer("\"", "'", "\\", "/").Replace(s)
+	return "\"" + s + "\""
 }

@@ -228,6 +228,10 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a file and opens `$EDITOR` on it in a pane of its own — herdr's
   `EditScrollback`. The file is removed by the command that opened it, so
   nothing has to remember it.
+- **Notifications from anything**: `notification.show` over the socket and
+  `tend notify <title> [body]`, for a script, a hook or a plugin that has
+  something to say and no screen to say it on. `[notify] toasts = "system"`
+  adds desktop notifications through notify-send or osascript.
 - **Moving a pane elsewhere**: `pane.move` takes a pane out of its tab and
   puts it beside another, in any tab or space, without remaking it — the
   process goes on running. A tab emptied by the move closes.
@@ -404,11 +408,9 @@ Ported (see "Ported, and checked"). Left, and deliberately:
 - **Bundled sounds.** herdr ships two mp3s and decodes them itself (`sound.rs`
   is 482 lines mostly for that). tend carries no assets, so a sound is a file
   the user names and the bell otherwise. Changing this means bundling audio.
-- **System notifications** (herdr's `ToastDelivery::System`): a desktop
-  notification through the OS rather than the terminal.
 - Per-agent sound overrides (`[sound.agents]`), notification queueing and
-  dismissal, `notification.show` over the API, and `OpenNotificationTarget`
-  (a key that jumps to whatever the last notification was about).
+  dismissal, and `OpenNotificationTarget` (a key that jumps to whatever the
+  last notification was about).
 - herdr re-checks a "finished" notification against a later snapshot before
   showing it (`notification_policy.rs`); tend uses a cooldown instead, which
   is written down beside the rule.

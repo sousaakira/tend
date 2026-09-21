@@ -3,11 +3,15 @@
 package main
 
 import (
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/detect"
+	"github.com/sousaakira/tend/internal/pty"
+	"github.com/sousaakira/tend/internal/vt"
 	"testing"
 	"time"
 )
@@ -95,4 +99,37 @@ func TestReloadingSettingsAppliesThemWithoutARestart(t *testing.T) {
 	if strings.Contains(a.text(), "spaces") {
 		t.Error("a settings file that will not parse changed the interface anyway")
 	}
+}
+
+// TestAnythingCanTellTheUserSomething: a script that finished, an agent's
+// hook, a plugin — they all have something to say and no screen to say it on.
+// The session has one.
+func TestAnythingCanTellTheUserSomething(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+
+	// A real session, because the notification goes over the automation
+	// socket, which only a real server opens.
+	p, err := pty.Start(bin, []string{"attach", "-s", "say"}, pty.Options{
+		Size: pty.Size{Cols: 100, Rows: 14}, Env: env,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(100, 14, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "say") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	cmd := exec.Command(bin, "notify", "-s", "say", "the build finished", "12 tests, no failures")
+	cmd.Env = env
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tend notify: %v\n%s", err, out)
+	}
+
+	a.waitForScreen(t, "the notice", func(s string) bool {
+		return strings.Contains(s, "the build finished")
+	})
 }

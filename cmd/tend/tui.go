@@ -595,6 +595,10 @@ func (t *tui) Event(ev proto.Event) {
 		}()
 	case proto.EventPaneClipboard:
 		t.paneCopied(ev.Data)
+	case proto.EventNotify:
+		// Somebody asked for the user to be told: a script, a hook, a plugin.
+		// It goes out the same ways an agent's own state does.
+		t.raise(ev.Title, ev.Body, notify.SoundRequest)
 	case proto.EventSessionChanged:
 		// Another client rearranged or renamed something. Re-read, off this
 		// goroutine for the same reason as above.

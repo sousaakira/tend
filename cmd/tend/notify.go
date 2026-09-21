@@ -116,6 +116,15 @@ func (t *tui) raise(title, body string, sound notify.Sound) {
 	if t.toasts != "off" {
 		t.setMessage(message, false)
 	}
+	if t.toasts == "system" {
+		// On its own goroutine: raising one runs another program, and the
+		// event goroutine is the one delivering pane output.
+		go func() {
+			if err := notify.System(title, body); err != nil {
+				t.setMessage("notification: "+err.Error(), true)
+			}
+		}()
+	}
 	if t.toasts == "terminal" && t.notifier.Available() {
 		if seq := t.notifier.Sequence(title, body); len(seq) > 0 {
 			// Straight to the terminal rather than through the frame: it is

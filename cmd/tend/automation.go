@@ -196,6 +196,31 @@ func runEvents(args []string) error {
 	return lines.Err()
 }
 
+// runNotify tells whoever is looking at the session something.
+func runNotify(args []string) error {
+	fs := flag.NewFlagSet("notify", flag.ExitOnError)
+	name := sessionFlag(fs)
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(),
+			"usage: tend notify <title> [body]\n\n"+
+				"tells whoever is attached to the session, by whatever they have turned\n"+
+				"on: the status line, a terminal notification, a desktop one, a sound.\n\n")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() == 0 {
+		return errors.New("usage: tend notify <title> [body]")
+	}
+	params := map[string]any{"title": fs.Arg(0)}
+	if fs.NArg() > 1 {
+		params["body"] = strings.Join(fs.Args()[1:], " ")
+	}
+	_, err := apiCall(*name, api.MethodNotificationShow, params, false)
+	return err
+}
+
 // runLayout saves a tab's arrangement to a file, or builds one from it.
 func runLayout(args []string) error {
 	usage := func(w io.Writer) {

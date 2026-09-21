@@ -247,6 +247,10 @@ func (c *clientConn) forward(ev Event) error {
 	case EventPaneClipboard:
 		out.Kind = proto.EventPaneClipboard
 		out.Data = ev.Data
+	case EventNotify:
+		out.Kind = proto.EventNotify
+		out.Title = ev.Title
+		out.Body = ev.Body
 	case EventSessionChanged:
 		out.Kind = proto.EventSessionChanged
 	case EventPaneFocused:

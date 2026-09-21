@@ -53,9 +53,9 @@ func (c Config) ManifestURL() string {
 // Notify configures being told that an agent needs you.
 type Notify struct {
 	// Toasts is "terminal" (ask the terminal to raise a notification),
-	// "tend" (say so on the status bar only) or "off". herdr's default is
-	// off; tend's is the status bar, which costs nothing and is already
-	// where the waiting count is.
+	// "system" (a desktop notification), "tend" (the status bar only) or
+	// "off". herdr's default is off; tend's is the status bar, which costs
+	// nothing and is already where the waiting count is.
 	Toasts string `toml:"toasts"`
 	// Focused notifies about the pane being looked at too. Off by default:
 	// being told about what is on screen is noise.
@@ -220,9 +220,9 @@ func (c Config) validate() error {
 		return fmt.Errorf("update.channel is %q; use \"stable\" or \"preview\"", c.Update.Channel)
 	}
 	switch c.Notify.Toasts {
-	case "", "tend", "terminal", "off":
+	case "", "tend", "terminal", "system", "off":
 	default:
-		return fmt.Errorf("notify.toasts is %q; use \"tend\", \"terminal\" or \"off\"", c.Notify.Toasts)
+		return fmt.Errorf("notify.toasts is %q; use \"tend\", \"terminal\", \"system\" or \"off\"", c.Notify.Toasts)
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
@@ -296,7 +296,7 @@ func (c Config) Shell() []string {
 // Toasts is how notifications are delivered, validated.
 func (c Config) Toasts() string {
 	switch c.Notify.Toasts {
-	case "terminal", "off":
+	case "terminal", "system", "off":
 		return c.Notify.Toasts
 	}
 	return "tend"
@@ -416,6 +416,7 @@ directory = "~/.tend/worktrees"
 #   "tend"     a line on the status bar
 #   "terminal" ask the terminal to raise a notification (ghostty, kitty,
 #              iTerm2, WezTerm; others take none and fall back to the line)
+#   "system"   a desktop notification (notify-send, or osascript on macOS)
 #   "off"      nothing
 toasts = "tend"
 # Notify about the pane you are looking at too. Off, because being told about

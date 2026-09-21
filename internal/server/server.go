@@ -735,6 +735,12 @@ func (s *Server) RenameWorkspace(id session.WorkspaceID, name string) error {
 
 // AdjustSplit moves one edge of a pane within its tab's layout, taking the
 // space from the neighbour across it.
+// Notify passes something to whoever is looking at the session. The server
+// has no screen of its own; every attached client decides what to do with it.
+func (s *Server) Notify(title, body string) {
+	s.publish(Event{Kind: EventNotify, Title: title, Body: body})
+}
+
 // SwapPanes exchanges two panes' places in their tab.
 func (s *Server) SwapPanes(a, b session.PaneID) error {
 	return s.rearrange(func(sess *session.Session) error { return sess.SwapPanes(a, b) })

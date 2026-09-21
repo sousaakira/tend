@@ -59,6 +59,8 @@ const (
 	MethodLayoutExport = "layout.export"
 	MethodLayoutApply  = "layout.apply"
 
+	MethodNotificationShow = "notification.show"
+
 	MethodEventsWait = "events.wait"
 	// MethodEventsSubscribe is in subscribe.go, where the stream is.
 
@@ -558,6 +560,20 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			"type": "layout_applied", "workspace_id": WorkspaceID(session.WorkspaceID(ws)),
 			"tab_id": TabID(tab),
 		}, nil
+
+	case MethodNotificationShow:
+		var p struct {
+			Title string `json:"title"`
+			Body  string `json:"body"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(p.Title) == "" {
+			return nil, fail("invalid_params", "a notification needs a title")
+		}
+		a.srv.Notify(p.Title, p.Body)
+		return ok2(), nil
 
 	case MethodEventsWait:
 		var p struct {
@@ -1137,6 +1153,8 @@ func eventName(k server.EventKind) string {
 		return "agent.state"
 	case server.EventPaneClipboard:
 		return "pane.clipboard"
+	case server.EventNotify:
+		return "notification"
 	case server.EventPaneFocused:
 		return "pane.focused"
 	case server.EventTabFocused:
