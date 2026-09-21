@@ -200,6 +200,9 @@ func (m *Model) Tick() {
 	m.Refresh()
 }
 
+// Warn shows a problem in the panel's footer.
+func (m *Model) Warn(msg string) { m.say(msg, true) }
+
 // FollowPanes makes the panel follow the directory of the pane beside it.
 func (m *Model) FollowPanes(n Neighbours) { m.neighbours = n }
 

@@ -551,3 +551,29 @@ func TestNotifyDelayIsHerdrsSecondAndBounded(t *testing.T) {
 		t.Error("a corner that is not one should be refused")
 	}
 }
+
+// TestLoadLenientKeepsWhatItKnows: a setting from a newer tend does not
+// cost the reader the ones it knows. If it regresses, a files panel started
+// before an update shows no icons once the new settings screen has written
+// a key it has never heard of.
+func TestLoadLenientKeepsWhatItKnows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("TEND_CONFIG", path)
+	body := "[files]\nicons = \"nerd\"\nsomething_newer = 3\n\n[brand_new_section]\nx = 1\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(); err == nil {
+		t.Fatal("the client stays strict about unknown settings")
+	}
+	cfg, err := LoadLenient()
+	if err != nil || cfg.Files.Icons != "nerd" {
+		t.Errorf("lenient: %v, icons %q", err, cfg.Files.Icons)
+	}
+	if err := os.WriteFile(path, []byte("[files\nicons = "), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadLenient(); err == nil {
+		t.Error("a file that is not TOML is still an error, to be said")
+	}
+}

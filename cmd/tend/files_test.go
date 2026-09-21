@@ -345,3 +345,30 @@ func TestTheFilesPanelDocksOnTheRightWhenSetTo(t *testing.T) {
 		t.Errorf("the panel's frame should come after the shell's:\n%s", top)
 	}
 }
+
+// TestThePanelKeepsItsIconsBesideASettingItDoesNotKnow: the panel reads
+// the settings file for its own part and passes over a key from a newer
+// tend. If it regresses, a panel started before an update shows no icons
+// once the settings screen of the new one has written anything.
+func TestThePanelKeepsItsIconsBesideASettingItDoesNotKnow(t *testing.T) {
+	project := gitProject(t)
+	t.Setenv("PATH", filepath.Dir(buildBinary(t))+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[files]\nicons = \"emoji\"\n\n[from_a_newer_tend]\nx = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The client is strict about the file, and refuses it; the panel, in
+	// its pane, is given it after the client started — the in-process
+	// server hands its environment to the panes it starts.
+	a := startSession(t, 120, 30)
+	t.Setenv("TEND_CONFIG", cfg)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "cd "+project+" && echo in-project\n", "the shell in the project",
+		func(s string) bool {
+			return strings.Contains(s, "\nin-project") || strings.Contains(s, "│in-project")
+		})
+	a.send(t, "\x02f")
+	a.waitForScreen(t, "the panel with icons", func(s string) bool {
+		return strings.Contains(s, "📁 src") || strings.Contains(s, "📁") && strings.Contains(s, "src")
+	})
+}

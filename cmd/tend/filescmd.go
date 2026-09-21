@@ -50,14 +50,20 @@ func runFiles(args []string) error {
 	}
 	m := explorer.New(dir, opener)
 	m.FollowPanes(opener)
+	// Leniently: this panel may be older than the tend that wrote the file,
+	// and a setting it does not know is no reason to lose the ones it does.
+	// A file it cannot read at all is said, not silently replaced by the
+	// defaults — which is how icons set on the settings screen went missing.
+	var settingsErr error
 	settings := func() explorer.Settings {
-		cfg, err := config.Load()
-		if err != nil {
-			cfg = config.Defaults()
-		}
+		cfg, err := config.LoadLenient()
+		settingsErr = err
 		return explorer.Settings{Icons: cfg.Files.Icons, Hidden: cfg.Files.Hidden, Follow: cfg.FilesFollow() && !*still}
 	}
 	m.Configure(settings())
+	if settingsErr != nil {
+		m.Warn("settings: " + settingsErr.Error())
+	}
 	// Read again when the file changes, so a choice made on the settings
 	// screen shows in a panel already open.
 	path, _ := config.Path()
@@ -71,7 +77,11 @@ func runFiles(args []string) error {
 			return explorer.Settings{}, false
 		}
 		seen = info.ModTime()
-		return settings(), true
+		s := settings()
+		if settingsErr != nil {
+			m.Warn("settings: " + settingsErr.Error())
+		}
+		return s, true
 	})
 	return explorer.Run(m, os.Stdin, os.Stdout)
 }

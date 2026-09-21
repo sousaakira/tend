@@ -288,6 +288,34 @@ func LoadFile(path string) (Config, error) {
 	return parse(string(data), path)
 }
 
+// LoadLenient reads the settings file as Load does, but ignores settings it
+// does not know rather than refusing the file. It is for a program that
+// reads the file for a part of it and may be older than whoever wrote it:
+// the files panel, started before tend was updated, reading a file the new
+// settings screen wrote a new key into. Refusing the whole file there threw
+// away the panel's own settings — its icons — over a key that was not its.
+func LoadLenient() (Config, error) {
+	path, err := Path()
+	if err != nil {
+		return Defaults(), err
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return Defaults(), nil
+	}
+	if err != nil {
+		return Defaults(), err
+	}
+	cfg := Defaults()
+	if _, err := toml.Decode(string(data), &cfg); err != nil {
+		return Defaults(), fmt.Errorf("config: %s: %w", path, err)
+	}
+	if err := cfg.validate(); err != nil {
+		return Defaults(), fmt.Errorf("config: %s: %w", path, err)
+	}
+	return cfg, nil
+}
+
 // parse reads settings from text, naming path in any complaint.
 func parse(data, path string) (Config, error) {
 	cfg := Defaults()
