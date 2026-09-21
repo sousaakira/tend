@@ -205,6 +205,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   minimum strip. `tab_bar_position = "bottom"` puts the bar above the status
   line and `hide_tab_bar_when_single_tab` gives its row back while a space
   has one tab; drawing, clicks and the pane area share one `TabBarRow`.
+- **Your own commands on keys** (herdr's `[[keys.command]]`,
+  `app/custom_commands.rs`): `shell` runs detached through a login shell,
+  `pane` opens a pane that has the screen (zoomed) until the command ends and
+  then closes and gives the view back, `plugin_action` invokes a plugin
+  action by id. They run on the server, in the focused pane's current
+  directory, with `TEND_ACTIVE_{WORKSPACE,TAB,PANE}_ID` and the socket. A key
+  given to a command takes it from a default binding, and that is reported;
+  `tend keys` and the help list them. The scrollback editor (`ctrl+b e`) is
+  now the same kind of visit: zoomed, and closed with the editor.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -388,8 +397,8 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
-- `agent.rename|view.*`,
-  `command.invoke`, and the graphics API.
+- `agent.rename|view.*` and the graphics API. (`command.invoke` is left out
+  on purpose; see item 11.)
 - A published schema (`herdr api schema`, `schemars`), which plugins read.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,
   `cli/workspace.rs`, `cli/api.rs`; user docs `socket-api.mdx`,
@@ -496,8 +505,6 @@ Keys are rebindable (see "Ported, and checked"). Left:
 - **Tab bar**: datetime uses a strftime written for tend covering the
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.
-- A tab bar command runs in the directory the focused pane started in; herdr
-  asks the pane for its current directory (`cwd_for_pane`).
 - A title set with `tend terminal title set` is held in the server's memory
   only, so a `tend handoff` or a restart forgets it.
 - **The rest of the themes**: the palette's backgrounds (`panel_bg`,
@@ -510,6 +517,12 @@ Keys are rebindable (see "Ported, and checked"). Left:
   `alt+x` cannot be bound: the terminal sends control bytes tend forwards to
   the pane. herdr reads key events with modifiers through crossterm.
 - herdr's remaining default keys, listed under item 7.
+- **Custom commands**: `popup` runs as a pane, since tend has no popups, and
+  `width`/`height` are read and unused. A key can only be one after the
+  prefix; herdr's direct chords (`alt+g` without the prefix) cannot be read,
+  for the reason above. `command.invoke` over the socket is not ported: in
+  herdr it takes an id from the thin client's command manifest, and a script
+  on tend's socket can run the command itself.
 
 ### 12. Agent session resume — done for a restored pane
 

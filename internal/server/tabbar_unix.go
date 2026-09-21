@@ -23,3 +23,10 @@ func killCommandGroup(cmd *exec.Cmd) error {
 	}
 	return cmd.Process.Kill()
 }
+
+// detach starts a background command in a session of its own, so it neither
+// receives the server's signals nor holds its terminal: a command bound to a
+// key must be free to outlive the server that started it.
+func detach(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+}

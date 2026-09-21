@@ -53,6 +53,11 @@ func (t *tui) reloadSettings() error {
 	} else {
 		t.keys.Bindings = bindings
 	}
+	if custom, _, err := ui.CustomFrom(cfg.Keys.Command, t.keys.Bindings); err != nil {
+		t.setMessage(err.Error(), true)
+	} else {
+		t.keys.Custom = custom
+	}
 	changedPrefix := previousPrefix != cfg.Keys.Prefix
 
 	// The server's half. An older server has never heard of the method, which

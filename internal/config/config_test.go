@@ -385,3 +385,39 @@ func TestStrftime(t *testing.T) {
 		}
 	}
 }
+
+// TestCommandKeys: [[keys.command]] reads as herdr writes it — "prefix+g",
+// no type meaning shell — and an entry that could never run is refused.
+func TestCommandKeys(t *testing.T) {
+	c, err := LoadFile(writeConfig(t, `[[keys.command]]
+key = "prefix+g"
+type = "popup"
+command = "lazygit"
+width = "80%"
+
+[[keys.command]]
+key = "y"
+command = "make test"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Keys.Command) != 2 {
+		t.Fatalf("%d commands, want 2", len(c.Keys.Command))
+	}
+	if got := c.Keys.Command[0].KeyName(); got != "g" {
+		t.Errorf("key = %q, want the prefix word dropped", got)
+	}
+	if got := c.Keys.Command[1].Kind(); got != CommandShell {
+		t.Errorf("type = %q, want herdr's default of shell", got)
+	}
+	for name, body := range map[string]string{
+		"no command": "[[keys.command]]\nkey = \"g\"\n",
+		"no key":     "[[keys.command]]\ncommand = \"x\"\n",
+		"bad type":   "[[keys.command]]\nkey = \"g\"\ncommand = \"x\"\ntype = \"window\"\n",
+	} {
+		if _, err := LoadFile(writeConfig(t, body)); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}

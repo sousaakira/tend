@@ -58,6 +58,23 @@ func runKeys(args []string) error {
 	for _, note := range notes {
 		fmt.Fprintf(os.Stderr, "%s %s\n", tag(), note)
 	}
+	if len(cfg.Keys.Command) > 0 {
+		_, customNotes, err := ui.CustomFrom(cfg.Keys.Command, bindings)
+		if err != nil {
+			return err
+		}
+		fmt.Println()
+		c := newTable("YOUR COMMAND", "KEY", "TYPE")
+		for _, cmd := range cfg.Keys.Command {
+			c.row(commandLabel(cmd), cmd.KeyName(), cmd.Kind())
+		}
+		if err := c.flush(); err != nil {
+			return err
+		}
+		for _, note := range customNotes {
+			fmt.Fprintf(os.Stderr, "%s %s\n", tag(), note)
+		}
+	}
 	if len(ui.Bound(bindings)) == 0 {
 		return errors.New("no commands are bound")
 	}

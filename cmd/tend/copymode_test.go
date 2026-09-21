@@ -117,12 +117,15 @@ func TestDoubleClickSelectsAWord(t *testing.T) {
 }
 
 // TestEditScrollbackOpensTheHistoryInAnEditor: reading a long answer in a pane
-// means scrolling it; reading it in an editor means searching it. If this
-// regresses, the output of a build or an agent can only be read by scrolling.
+// means scrolling it; reading it in an editor means searching it. The editor
+// has the screen while it is open and, closed, gives the view back, as
+// herdr's overlay pane does. If this regresses, the output of a build or an
+// agent can only be read by scrolling, or every look at it leaves a dead
+// "exited" pane behind.
 func TestEditScrollbackOpensTheHistoryInAnEditor(t *testing.T) {
 	// A stand-in for an editor: prints the file it was given and the first
-	// line of it, so the test can see both without a real editor's screen.
-	editor := fakeAgentBin(t, "fake-editor", `printf 'EDITING %s\n' "$1"; head -1 "$1"; sleep 30`)
+	// line of it, waits for a line on its input, and exits as :q would.
+	editor := fakeAgentBin(t, "fake-editor", `printf 'EDITING %s\n' "$1"; head -1 "$1"; read _`)
 	// The editor is opened by the server, so it is the server's environment
 	// that decides. In a real session the server inherits it from the client
 	// that started it; here the server runs in the test's own process.
@@ -135,11 +138,19 @@ func TestEditScrollbackOpensTheHistoryInAnEditor(t *testing.T) {
 	})
 
 	a.send(t, "\x02e")
-	a.waitForScreen(t, "the editor on the history", func(s string) bool {
-		return strings.Contains(s, "EDITING") && strings.Contains(s, "tend-pane-")
+	a.waitForScreen(t, "the editor on the history, alone on screen", func(s string) bool {
+		return strings.Contains(s, "EDITING") && strings.Contains(s, "tend-pane-") &&
+			strings.Count(s, "┌") == 1
 	})
 	// What it opened really holds the pane's output.
 	a.waitForScreen(t, "the history in the file", func(s string) bool {
-		return strings.Count(s, "THE-OUTPUT-TO-READ") >= 3
+		return strings.Contains(s, "THE-OUTPUT-TO-READ")
+	})
+
+	// Closed, the editor's pane goes and the pane it came from is back.
+	a.send(t, "\n")
+	a.waitForScreen(t, "the pane it was opened from", func(s string) bool {
+		return !strings.Contains(s, "EDITING") && strings.Count(s, "┌") == 1 &&
+			strings.Count(s, "THE-OUTPUT-TO-READ") >= 2
 	})
 }

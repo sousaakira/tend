@@ -236,6 +236,9 @@ type PaneSpec struct {
 	// Named marks a title the user gave rather than one a program reported.
 	Named bool
 
+	// CloseOnExit closes the pane when its program ends.
+	CloseOnExit bool
+
 	// Agent names the detection manifest. Empty means infer it from the
 	// command; a command that matches nothing simply gets no detector, since
 	// plenty of useful panes are not agents.
@@ -691,6 +694,7 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	}
 
 	rt := newPaneRuntime(id, p, size, manifest, s.cfg.Scrollback, spec.Command[0], spec.Agent, s.knownAgent)
+	rt.closeOnExit = spec.CloseOnExit
 	if spec.resume != nil {
 		rt.arbiter.RestoreSession(*spec.resume)
 	}
@@ -995,6 +999,10 @@ func (s *Server) readPane(rt *paneRuntime) {
 		ev.Err = waitErr.Error()
 	}
 	s.publish(ev)
+	if rt.closeOnExit {
+		// It was opened to run one thing, and that thing is done.
+		_ = s.ClosePane(rt.id)
+	}
 }
 
 // detectLoop re-examines panes on a tick.

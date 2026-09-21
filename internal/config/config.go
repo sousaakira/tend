@@ -92,6 +92,9 @@ type Keys struct {
 	// whether they name anything. Validating here would mean config importing
 	// ui, which already imports config for the theme.
 	Bind map[string]string `toml:"bind"`
+	// Command binds keys to commands the user wrote: herdr's
+	// [[keys.command]]. See commands.go.
+	Command []CommandKey `toml:"command"`
 }
 
 // Pane configures new panes.
@@ -239,6 +242,9 @@ func (c Config) validate() error {
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
+	}
+	if err := checkCommandKeys(c.Keys.Command); err != nil {
+		return err
 	}
 	switch c.UI.TabBarPosition {
 	case "", "top", "bottom":
@@ -401,6 +407,17 @@ prefix = "ctrl+b"
 # [keys.bind]
 # detach = "q"
 # settings = ","
+
+# Your own commands on a key after the prefix. type = "shell" runs it in the
+# background, "pane" in a pane of its own that has the screen until the
+# command ends, "plugin_action" invokes an installed plugin's action by id.
+# ("popup" is accepted and runs as a pane.) It runs in the focused pane's
+# directory, on the machine the panes are on.
+# [[keys.command]]
+# key = "Y"
+# type = "pane"
+# command = "lazygit"
+# description = "git"
 
 [pane]
 # What a pane runs when no command is given. Empty follows $SHELL.

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/sousaakira/tend/internal/config"
 )
 
 // Key handling is a state machine over raw bytes rather than a parsed key
@@ -81,6 +83,10 @@ const (
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
+	// CommandCustom runs one of the user's [[keys.command]] entries; Arg says
+	// which. It has no name of its own and no default key: the entries are
+	// the user's, not the table's.
+	CommandCustom
 )
 
 func (c Command) String() string {
@@ -369,6 +375,55 @@ func BindingsFrom(pairs map[string]string) (map[string]Command, []string, error)
 	return out, notes, nil
 }
 
+// CustomFrom is the key table for the user's commands. A key that one of
+// them takes from a default command is reported, as BindingsFrom reports a
+// key rebound over another.
+func CustomFrom(commands []config.CommandKey, bindings map[string]Command) (map[string]int, []string, error) {
+	if len(commands) == 0 {
+		return nil, nil, nil
+	}
+	if bindings == nil {
+		bindings = defaultBindings
+	}
+	out := make(map[string]int, len(commands))
+	var notes []string
+	for i, c := range commands {
+		key := c.KeyName()
+		if !ValidKeyName(key) {
+			return nil, nil, fmt.Errorf("keys.command[%d]: %q is not a key tend can read after the prefix", i, c.Key)
+		}
+		if len(key) == 1 && key[0] >= '1' && key[0] <= '9' {
+			return nil, nil, fmt.Errorf("keys.command[%d]: %s picks a tab and cannot run a command", i, key)
+		}
+		if cmd, taken := bindings[key]; taken {
+			notes = append(notes, key+" was "+cmd.String()+", now runs "+commandLabel(c))
+		}
+		out[key] = i
+	}
+	return out, notes, nil
+}
+
+// commandLabel is what a user's command is called in the help: what they
+// wrote about it, or the command itself.
+func commandLabel(c config.CommandKey) string {
+	if c.Description != "" {
+		return c.Description
+	}
+	return c.Command
+}
+
+// CustomHelpLines are the user's commands, for the end of the help.
+func CustomHelpLines(commands []config.CommandKey) []string {
+	if len(commands) == 0 {
+		return nil
+	}
+	lines := []string{"your commands:"}
+	for _, c := range commands {
+		lines = append(lines, "  "+pad(c.KeyName(), 5)+" "+commandLabel(c))
+	}
+	return lines
+}
+
 // ValidKeyName reports whether a key name is one the parser can produce.
 func ValidKeyName(name string) bool {
 	switch name {
@@ -394,6 +449,10 @@ type Input struct {
 	// Bindings overrides what the keys after the prefix do. Nil uses
 	// DefaultBindings, which is what every key in the help comes from.
 	Bindings map[string]Command
+	// Custom maps a key to one of the user's commands, by index. It is
+	// looked at first: a key the user gave a command of their own does that,
+	// as herdr lets a custom command take a default key.
+	Custom map[string]int
 
 	armed bool
 	// pending holds an escape sequence being read after the prefix, so that
@@ -536,6 +595,9 @@ func (in *Input) command(b byte) Result {
 		default:
 			name := arrowName(in.pending[2])
 			in.disarm()
+			if i, ok := in.Custom[name]; ok && name != "" {
+				return Result{Command: CommandCustom, Arg: i}
+			}
 			cmd, ok := in.binding(name)
 			if !ok {
 				return Result{}
@@ -553,6 +615,9 @@ func (in *Input) command(b byte) Result {
 	}
 	if b == in.prefix() {
 		return Result{Command: CommandLiteralPrefix, Forward: []byte{in.prefix()}}
+	}
+	if i, ok := in.Custom[KeyName(b)]; ok {
+		return Result{Command: CommandCustom, Arg: i}
 	}
 	if cmd, ok := in.binding(KeyName(b)); ok {
 		return Result{Command: cmd}

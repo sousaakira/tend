@@ -110,6 +110,14 @@ func runAttach(args []string) error {
 			fmt.Fprintf(os.Stderr, "%s keys.bind: %s\n", tag(), note)
 		}
 	}
+	if custom, notes, err := ui.CustomFrom(cfg.Keys.Command, t.keys.Bindings); err != nil {
+		fmt.Fprintf(os.Stderr, "%s %v\n", tag(), err)
+	} else {
+		t.keys.Custom = custom
+		for _, note := range notes {
+			fmt.Fprintf(os.Stderr, "%s keys.command: %s\n", tag(), note)
+		}
+	}
 	t.sidebar = cfg.UI.Sidebar
 	t.grouped = cfg.UI.Grouped
 	return t.run()
@@ -195,8 +203,11 @@ type tui struct {
 	msgAt       time.Time
 	overlay     []string
 	zoom        bool
-	offline     bool
-	dirty       bool
+	// transient is a pane opened to run one of the user's commands, and the
+	// view to go back to when it closes.
+	transient *transientPane
+	offline   bool
+	dirty     bool
 
 	// scrollPane is the pane being looked back through, zero when live.
 	// The pane keeps running while it is read: scrolling is a view, not a
@@ -458,7 +469,8 @@ func (t *tui) refresh() error {
 
 	t.mu.Lock()
 	t.rects = layout.Panes
-	if !paneInLayout(layout.Panes, t.focus) {
+	if !paneInLayout(layout.Panes, t.focus) &&
+		!t.returnFromTransientLocked(func(id uint64) bool { return paneInLayout(layout.Panes, id) }) {
 		t.focus = firstPane(layout.Panes)
 		// The pane being zoomed into is gone, so the zoom goes with it.
 		t.zoom = false
@@ -1343,13 +1355,20 @@ func (t *tui) command(action ui.Action) error {
 		if focus == 0 {
 			return nil
 		}
-		if _, err := t.client.EditScrollback(focus); err != nil {
+		pane, err := t.client.EditScrollback(focus)
+		if err != nil {
 			if t.reportStaleServer(err) {
 				return nil
 			}
 			t.setMessage(err.Error(), true)
 			return nil
 		}
+		// A visit, as herdr makes it: the editor has the screen, and closing
+		// it goes back to the pane it was opened from.
+		t.mu.Lock()
+		t.transient = &transientPane{pane: pane, previous: focus, previousZoom: t.zoom}
+		t.focus, t.zoom = pane, true
+		t.mu.Unlock()
 		return t.refresh()
 
 	case ui.CommandSettings:
@@ -1366,8 +1385,11 @@ func (t *tui) command(action ui.Action) error {
 		return nil
 
 	case ui.CommandHelp:
-		t.toggleOverlay(ui.HelpLinesFor(t.keys.Bindings))
+		t.toggleOverlay(append(ui.HelpLinesFor(t.keys.Bindings), ui.CustomHelpLines(t.config.Keys.Command)...))
 		return nil
+
+	case ui.CommandCustom:
+		return t.runCustomCommand(action.Arg)
 	}
 	return nil
 }

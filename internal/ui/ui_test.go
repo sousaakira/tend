@@ -1691,3 +1691,33 @@ func TestTheTabBarCanMoveToTheBottomOrStepAside(t *testing.T) {
 		t.Error("a second tab should bring the bar back")
 	}
 }
+
+// TestAUserCommandTakesItsKey: a key given to one of the user's commands
+// runs it, even one that had a default — as herdr lets a custom command take
+// a key — and says so; a digit, which picks a tab, is refused.
+func TestAUserCommandTakesItsKey(t *testing.T) {
+	commands := []config.CommandKey{
+		{Key: "prefix+g", Command: "lazygit"},
+		{Key: "z", Command: "make", Description: "build"},
+	}
+	custom, notes, err := CustomFrom(commands, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if joined := strings.Join(notes, "\n"); !strings.Contains(joined, "z was zoom, now runs build") ||
+		!strings.Contains(joined, "g was navigate, now runs lazygit") {
+		t.Errorf("notes = %q, want both taken keys reported", notes)
+	}
+	in := Input{Custom: custom}
+	_, actions, _ := in.FeedAll([]byte{Prefix, 'z', Prefix, 'g'})
+	if len(actions) != 2 || actions[0] != (Action{Command: CommandCustom, Arg: 1}) ||
+		actions[1] != (Action{Command: CommandCustom, Arg: 0}) {
+		t.Errorf("actions = %+v, want the two user commands", actions)
+	}
+	if _, _, err := CustomFrom([]config.CommandKey{{Key: "3", Command: "x"}}, nil); err == nil {
+		t.Error("a digit should be refused: it picks a tab")
+	}
+	if help := strings.Join(CustomHelpLines(commands), "\n"); !strings.Contains(help, "build") {
+		t.Errorf("help = %q, want the description", help)
+	}
+}

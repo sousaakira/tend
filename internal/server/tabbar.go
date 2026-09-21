@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -205,7 +204,10 @@ func (s *Server) statusCommandOnce(ctx context.Context, e config.TabBarEntry) (s
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", e.Command)
-	env, dir := s.statusCommandEnv()
+	s.mu.Lock()
+	focused := s.focusedPane
+	s.mu.Unlock()
+	env, dir := s.commandEnv(focused)
 	cmd.Env = env
 	if dir != "" {
 		cmd.Dir = dir
@@ -226,39 +228,6 @@ func (s *Server) statusCommandOnce(ctx context.Context, e config.TabBarEntry) (s
 		return "", err
 	}
 	return statusText(string(stripControlSequences(lastLine(out.Bytes())))), nil
-}
-
-// statusCommandEnv is what a command is told: the socket to call back on and
-// what the user is looking at, as herdr's `custom_command_env` does, and it
-// runs in the focused pane's directory.
-func (s *Server) statusCommandEnv() ([]string, string) {
-	env := append(os.Environ(), s.cfg.CommandEnv...)
-	s.mu.Lock()
-	pane, tab, ws := s.focusedPane, s.focusedTab, s.focusedWorkspace
-	dir := ""
-	for _, w := range s.session.Workspaces() {
-		for _, t := range w.Tabs() {
-			if p, ok := t.Pane(pane); ok {
-				dir = p.Dir
-			}
-		}
-	}
-	s.mu.Unlock()
-	if ws != 0 {
-		env = append(env, "TEND_ACTIVE_WORKSPACE_ID=w_"+itoa(uint64(ws)))
-	}
-	if tab != 0 {
-		env = append(env, "TEND_ACTIVE_TAB_ID=t_"+itoa(uint64(tab)))
-	}
-	if pane != 0 {
-		env = append(env, "TEND_ACTIVE_PANE_ID=p_"+itoa(uint64(pane)))
-	}
-	if dir != "" {
-		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			dir = ""
-		}
-	}
-	return env, dir
 }
 
 type timeoutError time.Duration

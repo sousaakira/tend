@@ -441,6 +441,14 @@ func (c *Client) EditScrollback(pane uint64) (uint64, error) {
 	return out.Pane, err
 }
 
+// RunCommand runs one of the user's commands from a pane, and says which pane
+// it opened, if it opened one.
+func (c *Client) RunCommand(pane uint64, kind, command string) (uint64, error) {
+	var out proto.CommandRunResult
+	err := c.Call(proto.MethodCommandRun, proto.CommandRunParams{Pane: pane, Type: kind, Command: command}, &out)
+	return out.Pane, err
+}
+
 // RenamePane gives a pane a name of its own.
 func (c *Client) RenamePane(pane uint64, name string) error {
 	return c.Call(proto.MethodPaneRename, proto.PaneRenameParams{Pane: pane, Name: name}, nil)

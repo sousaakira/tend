@@ -13,3 +13,5 @@ func killCommandGroup(cmd *exec.Cmd) error {
 	}
 	return cmd.Process.Kill()
 }
+
+func detach(*exec.Cmd) {}

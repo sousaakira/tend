@@ -87,6 +87,9 @@ type HandoffPane struct {
 	// then starts the agent fresh instead of carrying the conversation on.
 	// Optional, so a manifest from a build without it still reads.
 	AgentSession *agent.PersistedSession `json:"agent_session,omitempty"`
+	// CloseOnExit is a pane opened to run one command, which still closes
+	// when it ends on the other side of a handoff.
+	CloseOnExit bool `json:"close_on_exit,omitempty"`
 }
 
 // Handoff is one attempt, from the moment the readers stop.
@@ -266,6 +269,8 @@ func (rt *paneRuntime) handoffPane() HandoffPane {
 		Command:  rt.command,
 		Explicit: rt.explicit,
 		Resume:   vt.RenderResume(rt.screen, handoffHistory),
+
+		CloseOnExit: rt.closeOnExit,
 	}
 	if p, ok := rt.arbiter.Session(); ok {
 		hp.AgentSession = &p
@@ -343,6 +348,7 @@ func NewFromHandoff(cfg Config, m HandoffManifest, files []*os.File, ready func(
 		if p.AgentSession != nil {
 			rt.arbiter.RestoreSession(*p.AgentSession)
 		}
+		rt.closeOnExit = p.CloseOnExit
 		rt.write(p.Resume)
 		s.runtimes[id] = rt
 		s.titles[id] = ""

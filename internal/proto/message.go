@@ -63,6 +63,10 @@ const (
 	MethodPaneSwap      = "pane.swap"
 	MethodTabMove       = "tab.move"
 	MethodWorkspaceMove = "workspace.move"
+	// MethodCommandRun runs one of the user's [[keys.command]] entries where
+	// the panes are: in the background, in a pane that closes when it is
+	// done, or as a plugin action.
+	MethodCommandRun = "command.run"
 )
 
 // Request is a call from a client.
@@ -130,6 +134,7 @@ var KnownMethods = []string{
 	MethodPaneSwap,
 	MethodTabMove,
 	MethodWorkspaceMove,
+	MethodCommandRun,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -490,6 +495,19 @@ type ReloadResult struct {
 	Path    string   `json:"path"`
 	Changed []string `json:"changed,omitempty"`
 	Err     string   `json:"error,omitempty"`
+}
+
+// CommandRunParams is a user's command and the pane it was run from, whose
+// directory it runs in.
+type CommandRunParams struct {
+	Pane    uint64 `json:"pane,omitempty"`
+	Type    string `json:"type"`
+	Command string `json:"command"`
+}
+
+// CommandRunResult names the pane a command opened, when it opened one.
+type CommandRunResult struct {
+	Pane uint64 `json:"pane,omitempty"`
 }
 
 // PaneSwapParams exchanges a pane with another, named or found on a side of it

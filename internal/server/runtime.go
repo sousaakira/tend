@@ -58,6 +58,11 @@ type paneRuntime struct {
 	// client holding a stale answer sends the wheel to the wrong place.
 	mouse   bool
 	running bool
+	// closeOnExit closes the pane when its program ends, for a pane opened to
+	// run one thing — a user's command, the scrollback editor — whose frame
+	// would otherwise sit there saying "exited" until closed by hand. Set
+	// before the reader starts and never changed.
+	closeOnExit bool
 	// clipboard holds copies the program asked for that have not been passed
 	// on yet.
 	clipboard [][]byte

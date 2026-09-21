@@ -45,6 +45,9 @@ func (s *Server) EditScrollback(id session.PaneID, editor string) (session.PaneI
 	}
 	pane, err := s.SplitPane(id, session.Rows, PaneSpec{
 		Command: command, Title: "scrollback", Named: true,
+		// Gone with the editor, as herdr's overlay pane is: its frame
+		// sitting there "exited" is one more thing to close by hand.
+		CloseOnExit: true,
 	})
 	if err != nil {
 		_ = os.Remove(path)

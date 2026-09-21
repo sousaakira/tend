@@ -59,6 +59,7 @@ var Methods = []string{
 	proto.MethodPaneSwap,
 	proto.MethodTabMove,
 	proto.MethodWorkspaceMove,
+	proto.MethodCommandRun,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -513,6 +514,14 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		pane, err := c.srv.EditScrollback(session.PaneID(p.Pane), "")
 		return proto.PaneSplitResult{Pane: uint64(pane)}, err
+
+	case proto.MethodCommandRun:
+		var p proto.CommandRunParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		pane, err := c.srv.RunCommand(session.PaneID(p.Pane), p.Type, p.Command)
+		return proto.CommandRunResult{Pane: uint64(pane)}, err
 
 	case proto.MethodPaneRename:
 		var p proto.PaneRenameParams
