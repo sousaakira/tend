@@ -167,6 +167,13 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   pane says nothing unless `focused = true`. `[sound]` plays a file through
   paplay/aplay/afplay/ffplay/play, or rings the terminal bell when none is
   named.
+- **Settings, live**: `ctrl+b s` opens a settings screen (herdr's key) that
+  changes the file and applies it at once; `ctrl+b R` re-reads the file — the
+  client applies its half, `server.reload_config` makes the server re-read
+  its own (detection interval, scrollback for new panes). An edit keeps the
+  file the user wrote: one line replaced in place, comments and order intact,
+  refused outright if the result would not parse (herdr's
+  `config/io.rs::upsert_section_raw`).
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -323,8 +330,10 @@ Ported (see "Ported, and checked"). Left:
   herdr's differ: herdr detaches on `q` (tend `d`), renames tabs on `shift+t`
   and spaces on `shift+w` (tend `,` and `.`), splits on `v` and `-`, cycles
   panes on `tab`, toggles the sidebar on `b`, reloads the config on `shift+r`.
-  This item moved the three keys it touched to herdr's (`H J K L`, `r`); the
-  rest is a decision about the owner's muscle memory, not a port.
+  Moved to herdr's so far: `H J K L` (swap), `r` (resize mode), `s`
+  (settings), `N` (new space), `G` (new worktree), `R` (reload). Still tmux's:
+  `d` detach (herdr `q`), `,` and `.` rename (herdr `shift+t`, `shift+w`),
+  `|` and `-` split (herdr `v` and `-`), `a` agents (herdr `b` sidebar).
 
 ### 8. Navigation extras — done, except what needs multiple machines
 
@@ -352,11 +361,21 @@ Ported (see "Ported, and checked"). Left, and deliberately:
   showing it (`notification_policy.rs`); tend uses a cooldown instead, which
   is written down beside the rule.
 
-### 10. Settings UI, onboarding, live reload — medium
+### 10. Settings UI, onboarding, live reload — screen and reload done
 
-- herdr: `client/shell/settings.rs`, `settings_overlay.rs`, `ui/onboarding.rs`,
-  `ui/release_notes.rs`; `server.reload_config`; key `ReloadConfig`.
-- tend today: a TOML file read once at start.
+Ported (see "Ported, and checked"). Left:
+
+- **Onboarding** (`ui/onboarding.rs`) and release notes
+  (`ui/release_notes.rs`): what herdr shows on a first run and after an
+  update. tend has no updater yet (item 14), and nothing to announce.
+- **Themes in the screen**: herdr ships named themes (`THEME_NAMES`) and
+  previews them as you move; tend has five colours in `[ui.theme]` and no
+  names to pick from. Named themes are their own piece of work.
+- **Integrations in the screen**: herdr's settings has a section that installs
+  them; tend has `tend integration install`.
+- Live reload of the prefix key is applied, but a client started with one
+  prefix keeps any pane input already bound elsewhere; herdr rebinds
+  everything through its keybind table (item 11).
 
 ### 11. Configurable chrome — medium
 

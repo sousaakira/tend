@@ -434,6 +434,12 @@ func (c *Client) CopySearch(pane uint64, from proto.CopyPoint, query, direction 
 	}, &out)
 }
 
+// ReloadConfig makes the server re-read the settings file.
+func (c *Client) ReloadConfig() (proto.ReloadResult, error) {
+	var out proto.ReloadResult
+	return out, c.Call(proto.MethodServerReloadConfig, nil, &out)
+}
+
 // SwapPaneToward exchanges a pane with its neighbour on a side, as laid out at
 // cols by rows, and names the neighbour.
 func (c *Client) SwapPaneToward(pane uint64, side string, cols, rows int) (uint64, error) {

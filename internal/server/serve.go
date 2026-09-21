@@ -50,6 +50,7 @@ var Methods = []string{
 	proto.MethodServerHandoff,
 	proto.MethodPaneCopyMotion,
 	proto.MethodPaneCopySearch,
+	proto.MethodServerReloadConfig,
 	proto.MethodPaneSwap,
 	proto.MethodTabMove,
 	proto.MethodWorkspaceMove,
@@ -480,6 +481,9 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		}
 		return nil, c.srv.AdjustSplit(session.PaneID(p.Target), side, p.Cells,
 			session.Rect{W: p.Cols, H: p.Rows})
+
+	case proto.MethodServerReloadConfig:
+		return c.srv.ReloadFromFile(), nil
 
 	case proto.MethodPaneSwap:
 		var p proto.PaneSwapParams

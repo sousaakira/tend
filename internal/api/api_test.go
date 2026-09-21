@@ -80,9 +80,14 @@ func (h *harness) send(line string) error {
 }
 
 // call sends one line and reads one back, which is the whole protocol.
+//
+// The deadline is far longer than any wait these tests ask for. It used to be
+// the same five seconds a wait was given, so a wait that ran its full course —
+// which is what the test about timeouts asks for — answered at the instant the
+// read gave up, and the test failed under load and passed on its own.
 func (h *harness) call(t *testing.T, line string) map[string]any {
 	t.Helper()
-	_ = h.conn.SetDeadline(time.Now().Add(5 * time.Second))
+	_ = h.conn.SetDeadline(time.Now().Add(30 * time.Second))
 	if _, err := fmt.Fprintln(h.conn, line); err != nil {
 		t.Fatal(err)
 	}

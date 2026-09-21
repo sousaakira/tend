@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/detect"
@@ -53,5 +55,42 @@ func TestOnlyStoppingIsWorthSaying(t *testing.T) {
 		if ok != c.want || (c.want && kind != c.kind) {
 			t.Errorf("%s: worthAnnouncing = %d, %v; want %d, %v", c.name, kind, ok, c.kind, c.want)
 		}
+	}
+}
+
+// TestReloadingSettingsAppliesThemWithoutARestart: the alternative is
+// restarting the server, which closes every pane — a heavy price for a value
+// in a file.
+func TestReloadingSettingsAppliesThemWithoutARestart(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte("[ui]\nsidebar = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, configPath)
+
+	a := startSessionIn(t, 100, 16, t.TempDir())
+	a.waitForScreen(t, "the sidebar", func(s string) bool { return strings.Contains(s, "spaces") })
+
+	// Edited from outside, as somebody editing their settings would.
+	if err := os.WriteFile(configPath, []byte("[ui]\nsidebar = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.send(t, "\x02R")
+	a.waitForScreen(t, "the sidebar to go", func(s string) bool {
+		return !strings.Contains(s, "spaces") && strings.Contains(s, "settings reloaded")
+	})
+
+	// A broken file says so and changes nothing.
+	if err := os.WriteFile(configPath, []byte("[ui]\nsidebar = \"yes please\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.send(t, "\x02R")
+	a.waitForScreen(t, "the complaint", func(s string) bool {
+		// The message is the parser's, and it begins with the file it is
+		// about; the rest is as long as the path and gets cut.
+		return strings.Contains(s, "config:")
+	})
+	if strings.Contains(a.text(), "spaces") {
+		t.Error("a settings file that will not parse changed the interface anyway")
 	}
 }

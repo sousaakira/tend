@@ -48,9 +48,11 @@ const (
 	MethodPaneCopySearch = "pane.copy_search"
 	// MethodPaneSwap, MethodTabMove and MethodWorkspaceMove rearrange without
 	// making anything again: the programs keep running wherever they end up.
-	MethodPaneSwap      = "pane.swap"
-	MethodTabMove       = "tab.move"
-	MethodWorkspaceMove = "workspace.move"
+	// MethodServerReloadConfig makes the server re-read the settings file.
+	MethodServerReloadConfig = "server.reload_config"
+	MethodPaneSwap           = "pane.swap"
+	MethodTabMove            = "tab.move"
+	MethodWorkspaceMove      = "workspace.move"
 )
 
 // Request is a call from a client.
@@ -110,6 +112,7 @@ var KnownMethods = []string{
 	MethodServerHandoff,
 	MethodPaneCopyMotion,
 	MethodPaneCopySearch,
+	MethodServerReloadConfig,
 	MethodPaneSwap,
 	MethodTabMove,
 	MethodWorkspaceMove,
@@ -373,6 +376,13 @@ type PaneResizeParams struct {
 	Pane uint64 `json:"pane"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
+}
+
+// ReloadResult says what a reload changed, or what was wrong with the file.
+type ReloadResult struct {
+	Path    string   `json:"path"`
+	Changed []string `json:"changed,omitempty"`
+	Err     string   `json:"error,omitempty"`
 }
 
 // PaneSwapParams exchanges a pane with another, named or found on a side of it

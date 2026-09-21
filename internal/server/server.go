@@ -288,6 +288,10 @@ type Server struct {
 	// a snapshot identical to it is not written again.
 	lastSaved []byte
 
+	// retick carries a new detection interval to the loop, which cannot read
+	// the configuration under the lock while it is doing a round of work.
+	retick chan time.Duration
+
 	done chan struct{}
 	wg   sync.WaitGroup
 }
@@ -349,6 +353,7 @@ func build(cfg Config) (*Server, error) {
 		conns:    make(map[*clientConn]struct{}),
 		branches: newBranchCache(),
 		done:     make(chan struct{}),
+		retick:   make(chan time.Duration, 1),
 	}
 	return s, nil
 }
@@ -954,6 +959,9 @@ func (s *Server) detectLoop() {
 			s.adoptOnce()
 		case <-track.C:
 			s.trackOnce()
+		case interval := <-s.retick:
+			// The settings were re-read while this was running.
+			t.Reset(interval)
 		}
 	}
 }

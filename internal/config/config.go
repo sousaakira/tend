@@ -152,9 +152,13 @@ func LoadFile(path string) (Config, error) {
 	if err != nil {
 		return Defaults(), err
 	}
+	return parse(string(data), path)
+}
 
+// parse reads settings from text, naming path in any complaint.
+func parse(data, path string) (Config, error) {
 	cfg := Defaults()
-	md, err := toml.Decode(string(data), &cfg)
+	md, err := toml.Decode(data, &cfg)
 	if err != nil {
 		return Defaults(), fmt.Errorf("config: %s: %w", path, err)
 	}

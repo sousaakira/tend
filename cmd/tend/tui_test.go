@@ -39,6 +39,16 @@ func buildBinary(t *testing.T) string {
 	return bin
 }
 
+// configOverride is the settings file the next session should use, for the
+// tests that are about settings. withConfig sets it for one test.
+var configOverride string
+
+func withConfig(t *testing.T, path string) {
+	t.Helper()
+	configOverride = path
+	t.Cleanup(func() { configOverride = "" })
+}
+
 // attached is a running TUI and a terminal reading it.
 type attached struct {
 	pty    *pty.Pty
@@ -139,7 +149,11 @@ func startSessionConfigured(t *testing.T, cols, rows int, cfg server.Config) *at
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
 	// Point at a file that does not exist, so the tests see the defaults
 	// rather than whatever settings the machine running them happens to have.
-	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	// A test about settings names its own file instead.
+	configPath := configOverride
+	if configPath == "" {
+		configPath = filepath.Join(t.TempDir(), "absent.toml")
+	}
 	t.Setenv("TEND_CONFIG", configPath)
 
 	path, err := transport.SocketPath("tui")
@@ -965,7 +979,7 @@ func TestAttachTabsAreScopedToTheirSpace(t *testing.T) {
 
 	// A new space starts with one tab of its own, and the first space's tabs
 	// must not appear in its bar.
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "the new space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -985,7 +999,7 @@ func TestAttachTabsAreScopedToTheirSpace(t *testing.T) {
 func TestAttachAgentListGroupsEverything(t *testing.T) {
 	a := startSession(t, 100, 18)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -1042,7 +1056,7 @@ func TestAttachNavigateJumpsAcrossSpaces(t *testing.T) {
 		return strings.Contains(s, "FIRST-SPACE")
 	})
 
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "the second space", func(s string) bool {
 		return strings.Contains(s, "space 2") && !strings.Contains(s, "FIRST-SPACE")
 	})
@@ -1124,7 +1138,7 @@ func TestAttachNamesNewSpacesAndTabs(t *testing.T) {
 	a := startSession(t, 100, 14)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "the new space named", func(s string) bool {
 		return strings.Contains(s, "· space 2 ·")
 	})
@@ -1231,7 +1245,7 @@ func TestAttachClickSidebarHeading(t *testing.T) {
 	a.waitForScreen(t, "the marker", func(s string) bool {
 		return strings.Contains(s, "FIRST-SPACE")
 	})
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -1423,7 +1437,7 @@ func TestAttachMenuClosesAPane(t *testing.T) {
 func TestAttachMenuClosesASpace(t *testing.T) {
 	a := startSession(t, 100, 18)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -1483,7 +1497,7 @@ func (a *attached) groupSpace(t *testing.T, space, group string) {
 func TestAttachGroupsSpacesIntoATree(t *testing.T) {
 	a := startSession(t, 100, 20)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -1514,7 +1528,7 @@ func TestAttachGroupsSpacesIntoATree(t *testing.T) {
 func TestAttachUngroupsFromTheGroupMenu(t *testing.T) {
 	a := startSession(t, 100, 20)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -1540,7 +1554,7 @@ func TestAttachNavigatesIntoAFoldedGroup(t *testing.T) {
 	a.sendUntil(t, "printf FIRST-SPACE\n", "the marker", func(s string) bool {
 		return strings.Contains(s, "FIRST-SPACE")
 	})
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "a second space", func(s string) bool {
 		return strings.Contains(s, "space 2")
 	})
@@ -1579,7 +1593,7 @@ func TestAttachScrollsTheSidebar(t *testing.T) {
 	a := startSession(t, 100, 16)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 	for i := 0; i < 8; i++ {
-		a.send(t, "\x02s")
+		a.send(t, "\x02N")
 		time.Sleep(150 * time.Millisecond)
 	}
 	a.waitForScreen(t, "a long list", func(string) bool {
@@ -1730,7 +1744,7 @@ func TestAttachDividesTheSidebar(t *testing.T) {
 	a := startSession(t, 100, 22)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 	for i := 0; i < 6; i++ {
-		a.send(t, "\x02s")
+		a.send(t, "\x02N")
 		time.Sleep(150 * time.Millisecond)
 	}
 	a.waitForScreen(t, "a long list of spaces", func(string) bool {
@@ -1753,7 +1767,7 @@ func TestAttachDragsTheSidebarDivider(t *testing.T) {
 	a := startSession(t, 100, 22)
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 	for i := 0; i < 5; i++ {
-		a.send(t, "\x02s")
+		a.send(t, "\x02N")
 		time.Sleep(150 * time.Millisecond)
 	}
 	a.waitForScreen(t, "a divider", func(string) bool { return a.sidebarDividerRow() > 0 })
@@ -1887,7 +1901,7 @@ func TestAttachPinsTheSpaceButtonsAboveTheDivider(t *testing.T) {
 
 	// Adding spaces does not move them.
 	for i := 0; i < 4; i++ {
-		a.send(t, "\x02s")
+		a.send(t, "\x02N")
 		time.Sleep(150 * time.Millisecond)
 	}
 	a.waitForScreen(t, "more spaces", func(string) bool {
@@ -2619,7 +2633,7 @@ func TestAttachComesBackToTheSameLayoutAfterARestart(t *testing.T) {
 	// A split, a second tab and a second space: some of everything.
 	a.send(t, "\x02|")
 	a.waitForScreen(t, "two panes", func(s string) bool { return strings.Count(s, "┌") == 2 })
-	a.send(t, "\x02s")
+	a.send(t, "\x02N")
 	a.waitForScreen(t, "a second space", func(string) bool {
 		return strings.Contains(a.sidebarText(), "space 2")
 	})

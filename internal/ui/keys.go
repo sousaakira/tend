@@ -54,6 +54,11 @@ const (
 	// CommandResizeMode enters resize mode, where h/j/k/l move the focused
 	// pane's edges until escape — herdr's prefix+r.
 	CommandResizeMode
+	// CommandSettings opens the settings screen, herdr's prefix+s.
+	CommandSettings
+	// CommandNewWorktree makes a worktree for the current space's repository
+	// and opens it as a space of its own, herdr's prefix+shift+g.
+	CommandNewWorktree
 	// CommandFocusPrev goes back through the tab's panes, herdr's
 	// prefix+shift+tab; CommandFocusNext is also on prefix+tab.
 	CommandFocusPrev
@@ -139,6 +144,10 @@ func (c Command) String() string {
 		return "swap-down"
 	case CommandResizeMode:
 		return "resize-mode"
+	case CommandSettings:
+		return "settings"
+	case CommandNewWorktree:
+		return "new-worktree"
 	case CommandFocusPrev:
 		return "focus-prev"
 	case CommandLastPane:
@@ -180,7 +189,9 @@ var Keys = []struct {
 	{"n", CommandNextTab, "next tab"},
 	{"p", CommandPrevTab, "previous tab"},
 	{"1-9", CommandSelectTab, "go to tab"},
-	{"s", CommandNewSpace, "new space"},
+	{"s", CommandSettings, "settings"},
+	{"N", CommandNewSpace, "new space"},
+	{"G", CommandNewWorktree, "new worktree"},
 	{"( )", CommandNextSpace, "switch space"},
 	{"a", CommandToggleAgents, "show agents"},
 	{"w g", CommandNavigate, "pick a space or agent"},
@@ -188,7 +199,7 @@ var Keys = []struct {
 	{",", CommandRenameTab, "rename tab"},
 	{".", CommandRenameSpace, "rename space"},
 	{"d", CommandDetach, "detach"},
-	{"R", CommandRefresh, "redraw"},
+	{"R", CommandRefresh, "reload settings, redraw"},
 	{"?", CommandHelp, "this help"},
 }
 
@@ -377,7 +388,13 @@ func (in *Input) command(b byte) Result {
 	case 'c':
 		return Result{Command: CommandNewTab}
 	case 's':
+		// herdr's key for settings; a new space moved to shift+n, which is
+		// herdr's key for that.
+		return Result{Command: CommandSettings}
+	case 'N':
 		return Result{Command: CommandNewSpace}
+	case 'G':
+		return Result{Command: CommandNewWorktree}
 	case ')':
 		return Result{Command: CommandNextSpace}
 	case '(':

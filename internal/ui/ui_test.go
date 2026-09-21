@@ -664,7 +664,10 @@ func TestInputSelectTabCarriesTheNumber(t *testing.T) {
 
 func TestInputSpaceAndAgentCommands(t *testing.T) {
 	cases := map[byte]Command{
-		's': CommandNewSpace,
+		// herdr's keys: s opens settings, a new space is shift+n.
+		's': CommandSettings,
+		'N': CommandNewSpace,
+		'G': CommandNewWorktree,
 		')': CommandNextSpace,
 		'(': CommandPrevSpace,
 		'a': CommandToggleAgents,

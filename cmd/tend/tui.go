@@ -184,6 +184,8 @@ type tui struct {
 	scrollOffset int
 	scrollDepth  int
 	scrollScreen *vt.Screen
+	// settings is the settings screen while it is open.
+	settings *settingsState
 	// notices is what was last announced about each pane, so an agent that
 	// flickers between states is not announced every time.
 	notices map[uint64]paneNotice
@@ -992,6 +994,13 @@ func (t *tui) handleInput(data []byte) error {
 		}
 	}
 
+	if t.settingsUp() {
+		if _, err := t.settingsKeys(forward); err != nil {
+			return err
+		}
+		forward = nil
+	}
+
 	if t.resizingNow() {
 		handled, err := t.resizeKeys(forward)
 		if err != nil {
@@ -1196,8 +1205,11 @@ func (t *tui) command(action ui.Action) error {
 		return nil
 
 	case ui.CommandRefresh:
+		// Redraw and re-read the settings, herdr's prefix+shift+r. One key
+		// rather than two: a reload redraws anyway, and a redraw that also
+		// picked up an edit is never the wrong answer.
 		t.painter.Invalidate()
-		return t.refresh()
+		return t.reloadSettings()
 
 	case ui.CommandSwapLeft, ui.CommandSwapRight, ui.CommandSwapUp, ui.CommandSwapDown:
 		if focus == 0 {
@@ -1217,6 +1229,12 @@ func (t *tui) command(action ui.Action) error {
 		}
 		// Focus is on the pane, not the place, so it went with the pane.
 		return t.refresh()
+
+	case ui.CommandSettings:
+		return t.openSettings()
+
+	case ui.CommandNewWorktree:
+		return t.newWorktreeHere()
 
 	case ui.CommandResizeMode:
 		t.mu.Lock()
