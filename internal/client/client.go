@@ -364,11 +364,11 @@ func (c *Client) SplitPane(target uint64, direction string, spec proto.PaneSpec)
 	return out.Pane, err
 }
 
-// DockPane opens a pane along the left edge of beside's tab, taking share
-// of its width.
-func (c *Client) DockPane(beside uint64, share float64, spec proto.PaneSpec) (uint64, error) {
+// DockPane opens a pane along the left (or right) edge of beside's tab,
+// taking share of its width.
+func (c *Client) DockPane(beside uint64, share float64, right bool, spec proto.PaneSpec) (uint64, error) {
 	var out proto.PaneSplitResult
-	err := c.Call(proto.MethodPaneDock, proto.PaneDockParams{Beside: beside, Share: share, Pane: spec}, &out)
+	err := c.Call(proto.MethodPaneDock, proto.PaneDockParams{Beside: beside, Share: share, Right: right, Pane: spec}, &out)
 	return out.Pane, err
 }
 

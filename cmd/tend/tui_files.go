@@ -52,13 +52,13 @@ func (t *tui) toggleFiles() error {
 	}
 
 	t.mu.Lock()
-	cols := t.config.FilesWidth()
+	cols, onRight := t.config.FilesWidth(), t.config.Files.Dock == "right"
 	t.mu.Unlock()
 	share := 0.25
 	if width := right - left; width > 0 {
 		share = float64(cols) / float64(width)
 	}
-	created, err := t.client.DockPane(focus, share, proto.PaneSpec{Command: filesCommand, Title: filesTitle})
+	created, err := t.client.DockPane(focus, share, onRight, proto.PaneSpec{Command: filesCommand, Title: filesTitle})
 	if err != nil {
 		if t.reportStaleServer(err) {
 			return nil

@@ -930,7 +930,7 @@ func TestDockPaneRunsTheFullHeightOfTheLeftEdge(t *testing.T) {
 	if _, err := s.SplitPane(first.ID, Rows, PaneSpec{}); err != nil {
 		t.Fatal(err)
 	}
-	dock, err := s.DockPane(tab.ID, 0.25, PaneSpec{Title: "files"})
+	dock, err := s.DockPane(tab.ID, 0.25, false, PaneSpec{Title: "files"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -958,7 +958,7 @@ func TestDockPaneBesideColumnsDoesNotNest(t *testing.T) {
 	if _, err := s.SplitPane(first.ID, Columns, PaneSpec{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DockPane(tab.ID, 0.2, PaneSpec{}); err != nil {
+	if _, err := s.DockPane(tab.ID, 0.2, false, PaneSpec{}); err != nil {
 		t.Fatal(err)
 	}
 	check(t, s)
@@ -968,7 +968,38 @@ func TestDockPaneBesideColumnsDoesNotNest(t *testing.T) {
 	if a, b := tab.root.sizes[1], tab.root.sizes[2]; math.Abs(a-b) > 1e-9 || math.Abs(a-0.4) > 1e-9 {
 		t.Errorf("the two panes should share what is left evenly: %v", tab.root.sizes)
 	}
-	if _, err := s.DockPane(999, 0.2, PaneSpec{}); !errors.Is(err, ErrNoSuchTab) {
+	if _, err := s.DockPane(999, 0.2, false, PaneSpec{}); !errors.Is(err, ErrNoSuchTab) {
 		t.Errorf("docking into no tab: %v", err)
+	}
+}
+
+// TestDockPaneOnTheRight: the other edge, for a panel set to open there.
+// If it regresses, dock = "right" in [files] still opens on the left.
+func TestDockPaneOnTheRight(t *testing.T) {
+	s, _, tab, first := fixture(t)
+	if _, err := s.SplitPane(first.ID, Rows, PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	dock, err := s.DockPane(tab.ID, 0.25, true, PaneSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+	for _, pr := range tab.Layout(Rect{W: 100, H: 40}) {
+		if pr.Pane == dock.ID && (pr.Rect.X+pr.Rect.W != 100 || pr.Rect.H != 40 || pr.Rect.W > 30) {
+			t.Errorf("docked pane at %+v, want the right quarter at full height", pr.Rect)
+		}
+	}
+	// Beside columns it is the last column.
+	if _, err := s.DockPane(tab.ID, 0.2, false, PaneSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	right, err := s.DockPane(tab.ID, 0.2, true, PaneSpec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, s)
+	if last := tab.root.kids[len(tab.root.kids)-1]; last.pane != right.ID {
+		t.Errorf("the right dock should be the last column")
 	}
 }

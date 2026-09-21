@@ -571,7 +571,7 @@ func (s *Server) SplitPane(target session.PaneID, dir session.Direction, spec Pa
 // process in it. With no directory given it starts where beside is now —
 // where the user cd'd to, not where the pane was opened — which for the file
 // explorer is the project being worked on.
-func (s *Server) DockPane(beside session.PaneID, share float64, spec PaneSpec) (session.PaneID, error) {
+func (s *Server) DockPane(beside session.PaneID, share float64, right bool, spec PaneSpec) (session.PaneID, error) {
 	if spec.Dir == "" {
 		s.mu.Lock()
 		rt := s.runtimes[beside]
@@ -591,7 +591,7 @@ func (s *Server) DockPane(beside session.PaneID, share float64, spec PaneSpec) (
 	if !ok {
 		return 0, fmt.Errorf("%w: %d", session.ErrNoSuchPane, beside)
 	}
-	pane, err := s.session.DockPane(tab.ID, share, spec.record())
+	pane, err := s.session.DockPane(tab.ID, share, right, spec.record())
 	if err != nil {
 		return 0, err
 	}

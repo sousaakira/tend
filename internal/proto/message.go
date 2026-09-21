@@ -464,9 +464,12 @@ type PaneSplitParams struct {
 // in the one Beside is in now. A docked pane closes when its program ends,
 // and keeps the title it is given.
 type PaneDockParams struct {
-	Beside uint64   `json:"beside"`
-	Share  float64  `json:"share"`
-	Pane   PaneSpec `json:"pane"`
+	Beside uint64  `json:"beside"`
+	Share  float64 `json:"share"`
+	// Right docks on the right edge. A server from before it docks on the
+	// left, which is a panel on the wrong side rather than no panel.
+	Right bool     `json:"right,omitempty"`
+	Pane  PaneSpec `json:"pane"`
 }
 
 // PaneSplitResult reports the new pane.

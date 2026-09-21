@@ -75,7 +75,7 @@ are looking at.
 ### the files panel
 
 `ctrl+b f` (or "files panel" on a pane's right-click menu) docks it on the
-left of the tab; again goes to it, and once more puts it away. It runs on the
+left of the tab (or the right, with `dock = "right"`); again goes to it, and once more puts it away. It runs on the
 machine the session is on, so over `--remote` it shows the server's project,
 and it follows the pane beside it to whatever project that pane moves to
 (`tend files -still` stays put). `1` `2` `3` switch its views; `?` lists the
@@ -105,6 +105,7 @@ Its settings are `[files]` in the settings file, and on the settings screen:
 [files]
 icons = "nerd"   # "none" (default), "nerd" for a Nerd Font, or "emoji"
 width = 32       # columns it opens at
+dock = "left"    # or "right"
 follow = true    # follow the pane beside it
 hidden = false   # hide dotfiles
 ```

@@ -467,7 +467,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		// A docked pane is a panel: it goes when its program does, and its
 		// title is the name it was given, not whatever the program sets.
 		spec.CloseOnExit, spec.Named = true, spec.Title != ""
-		pane, err := c.srv.DockPane(session.PaneID(p.Beside), p.Share, spec)
+		pane, err := c.srv.DockPane(session.PaneID(p.Beside), p.Share, p.Right, spec)
 		if err != nil {
 			return nil, err
 		}

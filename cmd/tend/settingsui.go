@@ -87,6 +87,16 @@ var settingRows = []settingRow{
 		value:   func(c config.Config) string { return config.Bool(c.Files.Hidden) },
 	},
 	{
+		label: "files side", section: "files", key: "dock",
+		choices: []settingChoice{{"left", `"left"`}, {"right", `"right"`}},
+		value: func(c config.Config) string {
+			if c.Files.Dock == "right" {
+				return `"right"`
+			}
+			return `"left"`
+		},
+	},
+	{
 		label: "files width", section: "files", key: "width",
 		choices: []settingChoice{{"28", "28"}, {"32", "32"}, {"40", "40"}, {"48", "48"}},
 		value:   func(c config.Config) string { return strconv.Itoa(c.FilesWidth()) },

@@ -320,3 +320,27 @@ func TestThePanelPreviewsBesideTheMainPaneAndReusesIt(t *testing.T) {
 		t.Errorf("%d panes after the second preview, %d after the first", got, panes)
 	}
 }
+
+// TestTheFilesPanelDocksOnTheRightWhenSetTo: dock = "right" in [files]
+// opens the panel on the other edge. If it regresses, the setting is
+// written and ignored.
+func TestTheFilesPanelDocksOnTheRightWhenSetTo(t *testing.T) {
+	t.Setenv("PATH", filepath.Dir(buildBinary(t))+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[files]\ndock = \"right\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	configOverride = cfg
+	t.Cleanup(func() { configOverride = "" })
+	a := startSession(t, 120, 30)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02f")
+	a.waitForScreen(t, "the panel", func(s string) bool { return strings.Contains(s, "files │ search │ changes") })
+	line := a.lines()[a.lineContaining(t, "files │ search │ changes")-1]
+	if at := strings.Index(line, "files │ search"); at < strings.Index(line, "│$") && strings.Contains(line, "│$") {
+		t.Errorf("the panel should be right of the shell:\n%s", a.text())
+	}
+	if top := a.lines()[1]; strings.Index(top, "files") < strings.Index(top, "sh ") {
+		t.Errorf("the panel's frame should come after the shell's:\n%s", top)
+	}
+}

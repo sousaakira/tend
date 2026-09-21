@@ -387,7 +387,7 @@ func TestAPanelStillClosesWithItsProgramAfterARestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.DockPane(keep, 0.25, PaneSpec{
+	if _, err := first.DockPane(keep, 0.25, false, PaneSpec{
 		Command: []string{"/bin/sh"}, Title: "files", Named: true, CloseOnExit: true,
 	}); err != nil {
 		t.Fatal(err)

@@ -46,6 +46,8 @@ type Files struct {
 	Follow *bool `toml:"follow"`
 	// Hidden hides entries whose name starts with a dot.
 	Hidden bool `toml:"hidden"`
+	// Dock is the edge it opens on: "left" (the default) or "right".
+	Dock string `toml:"dock"`
 }
 
 // FilesFollow is whether the panel follows the pane beside it.
@@ -323,6 +325,11 @@ func (c Config) validate() error {
 	case "", "none", "nerd", "emoji":
 	default:
 		return fmt.Errorf("files.icons is %q; use \"none\", \"nerd\" or \"emoji\"", c.Files.Icons)
+	}
+	switch c.Files.Dock {
+	case "", "left", "right":
+	default:
+		return fmt.Errorf("files.dock is %q; use \"left\" or \"right\"", c.Files.Dock)
 	}
 	if c.Files.Width != 0 && (c.Files.Width < 16 || c.Files.Width > 120) {
 		return fmt.Errorf("files.width is %d; use 16 to 120 columns", c.Files.Width)
