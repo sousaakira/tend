@@ -113,9 +113,10 @@ contains = ["done"]
 	}
 }
 
-// TestDetectorReportsFirstUnknown: the first observation is a change even when
-// it is "unknown", so a caller learns the starting state rather than assuming.
-func TestDetectorReportsFirstUnknown(t *testing.T) {
+// TestDetectorReportsTheFirstObservation: the first observation is a change
+// even when no rule matched, so a caller learns the starting state rather
+// than assuming. With no rule matching, a known agent is idle, as in herdr.
+func TestDetectorReportsTheFirstObservation(t *testing.T) {
 	m := testManifest(t, `
 id = "demo"
 [[rules]]
@@ -128,8 +129,8 @@ contains = ["busy"]
 	if !changed {
 		t.Error("the first observation should be reported")
 	}
-	if res.State != detect.StateUnknown {
-		t.Errorf("state = %v, want unknown", res.State)
+	if res.State != detect.StateIdle {
+		t.Errorf("state = %v, want idle", res.State)
 	}
 }
 

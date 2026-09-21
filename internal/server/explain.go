@@ -33,6 +33,9 @@ type Explanation struct {
 	VisibleBlocker  bool `json:"visible_blocker,omitempty"`
 	VisibleWorking  bool `json:"visible_working,omitempty"`
 	SkipStateUpdate bool `json:"skip_state_update,omitempty"`
+	// FallbackReason says why the state is what it is when no rule matched:
+	// herdr\'s default_known_agent_idle_fallback.
+	FallbackReason string `json:"fallback_reason,omitempty"`
 
 	// Rules is every rule of the manifest and what it did.
 	Rules []RuleReport `json:"evaluated_rules"`
@@ -87,6 +90,7 @@ func (s *Server) Explain(id session.PaneID, withScreen bool) (Explanation, error
 	out.Rule, out.Region, out.Priority = result.RuleID, result.Region, result.Priority
 	out.VisibleIdle, out.VisibleBlocker = result.VisibleIdle, result.VisibleBlocker
 	out.VisibleWorking, out.SkipStateUpdate = result.VisibleWorking, result.SkipStateUpdate
+	out.FallbackReason = result.FallbackReason
 	for _, rule := range rules {
 		out.Rules = append(out.Rules, RuleReport{
 			ID: rule.RuleID, Region: rule.Region, State: rule.State.String(),

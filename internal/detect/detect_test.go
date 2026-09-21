@@ -28,8 +28,10 @@ contains = ["busy"]
 	if got.Matched {
 		t.Errorf("got %+v, want no match", got)
 	}
-	if got.State != StateUnknown {
-		t.Errorf("state = %v, want unknown", got.State)
+	// A known agent no rule speaks for is at rest: herdr's
+	// default_known_agent_idle_fallback.
+	if got.State != StateIdle || got.FallbackReason != KnownAgentIdleFallback {
+		t.Errorf("state = %v (%q), want idle by the known-agent fallback", got.State, got.FallbackReason)
 	}
 }
 

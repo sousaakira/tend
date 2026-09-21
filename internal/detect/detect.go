@@ -25,10 +25,12 @@ type Input struct {
 
 // Result is what detection concluded.
 type Result struct {
-	// Matched reports whether any rule fired. When false, State is
-	// StateUnknown and the rule fields are empty.
-	Matched bool
-	State   State
+	// Matched reports whether any rule fired. When false, State is idle —
+	// herdr's default for a known agent no rule speaks for — FallbackReason
+	// says so, and the rule fields are empty.
+	Matched        bool
+	State          State
+	FallbackReason string
 
 	RuleID   string
 	Priority int
@@ -75,9 +77,17 @@ func (m *Manifest) Explain(in Input) (Result, []RuleEvaluation) {
 	return m.result(best), evals
 }
 
+// KnownAgentIdleFallback is why a known agent with no rule matching is idle:
+// herdr's DEFAULT_KNOWN_AGENT_IDLE_FALLBACK. An agent's screen at rest is
+// the one thing its rules usually do not describe — they describe working
+// and waiting — so "recognised, and nothing to say" means it is at its
+// prompt. tend used to call that unknown, and OpenCode sitting at its
+// prompt was never idle.
+const KnownAgentIdleFallback = "default_known_agent_idle_fallback"
+
 func (m *Manifest) result(best int) Result {
 	if best < 0 {
-		return Result{State: StateUnknown}
+		return Result{State: StateIdle, FallbackReason: KnownAgentIdleFallback}
 	}
 	r := &m.Rules[best]
 	return Result{

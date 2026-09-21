@@ -126,7 +126,7 @@ func printResult(agentID string, res detect.Result) {
 	fmt.Printf("agent  %s\n", agentID)
 	fmt.Printf("state  %s\n", res.State)
 	if !res.Matched {
-		fmt.Println("rule   (no rule matched)")
+		fmt.Println("rule   (no rule matched: " + res.FallbackReason + ")")
 		return
 	}
 	fmt.Printf("rule   %s (priority %d, region %s)\n", res.RuleID, res.Priority, res.Region)
