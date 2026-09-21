@@ -539,8 +539,10 @@ Ported (see "Ported, and checked"). Left:
 - **Onboarding** (`ui/onboarding.rs`) and release notes
   (`ui/release_notes.rs`): what herdr shows on a first run and after an
   update. tend has no updater yet (item 14), and nothing to announce.
-- **Integrations in the screen**: herdr's settings has a section that installs
-  them; tend has `tend integration install`.
+- **Integrations in the screen** are rows after the settings, one per agent
+  on this machine, that install, update or remove its hooks; not offered to
+  a client attached over ssh, whose machine is not the agents'. herdr's
+  update badge is not drawn.
 - Live reload of the prefix key is applied, but a client started with one
   prefix keeps any pane input already bound elsewhere; herdr rebinds
   everything through its keybind table (item 11).

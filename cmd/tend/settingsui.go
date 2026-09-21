@@ -6,6 +6,7 @@ import (
 
 	"github.com/sousaakira/tend/internal/api"
 	"github.com/sousaakira/tend/internal/config"
+	"github.com/sousaakira/tend/internal/integration"
 	sessionpkg "github.com/sousaakira/tend/internal/session"
 	"github.com/sousaakira/tend/internal/ui"
 )
@@ -30,6 +31,9 @@ type settingRow struct {
 	choices []settingChoice
 	// value reads the current one out of a configuration.
 	value func(config.Config) string
+	// apply, when set, does the change itself instead of writing section
+	// and key to the file: an integration is installed, not configured.
+	apply func(next settingChoice) (string, error)
 }
 
 type settingChoice struct {
@@ -101,6 +105,65 @@ func themeChoices() []settingChoice {
 // settingsState is the screen while it is open.
 type settingsState struct {
 	row int
+	// rows is the screen as it was opened: the settings, then the agent
+	// integrations found on this machine, which is a list that depends on
+	// what is installed and so is not fixed.
+	rows []settingRow
+}
+
+// integrationRows are herdr's settings section for integrations: one row
+// per agent on this machine, whose hooks can be installed, updated or
+// taken out from here as `tend integration` does it.
+//
+// Only for a client on the machine the session is on: the hooks go into the
+// agent's settings where the agent runs, and a client attached over ssh is on
+// another machine.
+func integrationRows(remote bool) []settingRow {
+	if remote {
+		return nil
+	}
+	var rows []settingRow
+	for _, st := range integration.Statuses() {
+		if !st.Available && st.State == integration.StatusNotInstalled {
+			continue // that agent is not on this machine
+		}
+		target := st.Target
+		rows = append(rows, settingRow{
+			label: "hooks: " + target.Label(),
+			choices: []settingChoice{
+				{"not installed", string(integration.StatusNotInstalled)},
+				{"installed", string(integration.StatusCurrent)},
+			},
+			value: func(config.Config) string {
+				state := integrationState(target)
+				if state == integration.StatusOutdated {
+					// Shown as installed; the next step along installs the
+					// current version over it.
+					return string(integration.StatusCurrent)
+				}
+				return string(state)
+			},
+			apply: func(next settingChoice) (string, error) {
+				if next.toml == string(integration.StatusNotInstalled) {
+					_, err := integration.Uninstall(target)
+					return "hooks removed from " + target.Label(), err
+				}
+				_, err := integration.Install(target)
+				return "hooks installed for " + target.Label(), err
+			},
+		})
+	}
+	return rows
+}
+
+// integrationState is where one target's hooks stand now.
+func integrationState(target integration.Target) integration.StatusKind {
+	for _, st := range integration.Statuses() {
+		if st.Target == target {
+			return st.State
+		}
+	}
+	return integration.StatusNotInstalled
 }
 
 // openSettings shows the screen, or closes it if it is already up.
@@ -111,7 +174,7 @@ func (t *tui) openSettings() error {
 		t.settings = nil
 		t.overlay = nil
 	} else {
-		t.settings = &settingsState{}
+		t.settings = &settingsState{rows: append(append([]settingRow(nil), settingRows...), integrationRows(t.host != "")...)}
 	}
 	t.dirty = true
 	t.mu.Unlock()
@@ -160,7 +223,7 @@ func (t *tui) settingsKeys(data []byte) (bool, error) {
 func (t *tui) moveSetting(delta int) {
 	t.mu.Lock()
 	if t.settings != nil {
-		t.settings.row = (t.settings.row + delta + len(settingRows)) % len(settingRows)
+		t.settings.row = (t.settings.row + delta + len(t.settings.rows)) % len(t.settings.rows)
 	}
 	t.mu.Unlock()
 	t.drawSettings()
@@ -173,7 +236,7 @@ func (t *tui) changeSetting(delta int) error {
 		t.mu.Unlock()
 		return nil
 	}
-	row := settingRows[t.settings.row]
+	row := t.settings.rows[t.settings.row]
 	current := row.value(t.config)
 	t.mu.Unlock()
 
@@ -185,6 +248,16 @@ func (t *tui) changeSetting(delta int) error {
 	}
 	next := row.choices[(at+delta+len(row.choices))%len(row.choices)]
 
+	if row.apply != nil {
+		said, err := row.apply(next)
+		if err != nil {
+			t.setMessage(err.Error(), true)
+		} else {
+			t.setMessage(said, false)
+		}
+		t.drawSettings()
+		return nil
+	}
 	if err := config.Set(row.section, row.key, next.toml); err != nil {
 		t.setMessage(err.Error(), true)
 		return nil
@@ -208,7 +281,7 @@ func (t *tui) drawSettings() {
 	}
 
 	lines := []string{"settings", ""}
-	for i, row := range settingRows {
+	for i, row := range t.settings.rows {
 		current := row.value(t.config)
 		var shown []string
 		for _, choice := range row.choices {
