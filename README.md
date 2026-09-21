@@ -76,7 +76,9 @@ are looking at.
 tree with git's letter beside each changed file, the changes with their diffs
 (stage with `s`, commit with `c`), `/` to find any file by name, and
 `ctrl+f` to search the files' text (case, whole word, regex, include and
-exclude globs) and open the editor on the line found. Enter
+exclude globs) and open the editor on the line found. It follows the pane
+beside it: when that pane's program moves to another project, the panel goes
+there too (`tend files -still` stays put). Enter
 opens a file in `$EDITOR` in a tab of its own. It runs on the machine the
 session is on, so over `--remote` it shows the server's project. `ctrl+b f`
 again goes to it, and once more puts it away.

@@ -145,3 +145,37 @@ func editorAt(editor string, line int) string {
 	}
 	return editor
 }
+
+// Siblings lists the other panes of this pane's tab and where their
+// programs are, from pane.list.
+func (o *SessionOpener) Siblings() ([]Sibling, error) {
+	if o.Socket == "" || o.Pane == "" {
+		return nil, errors.New("not running in a tend pane")
+	}
+	res, err := o.call("pane.list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	panes, _ := res["panes"].([]any)
+	tab := ""
+	for _, raw := range panes {
+		if p, _ := raw.(map[string]any); p["pane_id"] == o.Pane {
+			tab, _ = p["tab_id"].(string)
+		}
+	}
+	if tab == "" {
+		return nil, errors.New("this pane is in no tab the session lists")
+	}
+	var out []Sibling
+	for _, raw := range panes {
+		p, _ := raw.(map[string]any)
+		id, _ := p["pane_id"].(string)
+		if id == o.Pane || p["tab_id"] != tab {
+			continue
+		}
+		cwd, _ := p["foreground_cwd"].(string)
+		focused, _ := p["focused"].(bool)
+		out = append(out, Sibling{Pane: id, Cwd: cwd, Focused: focused})
+	}
+	return out, nil
+}

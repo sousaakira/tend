@@ -19,6 +19,7 @@ import (
 func runFiles(args []string) error {
 	fs := flag.NewFlagSet("files", flag.ExitOnError)
 	editor := fs.String("editor", "", "command to edit files with (default: $VISUAL, $EDITOR, vi)")
+	still := fs.Bool("still", false, "stay in the directory given rather than follow the pane beside the panel")
 	fs.Usage = func() {
 		fs.Output().Write([]byte("usage: tend files [-editor cmd] [directory]\n\n" +
 			"A tree of the project with what git says about each file, the\n" +
@@ -45,5 +46,9 @@ func runFiles(args []string) error {
 		Pane:   os.Getenv(api.EnvPaneID),
 		Editor: *editor,
 	}
-	return explorer.Run(explorer.New(dir, opener), os.Stdin, os.Stdout)
+	m := explorer.New(dir, opener)
+	if !*still {
+		m.FollowPanes(opener)
+	}
+	return explorer.Run(m, os.Stdin, os.Stdout)
 }

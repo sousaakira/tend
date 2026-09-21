@@ -127,8 +127,17 @@ func ParsePaneID(s string) (session.PaneID, bool) {
 // PaneInfo describes a pane to a script.
 type PaneInfo struct {
 	PaneID string `json:"pane_id"`
-	Title  string `json:"title,omitempty"`
-	Agent  string `json:"agent,omitempty"`
+	// WorkspaceID and TabID are where the pane is; Focused marks the pane
+	// last focused; Cwd is where it was opened and ForegroundCwd where its
+	// program is now. herdr's names, which a plugin following a pane's
+	// directory reads.
+	WorkspaceID   string `json:"workspace_id,omitempty"`
+	TabID         string `json:"tab_id,omitempty"`
+	Focused       bool   `json:"focused,omitempty"`
+	Cwd           string `json:"cwd,omitempty"`
+	ForegroundCwd string `json:"foreground_cwd,omitempty"`
+	Title         string `json:"title,omitempty"`
+	Agent         string `json:"agent,omitempty"`
 	// Name is what a script called the agent (agent.rename), which it can
 	// then be addressed by.
 	Name    string `json:"name,omitempty"`
@@ -362,6 +371,12 @@ func (a *API) info(st server.PaneStatus) PaneInfo {
 		Message: st.Message, Running: st.Running, Pid: st.Pid,
 		Display: st.Presentation.DisplayAgent, Tokens: st.Presentation.Tokens,
 		Name: a.srv.AgentName(st.ID),
+	}
+	if c, err := a.srv.PaneContext(st.ID); err == nil {
+		if c.Tab != 0 {
+			info.WorkspaceID, info.TabID = WorkspaceID(c.Workspace), TabID(c.Tab)
+		}
+		info.Focused, info.Cwd, info.ForegroundCwd = c.Focused, c.Dir, c.Cwd
 	}
 	if p, ok, err := a.srv.AgentSession(st.ID); err == nil && ok {
 		info.AgentSession = &AgentSessionInfo{

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sousaakira/tend/internal/session"
 )
 
 // result digs the result object out of a reply, failing on an error reply.
@@ -600,4 +602,51 @@ func TestAScriptCanPutAViewOnTheAgentList(t *testing.T) {
 	})); code != "invalid_agent_view" {
 		t.Errorf("a bad view gave %q", code)
 	}
+}
+
+// TestPaneListSaysWhereEachPaneIsAndWhereItsProgramIs: pane.list carries
+// herdr's workspace_id, tab_id, focused, cwd and foreground_cwd, the live
+// directory being where the program has cd'd to. If it regresses, the files
+// panel cannot follow the pane beside it.
+func TestPaneListSaysWhereEachPaneIsAndWhereItsProgramIs(t *testing.T) {
+	h := start(t)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := result(t, call(t, h, MethodPaneSplit, map[string]any{
+		"pane_id": PaneID(h.pane), "direction": "down", "command": []string{"/bin/sh"},
+	}))
+	shell, _ := res["pane"].(map[string]any)
+	id, _ := shell["pane_id"].(string)
+	call(t, h, MethodPaneSendText, map[string]any{"pane_id": id, "text": "cd " + dir + " && echo moved\n"})
+	result(t, call(t, h, MethodPaneWaitForOutput, map[string]any{"pane_id": id, "contains": "moved", "timeout_ms": 5000}))
+	h.srv.FocusPane(parsePane(t, id), 0)
+
+	list := result(t, call(t, h, MethodPaneList, nil))
+	panes, _ := list["panes"].([]any)
+	var got map[string]any
+	for _, p := range panes {
+		if m, _ := p.(map[string]any); m["pane_id"] == id {
+			got = m
+		}
+	}
+	if got == nil {
+		t.Fatalf("pane %s not listed: %v", id, panes)
+	}
+	if got["foreground_cwd"] != dir {
+		t.Errorf("foreground_cwd = %v, want %s", got["foreground_cwd"], dir)
+	}
+	if got["focused"] != true || got["tab_id"] == nil || got["workspace_id"] == nil {
+		t.Errorf("place and focus: %v", got)
+	}
+}
+
+func parsePane(t *testing.T, id string) session.PaneID {
+	t.Helper()
+	n, ok := parseID("p_", id)
+	if !ok {
+		t.Fatalf("pane id %q", id)
+	}
+	return session.PaneID(n)
 }

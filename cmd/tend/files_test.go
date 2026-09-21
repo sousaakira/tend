@@ -226,3 +226,46 @@ func TestTextFoundInThePanelOpensTheEditorOnItsLine(t *testing.T) {
 		return strings.Contains(s, "EDITING +3 "+filepath.Join(project, "notes.txt"))
 	})
 }
+
+// TestThePanelFollowsThePaneBesideItToAnotherProject: with the panel open,
+// the shell beside it cd'ing into another repository takes the panel there
+// at its next look. If it regresses, the panel shows the project the agent
+// has left.
+func TestThePanelFollowsThePaneBesideItToAnotherProject(t *testing.T) {
+	first, second := gitProject(t), gitProject(t)
+	if err := os.WriteFile(filepath.Join(second, "only-in-second.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir, err := os.MkdirTemp("", "tf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(runtimeDir) })
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh",
+		"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"))
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, []string{"attach", "-s", "follow"}, pty.Options{Size: pty.Size{Cols: 130, Rows: 30}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(130, 30, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stopSession(t, "follow")
+	})
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "cd "+first+" && echo in-first\n", "the shell in the first project",
+		func(s string) bool { return strings.Contains(s, "\nin-first") || strings.Contains(s, "│in-first") })
+	a.send(t, "\x02f")
+	a.waitForScreen(t, "the panel on the first project", func(s string) bool {
+		return strings.Contains(s, "brandnew.md") && !strings.Contains(s, "only-in-second.txt")
+	})
+
+	// Back to the shell, by a click on it, and into the other project.
+	a.clickAt(t, 100, 15)
+	a.sendUntil(t, "cd "+second+" && echo in-second\n", "the shell in the second project",
+		func(s string) bool { return strings.Contains(s, "in-second") })
+	a.waitForScreen(t, "the panel to follow", func(s string) bool { return strings.Contains(s, "only-in-second.txt") })
+}

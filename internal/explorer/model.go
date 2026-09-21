@@ -65,6 +65,11 @@ type Model struct {
 
 	csearch contentSearch
 
+	// neighbours says where the other panes of the tab are, and follow is
+	// what the panel made of it last time.
+	neighbours Neighbours
+	follow     follower
+
 	// rows as last laid out, so a click lands on what was drawn.
 	fileRows   []*Node
 	changeRows []changeRow
@@ -109,6 +114,9 @@ func New(dir string, opener Opener) *Model {
 	m.Refresh()
 	return m
 }
+
+// FollowPanes makes the panel follow the directory of the pane beside it.
+func (m *Model) FollowPanes(n Neighbours) { m.neighbours = n }
 
 // Quit reports whether the user asked to leave.
 func (m *Model) Quit() bool { return m.quit }

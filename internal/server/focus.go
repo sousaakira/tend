@@ -1,6 +1,8 @@
 package server
 
 import (
+	"fmt"
+
 	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/session"
 )
@@ -191,4 +193,38 @@ func (s *Server) PaneLayout(id session.PaneID) (tab session.TabID, ws session.Wo
 		focused = s.focusedPane
 	}
 	return t.ID, ws, focused, t.Layout(nominalArea), t.Splits(nominalArea), nominalArea, nil
+}
+
+// PaneContext is where a pane is and what it is looking at: its tab and
+// space, whether it is the pane last focused, the directory it was opened
+// in, and the one its program is in now.
+type PaneContext struct {
+	Tab       session.TabID
+	Workspace session.WorkspaceID
+	Focused   bool
+	Dir       string
+	Cwd       string
+}
+
+// PaneContext answers for one pane. The live directory is read after the
+// lock, since asking the terminal reads /proc.
+func (s *Server) PaneContext(id session.PaneID) (PaneContext, error) {
+	var out PaneContext
+	s.mu.Lock()
+	rt, ok := s.runtimes[id]
+	if !ok {
+		s.mu.Unlock()
+		return out, fmt.Errorf("%w: %d", session.ErrNoSuchPane, id)
+	}
+	for _, w := range s.session.Workspaces() {
+		for _, t := range w.Tabs() {
+			if p, ok := t.Pane(id); ok {
+				out.Tab, out.Workspace, out.Dir = t.ID, w.ID, p.Dir
+			}
+		}
+	}
+	out.Focused = s.focusedPane == id
+	s.mu.Unlock()
+	out.Cwd = rt.pty.Cwd()
+	return out, nil
 }
