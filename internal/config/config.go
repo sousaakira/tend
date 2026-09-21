@@ -133,7 +133,13 @@ type UI struct {
 // other value is a colour name, a number from 0 to 255, or a #rrggbb value,
 // and overrides that one colour of the palette. Empty keeps the default.
 type Theme struct {
-	Name          string `toml:"name"`
+	Name string `toml:"name"`
+	// AutoSwitch follows the outer terminal between light and dark, using
+	// DarkName and LightName (herdr's defaults: catppuccin and
+	// catppuccin-latte) in place of Name.
+	AutoSwitch    bool   `toml:"auto_switch"`
+	DarkName      string `toml:"dark_name"`
+	LightName     string `toml:"light_name"`
 	Border        string `toml:"border"`
 	BorderFocused string `toml:"border_focused"`
 	Working       string `toml:"working"`
@@ -257,10 +263,15 @@ func (c Config) validate() error {
 	if _, err := ParseWindowTitle(c.UI.WindowTitle); err != nil {
 		return fmt.Errorf("ui.window_title %q %v", c.UI.WindowTitle, err)
 	}
-	if c.UI.Theme.Name != "" {
-		if _, ok := CanonicalTheme(c.UI.Theme.Name); !ok {
-			return fmt.Errorf("ui.theme.name is %q; use one of %s",
-				c.UI.Theme.Name, strings.Join(ThemeNames, ", "))
+	for field, name := range map[string]string{
+		"name": c.UI.Theme.Name, "dark_name": c.UI.Theme.DarkName, "light_name": c.UI.Theme.LightName,
+	} {
+		if name == "" {
+			continue
+		}
+		if _, ok := CanonicalTheme(name); !ok {
+			return fmt.Errorf("ui.theme.%s is %q; use one of %s",
+				field, name, strings.Join(ThemeNames, ", "))
 		}
 	}
 	for name, value := range map[string]string{
@@ -467,6 +478,11 @@ grouped = false
 # solarized, solarized-light, kanagawa, kanagawa-lotus, rose-pine,
 # rose-pine-dawn, vesper. Unset uses the terminal's own colours.
 # name = "catppuccin"
+#
+# Or follow the terminal between light and dark, with a theme for each.
+# auto_switch = true
+# dark_name = "catppuccin"
+# light_name = "catppuccin-latte"
 #
 # Each colour below overrides that one colour of the theme: a colour name,
 # a number from 0 to 255, or "#rrggbb".

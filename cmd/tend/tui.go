@@ -76,7 +76,7 @@ func runAttach(args []string) error {
 		config:  cfg,
 		session: *name,
 		host:    remoteHost,
-		theme:   ui.ThemeFrom(cfg.UI.Theme),
+		theme:   ui.ThemeFor(cfg.UI.Theme, false),
 		// Refused at load when it does not parse, so the error has gone.
 		titleTemplate: mustTitle(cfg.UI.WindowTitle),
 		painter:       vt.NewPainter(),
@@ -203,6 +203,15 @@ type tui struct {
 	msgAt       time.Time
 	overlay     []string
 	zoom        bool
+	// hostLight is whether the outer terminal is light, as it last said;
+	// hostExplicit whether it said so itself rather than by its background
+	// colour; hostAsked whether it was asked, so the reports are turned off
+	// on the way out. hostPending is a report split across two reads, and is
+	// touched only by the goroutine handling input.
+	hostLight    bool
+	hostExplicit bool
+	hostAsked    bool
+	hostPending  []byte
 	// transient is a pane opened to run one of the user's commands, and the
 	// view to go back to when it closes.
 	transient *transientPane
@@ -284,6 +293,8 @@ func (t *tui) run() error {
 	}
 	defer restore()
 	defer t.restoreWindowTitle()
+	defer t.stopHostScheme()
+	t.askHostScheme()
 	// Images this client put on the terminal are taken off before it leaves:
 	// they are drawn over the screen, not part of it, and would otherwise sit
 	// on top of whatever the shell does next.
@@ -1036,6 +1047,11 @@ func (t *tui) readInput() {
 }
 
 func (t *tui) handleInput(data []byte) error {
+	// The terminal's answers about itself come in with the typing, and must
+	// not reach a pane as though typed.
+	if data = t.takeHostReports(data); len(data) == 0 {
+		return nil
+	}
 	forward, commands, mice := t.keys.FeedAll(data)
 	if len(forward) > 0 {
 		t.dismissOverlay()

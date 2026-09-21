@@ -125,6 +125,26 @@ func ThemeFrom(c config.Theme) Theme {
 	return t
 }
 
+// ThemeFor is ThemeFrom for a terminal that is light or dark: with
+// auto_switch on, the configured dark or light theme stands in for the name,
+// as herdr's resolve_effective_theme does. Until the terminal has said which
+// it is, it is taken to be dark, herdr's assumption too.
+func ThemeFor(c config.Theme, light bool) Theme {
+	if c.AutoSwitch {
+		c.Name = c.DarkName
+		if c.Name == "" {
+			c.Name = "catppuccin"
+		}
+		if light {
+			c.Name = c.LightName
+			if c.Name == "" {
+				c.Name = "catppuccin-latte"
+			}
+		}
+	}
+	return ThemeFrom(c)
+}
+
 // withPalette colours a theme from a palette, using the tokens herdr uses
 // for the same things: accent for what has focus, overlay0 for frames and
 // secondary text, and yellow, red and green for working, blocked and idle

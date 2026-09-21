@@ -30,7 +30,7 @@ func (t *tui) reloadSettings() error {
 	t.mu.Lock()
 	previousPrefix := t.config.Keys.Prefix
 	t.config = cfg
-	t.theme = ui.ThemeFrom(cfg.UI.Theme)
+	t.theme = ui.ThemeFor(cfg.UI.Theme, t.hostLight)
 	t.titleTemplate = mustTitle(cfg.UI.WindowTitle)
 	t.sidebar = cfg.UI.Sidebar
 	t.grouped = cfg.UI.Grouped
@@ -44,6 +44,9 @@ func (t *tui) reloadSettings() error {
 	}
 	t.dirty = true
 	t.mu.Unlock()
+
+	// Turned on by this reload, the terminal has to be asked.
+	t.askHostScheme()
 
 	if prefix, err := cfg.PrefixKey(); err == nil {
 		t.keys.PrefixKey = prefix

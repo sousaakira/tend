@@ -182,7 +182,10 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   and secondary text, yellow/red/green for states — and the five individual
   colours still override it. The settings screen's first row is the theme,
   as in herdr, and each step along it writes and applies, which is the
-  preview herdr's list gives.
+  preview herdr's list gives. `auto_switch` with `dark_name`/`light_name`
+  follows the outer terminal: tend turns on mode 2031 and asks for the scheme
+  and the background colour, takes a scheme report over the background's
+  luminance as herdr does, and keeps both kinds of answer out of the panes.
 - **Outer window title** (herdr's `config/window_title.rs`,
   `app/window_title.rs`): `[ui] window_title` with herdr's tokens
   (`{hostname}`, `{workspace}`, `{tab}`, `{pane}`, `{terminal_title}`),
@@ -510,9 +513,11 @@ Keys are rebindable (see "Ported, and checked"). Left:
 - **The rest of the themes**: the palette's backgrounds (`panel_bg`,
   `active_row_bg`, `selection_bg`, surfaces) are carried but not drawn —
   tend's panels mark themselves by reversing, not with a background of their
-  own. Also `auto_switch` with `dark_name`/`light_name` (follows the host
-  terminal's appearance, `terminal_theme.rs`), and `[theme.custom]`'s
-  per-token overrides beyond tend's five colours.
+  own. Also `[theme.custom]`'s per-token overrides beyond tend's five
+  colours, and its `custom.dark`/`custom.light` variants. herdr asks the
+  terminal again when its window regains focus; tend asks at start and on
+  reload, and relies on mode 2031 for changes, so a terminal without 2031
+  that changes background mid-session is not noticed.
 - A key is one byte or one escape sequence after the prefix, so `ctrl+q` and
   `alt+x` cannot be bound: the terminal sends control bytes tend forwards to
   the pane. herdr reads key events with modifiers through crossterm.

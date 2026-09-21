@@ -212,3 +212,42 @@ func TestUpdatingFromAPublishedManifest(t *testing.T) {
 		t.Errorf("the directory holds %d files after an update", len(entries))
 	}
 }
+
+// TestTheThemeFollowsTheTerminal: with auto_switch the client asks the
+// terminal what it looks like, turns to the light theme when the terminal
+// says it went light, and keeps the report out of the pane. If it regresses,
+// the theme stays dark on a light desktop, or the report is typed into the
+// shell.
+func TestTheThemeFollowsTheTerminal(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte("[ui.theme]\nauto_switch = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, configPath)
+
+	a := startSessionIn(t, 100, 16, t.TempDir())
+	a.waitForScreen(t, "the question to the terminal", func(string) bool {
+		return strings.Contains(a.raw(), "\x1b[?2031h") && strings.Contains(a.raw(), "\x1b]11;?")
+	})
+	// Dark until told otherwise: catppuccin's accent, 137 180 250.
+	a.waitForScreen(t, "the dark theme", func(string) bool {
+		return strings.Contains(a.raw(), "2;137;180;250")
+	})
+
+	a.send(t, "\x1b[?997;2n")
+	// Latte's accent is 30 102 245.
+	a.waitForScreen(t, "the light theme", func(string) bool {
+		return strings.Contains(a.raw(), "2;30;102;245")
+	})
+	a.sendUntil(t, "printf 'STILL-CLEAN\\n'\n", "the shell", func(s string) bool {
+		return strings.Contains(s, "STILL-CLEAN")
+	})
+	if strings.Contains(a.text(), "997") {
+		t.Errorf("the report reached the pane:\n%s", a.text())
+	}
+
+	a.send(t, "\x02d")
+	a.waitForScreen(t, "the reports turned off", func(string) bool {
+		return strings.Contains(a.raw(), "\x1b[?2031l")
+	})
+}

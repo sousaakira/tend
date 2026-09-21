@@ -1721,3 +1721,56 @@ func TestAUserCommandTakesItsKey(t *testing.T) {
 		t.Errorf("help = %q, want the description", help)
 	}
 }
+
+// TestHostReportsAreTakenOutOfTheInput: the terminal's answers about its
+// scheme and background are read and never reach a pane as typing, even when
+// a read splits one in two. If it regresses, "^[[?997;1n" lands in the shell
+// every time the desktop changes theme.
+func TestHostReportsAreTakenOutOfTheInput(t *testing.T) {
+	rest, reports, hold := HostReports(nil, []byte("a\x1b[?997;2nb\x1b]11;rgb:ffff/ffff/ffff\x1b\\c\x1b]10;rgb:0/0/0\x07d"))
+	if string(rest) != "abcd" || hold != nil {
+		t.Errorf("rest = %q, hold = %q", rest, hold)
+	}
+	if len(reports) != 2 || reports[0] != (HostReport{Explicit: true, Light: true}) || reports[1] != (HostReport{Light: true}) {
+		t.Errorf("reports = %+v", reports)
+	}
+
+	rest, reports, hold = HostReports(nil, []byte("x\x1b]11;#10"))
+	if string(rest) != "x" || len(reports) != 0 || string(hold) != "\x1b]11;#10" {
+		t.Fatalf("split: rest %q, reports %v, hold %q", rest, reports, hold)
+	}
+	rest, reports, hold = HostReports(hold, []byte("1010\x07y"))
+	if string(rest) != "y" || hold != nil || len(reports) != 1 || reports[0].Light {
+		t.Errorf("joined: rest %q, reports %+v, hold %q", rest, reports, hold)
+	}
+
+	// The keyboard's own escapes pass: a lone escape, an arrow, a mouse report.
+	for _, keys := range []string{"\x1b", "\x1b[A", "\x1b[<0;1;1M", "\x1b[?25h"} {
+		if rest, reports, hold := HostReports(nil, []byte(keys)); string(rest) != keys || len(reports) != 0 || hold != nil {
+			t.Errorf("%q: rest %q, reports %v, hold %q", keys, rest, reports, hold)
+		}
+	}
+}
+
+// TestAutoSwitchPicksTheThemeForTheTerminal: with auto_switch on, a light
+// terminal gets the light theme and a dark one the dark, herdr's defaults
+// when none is named.
+func TestAutoSwitchPicksTheThemeForTheTerminal(t *testing.T) {
+	latte, _ := PaletteNamed("catppuccin-latte")
+	mocha, _ := PaletteNamed("catppuccin")
+	nord, _ := PaletteNamed("nord")
+	c := config.Theme{AutoSwitch: true, Name: "dracula"}
+	if got := ThemeFor(c, true).BorderFocused.FG; got != latte.Accent {
+		t.Errorf("light terminal: accent %v, want latte's", got)
+	}
+	if got := ThemeFor(c, false).BorderFocused.FG; got != mocha.Accent {
+		t.Errorf("dark terminal: accent %v, want mocha's", got)
+	}
+	c.DarkName = "nord"
+	if got := ThemeFor(c, false).BorderFocused.FG; got != nord.Accent {
+		t.Errorf("dark_name: accent %v, want nord's", got)
+	}
+	if ThemeFor(config.Theme{Name: "nord"}, true) != ThemeFrom(config.Theme{Name: "nord"}) {
+		t.Error("without auto_switch the terminal's scheme should not matter")
+	}
+}
