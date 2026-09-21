@@ -156,8 +156,15 @@ func (s *Server) notifyPlugins(ev Event) {
 		// Read once for all of this event's hooks, so two hooks on one event
 		// cannot disagree about what the session looked like.
 		ctx := s.pluginContext(ev.Pane)
+		if ev.Tab != 0 {
+			ctx.TabID = "t_" + itoa(uint64(ev.Tab))
+		}
+		if ev.Workspace != 0 {
+			ctx.WorkspaceID = "w_" + itoa(uint64(ev.Workspace))
+		}
 		data, _ := json.Marshal(map[string]any{
 			"event": name, "pane_id": ctx.PaneID,
+			"tab_id": ctx.TabID, "workspace_id": ctx.WorkspaceID,
 			"agent_state": ev.State.String(), "rule": ev.Rule,
 		})
 
@@ -196,6 +203,16 @@ func PluginEventName(k EventKind) string {
 		return "agent.state"
 	case EventPaneClipboard:
 		return "pane.clipboard"
+	case EventPaneFocused:
+		return "pane.focused"
+	case EventTabFocused:
+		return "tab.focused"
+	case EventWorkspaceFocused:
+		return "workspace.focused"
+	case EventTabCreated:
+		return "tab.created"
+	case EventWorkspaceCreated:
+		return "workspace.created"
 	}
 	return ""
 }

@@ -96,11 +96,16 @@ type Pane struct {
 // unknown name is reported as a warning: a plugin written for a newer tend
 // should still install and do the rest of what it does.
 var knownEvents = map[string]bool{
-	"pane.opened":    true,
-	"pane.closed":    true,
-	"pane.exited":    true,
-	"agent.state":    true,
-	"pane.clipboard": true,
+	"pane.opened":       true,
+	"pane.closed":       true,
+	"pane.exited":       true,
+	"agent.state":       true,
+	"pane.clipboard":    true,
+	"pane.focused":      true,
+	"tab.focused":       true,
+	"tab.created":       true,
+	"workspace.focused": true,
+	"workspace.created": true,
 }
 
 // KnownEvents is the set a hook may wait for, for anything that has to list

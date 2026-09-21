@@ -18,15 +18,54 @@ const (
 	focusLost   = "\x1b[O"
 )
 
-// FocusPane tells panes that focus moved from one to another. Either may be
-// zero: nothing had it, or nothing has it now.
+// FocusPane tells panes that focus moved from one to another, and everything
+// listening that it did. Either may be zero: nothing had it, or nothing has it
+// now.
+//
+// The tab and the space it is in are announced as well, when they changed,
+// because that is what a plugin decorating a tab is waiting for — and only
+// when they changed, or every keystroke that moves focus inside one tab would
+// announce the tab again.
 func (s *Server) FocusPane(gained, lost session.PaneID) {
 	if lost != 0 && lost != gained {
 		s.sendFocus(lost, focusLost)
 	}
-	if gained != 0 {
-		s.sendFocus(gained, focusGained)
+	if gained == 0 {
+		return
 	}
+	s.sendFocus(gained, focusGained)
+
+	tab, workspace := s.placeOf(gained)
+	s.mu.Lock()
+	tabChanged := tab != 0 && tab != s.focusedTab
+	wsChanged := workspace != 0 && workspace != s.focusedWorkspace
+	paneChanged := gained != s.focusedPane
+	s.focusedPane, s.focusedTab, s.focusedWorkspace = gained, tab, workspace
+	s.mu.Unlock()
+
+	if wsChanged {
+		s.publish(Event{Kind: EventWorkspaceFocused, Workspace: workspace})
+	}
+	if tabChanged {
+		s.publish(Event{Kind: EventTabFocused, Tab: tab, Workspace: workspace})
+	}
+	if paneChanged {
+		s.publish(Event{Kind: EventPaneFocused, Pane: gained, Tab: tab, Workspace: workspace})
+	}
+}
+
+// placeOf is the tab and space a pane is in.
+func (s *Server) placeOf(id session.PaneID) (session.TabID, session.WorkspaceID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, w := range s.session.Workspaces() {
+		for _, t := range w.Tabs() {
+			if _, ok := t.Pane(id); ok {
+				return t.ID, w.ID
+			}
+		}
+	}
+	return 0, 0
 }
 
 // sendFocus writes a focus report to a pane that asked for one.

@@ -19,7 +19,7 @@ func pluginDir(t *testing.T, manifest string) (root, log string) {
 	t.Helper()
 	root = t.TempDir()
 	log = filepath.Join(root, "ran.log")
-	script := "#!/bin/sh\nprintf '%s %s %s\\n' \"$1\" \"$TEND_PLUGIN_EVENT\" \"$TEND_PLUGIN_ROOT\" >>" + log + "\n"
+	script := "#!/bin/sh\nprintf '%s %s %s %s\\n' \"$1\" \"$TEND_PLUGIN_EVENT\" \"$TEND_PLUGIN_ROOT\" \"$TEND_PLUGIN_CONTEXT_JSON\" >>" + log + "\n"
 	if err := os.WriteFile(filepath.Join(root, "hook.sh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -155,5 +155,74 @@ command = ["/bin/sh", "-c", "sleep 30"]
 			return // the limit held while more events arrived
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestPluginsHearAboutFocusAndCreation: the sidebar plugin the owner runs in
+// herdr hooks on pane.focused, tab.created, workspace.created and
+// workspace.focused. Without those events it installs and never runs.
+func TestPluginsHearAboutFocusAndCreation(t *testing.T) {
+	root, log := pluginDir(t, `
+id = "watcher"
+name = "watcher"
+version = "0.1.0"
+
+[[events]]
+on = "workspace.created"
+command = ["./hook.sh", "ws-created"]
+
+[[events]]
+on = "tab.created"
+command = ["./hook.sh", "tab-created"]
+
+[[events]]
+on = "pane.focused"
+command = ["./hook.sh", "pane-focused"]
+
+[[events]]
+on = "workspace.focused"
+command = ["./hook.sh", "ws-focused"]
+`)
+	host := hostFor(t, root)
+	s, err := build(Config{
+		DetectInterval: 10 * time.Millisecond,
+		DefaultSize:    pty.Size{Cols: 80, Rows: 24},
+		Plugins:        host,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.startLoops()
+	t.Cleanup(func() { _ = s.Close() })
+
+	ws, err := s.NewWorkspace("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, log, "ws-created")
+
+	_, pane, err := s.NewTab(ws, "t", shell("sleep 5"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, log, "tab-created")
+
+	// Focus is the client's, so it is reported rather than assumed.
+	s.FocusPane(pane, 0)
+	text := waitForFile(t, log, "pane-focused")
+	if !strings.Contains(text, "ws-focused") {
+		t.Errorf("the space was not reported as focused:\n%s", text)
+	}
+	if !strings.Contains(text, `"tab_id":"t_1"`) {
+		t.Errorf("a hook was not told which tab:\n%s", text)
+	}
+
+	// The same pane again says nothing: a hook that runs on every keystroke
+	// that moves focus inside one pane is a hook that runs constantly.
+	before := text
+	s.FocusPane(pane, pane)
+	time.Sleep(200 * time.Millisecond)
+	if after, _ := os.ReadFile(log); len(after) != len(before) {
+		t.Errorf("focusing the same pane again ran the hooks:\n%s", after)
 	}
 }

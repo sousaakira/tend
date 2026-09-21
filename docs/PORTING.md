@@ -214,6 +214,11 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 - **Double-click selects a word**, by herdr's word classes — the same ones
   copy mode moves by, so a double click and `w` cannot disagree — and copies
   it at once.
+- **Lifecycle events**: `pane.focused`, `tab.focused`, `workspace.focused`,
+  `tab.created` and `workspace.created`, over both sockets and to plugin
+  hooks, under herdr's names. Focus is the client's, so a client reports it
+  and every listener hears; the same pane twice says nothing, or a hook would
+  run on every keystroke that moves focus.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -316,15 +321,12 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 The host is ported (see "Ported, and checked"). Left:
 
-- **Events herdr has and tend does not**: `pane.focused`, `tab.focused`,
-  `tab.created`, `workspace.created`, `workspace.focused`. Focus is client
-  state in tend, so the focus events need the client to report it; the
-  `created` ones are a server change. A manifest naming them links with a
-  warning and those hooks never run.
 - **The owner's `herdr-sidebar`** (`~/.config/herdr/plugins/github/`) calls
-  `pane.focus`, `pane.swap`, the focus events above and herdr's CLI by name.
-  Running it needs those, plus its manifest renamed to `tend-plugin.toml` and
-  its `herdr` calls pointed at `tend`. It is a separate piece of work.
+  herdr's CLI by name and expects its pane methods. The events it hooks on
+  (`pane.focused`, `tab.created`, `workspace.created`, `workspace.focused`,
+  `tab.focused`) now exist; running it still needs its manifest renamed to
+  `tend-plugin.toml`, its `herdr` calls pointed at `tend`, and whatever of
+  herdr's API it uses that tend does not have.
 - `build` steps are parsed and not run: nothing yet decides when to build.
   herdr builds on install.
 - Installing from a URL or GitHub (`plugin install`), the marketplace, popups

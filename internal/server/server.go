@@ -288,6 +288,12 @@ type Server struct {
 	conns    map[*clientConn]struct{}
 	branches *branchCache
 	closed   bool
+	// focusedPane, focusedTab and focusedWorkspace are what a client last
+	// said it was looking at, so the events about focus are sent when it
+	// moves rather than on every report.
+	focusedPane      session.PaneID
+	focusedTab       session.TabID
+	focusedWorkspace session.WorkspaceID
 	// handingOff is set from the moment the session is described for a
 	// replacement until that either takes over or fails to.
 	handingOff bool
@@ -475,7 +481,12 @@ func (s *Server) NewWorkspaceIn(name, dir string) (session.WorkspaceID, error) {
 	if dir == "" {
 		dir = s.cfg.Dir
 	}
-	return s.session.AddWorkspaceIn(name, dir).ID, nil
+	id := s.session.AddWorkspaceIn(name, dir).ID
+	// Published after the lock is released, because publishing reaches
+	// plugins and nothing that touches the outside world runs under the lock
+	// every pane operation needs.
+	defer func() { go s.publish(Event{Kind: EventWorkspaceCreated, Workspace: id}) }()
+	return id, nil
 }
 
 // NewTab creates a tab with one pane and starts its process.
@@ -501,6 +512,7 @@ func (s *Server) NewTab(ws session.WorkspaceID, name string, spec PaneSpec) (ses
 		_, _ = s.session.CloseTab(tab.ID)
 		return 0, 0, err
 	}
+	defer func() { go s.publish(Event{Kind: EventTabCreated, Tab: tab.ID, Workspace: ws}) }()
 	return tab.ID, pane.ID, nil
 }
 

@@ -169,12 +169,16 @@ const (
 	// FeatureGraphics: the server keeps the images a pane's program sent and
 	// hands them over, so a client can draw them on its own terminal.
 	FeatureGraphics = "graphics"
+	// FeatureLifecycle: the server reports what is focused and what was
+	// created, which plugins hook on.
+	FeatureLifecycle = "lifecycle"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
 // KnownMethods exists.
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
+	FeatureLifecycle,
 }
 
 // --- session ---------------------------------------------------------------
@@ -565,6 +569,14 @@ const (
 	// EventSessionChanged says the session's shape changed with no pane
 	// opened or closed. It carries nothing: the client reads the session.
 	EventSessionChanged = "session-changed"
+	// The events about what is focused and what was created. A client sends
+	// focus and every client hears it, which is how a second one follows
+	// along; a plugin hears them under herdr's names.
+	EventPaneFocused      = "pane-focused"
+	EventTabFocused       = "tab-focused"
+	EventWorkspaceFocused = "workspace-focused"
+	EventTabCreated       = "tab-created"
+	EventWorkspaceCreated = "workspace-created"
 )
 
 // Event is something that happened, sent unsolicited.
@@ -577,6 +589,9 @@ type Event struct {
 	Err   string `json:"error,omitempty"`
 	// Data is the text of a clipboard event. JSON carries it as base64.
 	Data []byte `json:"data,omitempty"`
+	// Tab and Workspace are set on the events about them.
+	Tab       uint64 `json:"tab,omitempty"`
+	Workspace uint64 `json:"workspace,omitempty"`
 }
 
 // Compare reports which side of a connection knows things the other does not,

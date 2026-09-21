@@ -1023,6 +1023,16 @@ func eventName(k server.EventKind) string {
 		return "agent.state"
 	case server.EventPaneClipboard:
 		return "pane.clipboard"
+	case server.EventPaneFocused:
+		return "pane.focused"
+	case server.EventTabFocused:
+		return "tab.focused"
+	case server.EventWorkspaceFocused:
+		return "workspace.focused"
+	case server.EventTabCreated:
+		return "tab.created"
+	case server.EventWorkspaceCreated:
+		return "workspace.created"
 	}
 	return fmt.Sprintf("event.%d", int(k))
 }

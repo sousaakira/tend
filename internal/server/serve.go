@@ -228,7 +228,9 @@ func (c *clientConn) sendScreen(id session.PaneID) error {
 
 // forward sends one non-output event.
 func (c *clientConn) forward(ev Event) error {
-	out := proto.Event{Pane: uint64(ev.Pane)}
+	out := proto.Event{
+		Pane: uint64(ev.Pane), Tab: uint64(ev.Tab), Workspace: uint64(ev.Workspace),
+	}
 	switch ev.Kind {
 	case EventPaneOpened:
 		out.Kind = proto.EventPaneOpened
@@ -246,6 +248,16 @@ func (c *clientConn) forward(ev Event) error {
 		out.Data = ev.Data
 	case EventSessionChanged:
 		out.Kind = proto.EventSessionChanged
+	case EventPaneFocused:
+		out.Kind = proto.EventPaneFocused
+	case EventTabFocused:
+		out.Kind = proto.EventTabFocused
+	case EventWorkspaceFocused:
+		out.Kind = proto.EventWorkspaceFocused
+	case EventTabCreated:
+		out.Kind = proto.EventTabCreated
+	case EventWorkspaceCreated:
+		out.Kind = proto.EventWorkspaceCreated
 	default:
 		// An event kind this build does not map is dropped rather than sent
 		// half-formed, so a client never sees a message it cannot interpret.

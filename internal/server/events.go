@@ -31,6 +31,17 @@ const (
 	// put on the clipboard. The clipboard belongs to whoever is looking at
 	// the pane, so the request is passed on rather than acted on here.
 	EventPaneClipboard
+	// EventPaneFocused, EventTabFocused and EventWorkspaceFocused report what
+	// the user is looking at. Focus is the client's, so these are published
+	// when a client says so; a session nobody is attached to has no focus and
+	// sends none.
+	EventPaneFocused
+	EventTabFocused
+	EventWorkspaceFocused
+	// EventTabCreated and EventWorkspaceCreated report new ones. A plugin
+	// that decorates a tab has to hear about the tab before it can.
+	EventTabCreated
+	EventWorkspaceCreated
 	// EventSessionChanged reports that the session's shape changed without a
 	// pane coming or going: panes swapped, a tab or a space moved or renamed.
 	// Clients that did not make the change learn of it only this way, and
@@ -53,6 +64,16 @@ func (k EventKind) String() string {
 		return "pane-closed"
 	case EventPaneClipboard:
 		return "pane-clipboard"
+	case EventPaneFocused:
+		return "pane-focused"
+	case EventTabFocused:
+		return "tab-focused"
+	case EventWorkspaceFocused:
+		return "workspace-focused"
+	case EventTabCreated:
+		return "tab-created"
+	case EventWorkspaceCreated:
+		return "workspace-created"
 	case EventSessionChanged:
 		return "session-changed"
 	default:
@@ -74,6 +95,10 @@ type Event struct {
 
 	// Data is set on EventPaneClipboard: the text to be copied.
 	Data []byte
+
+	// Tab and Workspace are set on the events about them.
+	Tab       session.TabID
+	Workspace session.WorkspaceID
 }
 
 // Subscription is a stream of events.
