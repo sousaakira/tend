@@ -590,6 +590,9 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			Command   []string `json:"command"`
 			Dir       string   `json:"dir"`
 			Agent     string   `json:"agent"`
+			// CloseOnExit is tend's, as on tab.create: the files panel's
+			// preview goes when it is closed.
+			CloseOnExit bool `json:"close_on_exit"`
 		}
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
@@ -610,6 +613,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		spec.CloseOnExit = p.CloseOnExit
 		child, err := a.srv.SplitPane(id, dir, spec)
 		if err != nil {
 			return nil, paneErr(p.PaneID, err)

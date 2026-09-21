@@ -239,9 +239,7 @@ func (m *Model) searchViewKey(k Key) bool {
 		}
 	case "space", "v":
 		if path, line, ok := m.selectedSearchHit(); ok {
-			m.showFile(filepath.ToSlash(m.relToRoot(path)), path)
-			m.viewer.top = max(line-1-m.listRows()/2, 0)
-			m.viewer.mark = line
+			m.preview(filepath.ToSlash(m.relToRoot(path)), path, line)
 		}
 	default:
 		return false

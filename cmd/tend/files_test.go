@@ -269,3 +269,54 @@ func TestThePanelFollowsThePaneBesideItToAnotherProject(t *testing.T) {
 		func(s string) bool { return strings.Contains(s, "in-second") })
 	a.waitForScreen(t, "the panel to follow", func(s string) bool { return strings.Contains(s, "only-in-second.txt") })
 }
+
+// TestThePanelPreviewsBesideTheMainPaneAndReusesIt: space on a file shows
+// it read-only in a pane beside the shell, with its line numbers, and the
+// panel keeps the keys; space on another file shows that one in the same
+// pane. If it regresses, looking at a file hides the panel, or every file
+// looked at leaves a pane behind.
+func TestThePanelPreviewsBesideTheMainPaneAndReusesIt(t *testing.T) {
+	project := gitProject(t)
+	runtimeDir, err := os.MkdirTemp("", "tf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(runtimeDir) })
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh",
+		"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"))
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, []string{"attach", "-s", "preview"}, pty.Options{Size: pty.Size{Cols: 140, Rows: 30}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(140, 30, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stopSession(t, "preview")
+	})
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "cd "+project+" && echo in-project\n", "the shell in the project",
+		func(s string) bool {
+			return strings.Contains(s, "\nin-project") || strings.Contains(s, "│in-project")
+		})
+	a.send(t, "\x02f")
+	a.waitForScreen(t, "the panel", func(s string) bool { return strings.Contains(s, "kept.txt") })
+
+	// The tree is src/, brandnew.md, kept.txt: the last row.
+	a.send(t, "G ")
+	a.waitForScreen(t, "the preview of kept.txt", func(s string) bool {
+		return strings.Contains(s, "kept.txt "+project) || strings.Contains(s, "│ kept.txt")
+	})
+	a.waitForScreen(t, "its first line", func(s string) bool { return strings.Contains(s, "1 one") })
+	panes := strings.Count(a.lines()[1], "┌")
+
+	a.send(t, "k ")
+	a.waitForScreen(t, "brandnew.md in the same pane", func(s string) bool {
+		return strings.Contains(s, "1 # new") && !strings.Contains(s, "1 one")
+	})
+	if got := strings.Count(a.lines()[1], "┌"); got != panes {
+		t.Errorf("%d panes after the second preview, %d after the first", got, panes)
+	}
+}

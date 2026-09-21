@@ -85,7 +85,9 @@ ahead, publish a branch with no upstream to origin — in the background, and
 never asks for a password on the panel. In the changes view, `A` drafts the
 commit message with the local `claude` CLI (haiku), or from the file names
 without it, and puts it in the commit box to read before Enter. Enter
-opens a file in `$EDITOR` in a tab of its own. It runs on the machine the
+opens a file in `$EDITOR` in a tab of its own; space, or a click, shows it
+read-only in a preview pane beside the main one, with syntax colour, kept for
+the next file (`tend view` is that preview on its own). It runs on the machine the
 session is on, so over `--remote` it shows the server's project. `ctrl+b f`
 again goes to it, and once more puts it away.
 

@@ -50,6 +50,27 @@ type Opener interface {
 	Open(path string, line int) error
 }
 
+// Previewer shows a file read-only beside the main pane (tend's preview
+// pane). An opener that is not one leaves previews to the panel itself.
+type Previewer interface {
+	Preview(path string, line int, dir string) error
+}
+
+// preview shows a file in the preview pane, or in the panel when there is
+// no preview pane to be had.
+func (m *Model) preview(title, path string, line int) {
+	if pv, ok := m.opener.(Previewer); ok && m.opener != nil {
+		if err := pv.Preview(path, line, m.tree.Root); err == nil {
+			return
+		}
+	}
+	m.showFile(title, path)
+	if line > 0 {
+		m.viewer.top = max(line-1-m.listRows()/2, 0)
+		m.viewer.mark = line
+	}
+}
+
 // Model is the explorer's whole state.
 type Model struct {
 	tree   *Tree
@@ -392,7 +413,7 @@ func (m *Model) filesKey(k Key) {
 			m.clamp()
 			return
 		}
-		m.showFile(n.Rel, m.tree.Path(n))
+		m.preview(n.Rel, m.tree.Path(n), 0)
 	case "right", "l":
 		if n != nil && n.Dir {
 			if !n.Expanded {

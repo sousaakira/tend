@@ -28,6 +28,8 @@ type SessionOpener struct {
 
 	opened map[string]string
 	seq    atomic.Uint64
+	// preview is the pane showing previews, reused for the next one.
+	preview string
 }
 
 // callTimeout bounds one call: a session that does not answer should not
@@ -178,4 +180,62 @@ func (o *SessionOpener) Siblings() ([]Sibling, error) {
 		out = append(out, Sibling{Pane: id, Cwd: cwd, Focused: focused})
 	}
 	return out, nil
+}
+
+// Preview shows a file read-only in the preview pane beside the main one,
+// with line (from one) in view: the pane already showing a preview is
+// pointed at this file, and one is opened, splitting the widest other pane
+// of the tab, when there is none. The panel keeps the focus, so browsing
+// with the keys goes on.
+func (o *SessionOpener) Preview(path string, line int, dir string) error {
+	if o.Socket == "" || o.Pane == "" {
+		return errors.New("nowhere to preview: not running in a tend pane")
+	}
+	if o.preview != "" {
+		if _, err := o.call("pane.send_text", map[string]any{
+			"pane_id": o.preview, "text": RetargetSequence(path, line),
+		}); err == nil {
+			return nil
+		}
+		o.preview = "" // closed since
+	}
+	layout, err := o.call("pane.layout", map[string]any{"pane_id": o.Pane})
+	if err != nil {
+		return err
+	}
+	inner, _ := layout["layout"].(map[string]any)
+	panes, _ := inner["panes"].([]any)
+	target, widest := "", -1.0
+	for _, raw := range panes {
+		p, _ := raw.(map[string]any)
+		id, _ := p["pane_id"].(string)
+		rect, _ := p["rect"].(map[string]any)
+		w, _ := rect["width"].(float64)
+		if id != o.Pane && w > widest {
+			target, widest = id, w
+		}
+	}
+	if target == "" {
+		target = o.Pane
+	}
+	res, err := o.call("pane.split", map[string]any{
+		"pane_id": target, "direction": "right",
+		"command": []string{"/bin/sh", "-c", `exec "${TEND_BIN_PATH:-tend}" view -line "$2" "$1"`,
+			"tend-view", path, strconv.Itoa(line)},
+		// In the project, so the panel following its siblings does not
+		// follow the preview somewhere else.
+		"dir":           dir,
+		"close_on_exit": true,
+	})
+	if err != nil {
+		return err
+	}
+	pane, _ := res["pane"].(map[string]any)
+	o.preview, _ = pane["pane_id"].(string)
+	// Named, so its frame says what it is rather than "sh".
+	_, _ = o.call("pane.rename", map[string]any{"pane_id": o.preview, "label": "preview"})
+	// The split took the focus on the server; the panel asks for it back,
+	// since browsing goes on from there.
+	_, _ = o.call("pane.focus", map[string]any{"pane_id": o.Pane})
+	return nil
 }

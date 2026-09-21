@@ -41,6 +41,7 @@ commands:
   plugin            install and run plugins
   worktree          give an agent a checkout of its own, as a space
   files             the file explorer, as it runs in its panel (prefix+f)
+  view              a file read-only with syntax colour (the panel's preview)
   follow            print a session's events, for diagnosis
   serve             run a session server in the foreground
   config            show or create the settings file
@@ -161,6 +162,8 @@ func main() {
 		err = runWorktree(args[1:])
 	case "files":
 		err = runFiles(args[1:])
+	case "view":
+		err = runView(args[1:])
 	case "attach":
 		err = runAttach(args[1:])
 	case "follow":

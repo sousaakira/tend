@@ -97,6 +97,31 @@ func parseEscape(data []byte) (n int, ev any, complete bool) {
 			return 0, nil, false
 		}
 		return 3, arrowKey(data[2]), true
+	case ']':
+		// An OSC, ended by BEL or ST: the only one a pane is sent is the
+		// files panel pointing a preview at another file.
+		end, size := -1, 0
+		for i := 2; i < len(data); i++ {
+			if data[i] == 0x07 {
+				end, size = i, 1
+				break
+			}
+			if data[i] == 0x1b && i+1 < len(data) && data[i+1] == '\\' {
+				end, size = i, 2
+				break
+			}
+		}
+		if end < 0 {
+			return 0, nil, false
+		}
+		payload := string(data[2:end])
+		if rest, ok := strings.CutPrefix(payload, "tend-view;"); ok {
+			if line, path, ok := strings.Cut(rest, ";"); ok {
+				n, _ := strconv.Atoi(line)
+				return end + size, Retarget{Path: path, Line: n}, true
+			}
+		}
+		return end + size, nil, true
 	default:
 		// Escape and a printable character together is that character with
 		// alt held, which is how a terminal sends alt+c.
@@ -263,6 +288,12 @@ func (m *Model) Mouse(ev Mouse) {
 		case double:
 			m.open(m.tree.Path(n), 0)
 			m.lastClick = time.Time{}
+		default:
+			// One click previews, as herdr-sidebar's does; the second
+			// opens it for editing.
+			if _, ok := m.opener.(Previewer); ok {
+				m.preview(n.Rel, m.tree.Path(n), 0)
+			}
 		}
 		m.clamp()
 		return

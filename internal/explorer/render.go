@@ -264,7 +264,7 @@ func (m *Model) drawChanges(g *vt.Grid) {
 var helpLines = []string{
 	"files",
 	"  enter   open in the editor",
-	"  space   view here",
+	"  space   preview beside (click too)",
 	"  ← →     close, open folder",
 	"  .       dotfiles on, off",
 	"changes",
