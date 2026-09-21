@@ -422,6 +422,7 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 		Group:     w.Group,
 		Depth:     depth,
 		Workspace: w.ID,
+		DropHere:  w.ID == t.spaceDropTarget,
 		State:     state,
 		Running:   true,
 		Active:    w.ID == t.workspace,

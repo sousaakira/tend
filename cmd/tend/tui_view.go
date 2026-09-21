@@ -372,7 +372,7 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MouseDrag:
-		if t.dragTab(ev) {
+		if t.dragTab(ev) || t.dragSpace(ev) {
 			return nil
 		}
 		if took, err := t.continueGesture(ev); took {
@@ -388,6 +388,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 
 	case ui.MouseRelease:
 		if dropped, err := t.dropTab(); dropped {
+			return err
+		}
+		if dropped, err := t.dropSpace(); dropped {
 			return err
 		}
 		// paneAt takes the same lock, so the grab is released first and the
@@ -644,9 +647,68 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 	case row.Tab != 0:
 		return true, t.showTab(row.Tab)
 	case row.Workspace != 0:
+		// The press may start a drag that moves the space, as a tab's may.
+		if row.Kind == ui.SidebarSpace {
+			t.mu.Lock()
+			t.spaceDrag, t.spaceDropTarget = row.Workspace, 0
+			t.mu.Unlock()
+		}
 		return true, t.showWorkspace(row.Workspace)
 	}
 	return true, nil
+}
+
+// dragSpace follows a space dragged down the sidebar, marking the space it
+// would take the place of. It reports whether a space drag is under way.
+func (t *tui) dragSpace(ev ui.MouseEvent) bool {
+	t.mu.Lock()
+	dragging := t.spaceDrag
+	if dragging == 0 {
+		t.mu.Unlock()
+		return false
+	}
+	frame := t.buildFrame()
+	rows := t.rows
+	target := uint64(0)
+	if row, ok := ui.SidebarRowAt(frame, 1, ev.Y, rows); ok && row.Kind == ui.SidebarSpace && row.Workspace != dragging {
+		target = row.Workspace
+	}
+	if target != t.spaceDropTarget {
+		t.spaceDropTarget = target
+		t.dirty = true
+	}
+	t.mu.Unlock()
+	t.wakeUp()
+	return true
+}
+
+// dropSpace ends a space drag, moving the space to the place of the one it
+// was dropped on. It reports whether there was one.
+func (t *tui) dropSpace() (bool, error) {
+	t.mu.Lock()
+	dragging, target := t.spaceDrag, t.spaceDropTarget
+	t.spaceDrag, t.spaceDropTarget = 0, 0
+	from, to := -1, -1
+	for i, w := range t.snap.Workspaces {
+		if w.ID == dragging {
+			from = i
+		}
+		if w.ID == target {
+			to = i
+		}
+	}
+	t.dirty = true
+	t.mu.Unlock()
+	if dragging == 0 {
+		return false, nil
+	}
+	if target == 0 || from < 0 || to < 0 {
+		return true, nil
+	}
+	if err := t.client.MoveWorkspace(dragging, to-from); err != nil {
+		return true, err
+	}
+	return true, t.refresh()
 }
 
 // paneAt returns the pane drawn at a point, or zero.

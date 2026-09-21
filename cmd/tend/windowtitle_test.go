@@ -207,3 +207,21 @@ func TestATabIsDraggedToAnotherPlace(t *testing.T) {
 		return strings.Index(bar, "tab 3") >= 0 && strings.Index(bar, "tab 3") < strings.Index(bar, "tab 1")
 	})
 }
+
+// TestASpaceIsDraggedToAnotherPlace: pressed in the sidebar, dragged onto
+// another space and let go, a space takes its place, as a tab does on the
+// bar. If it regresses, spaces can only be reordered over the socket.
+func TestASpaceIsDraggedToAnotherPlace(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02N")
+	a.waitForScreen(t, "a second space", func(string) bool { return strings.Contains(a.sidebarText(), "space 2") })
+
+	from := a.lineContaining(t, "space 2")
+	to := a.lineContaining(t, "main")
+	a.dragFromTo(t, 0, 6, from, 6, to)
+	a.waitForScreen(t, "space 2 above main", func(string) bool {
+		side := a.sidebarText()
+		return strings.Index(side, "space 2") >= 0 && strings.Index(side, "space 2") < strings.Index(side, "main")
+	})
+}

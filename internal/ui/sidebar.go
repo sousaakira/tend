@@ -84,6 +84,8 @@ type SidebarRow struct {
 	// the entry (row_gap).
 	Lines [][]SidebarToken
 	Gap   int
+	// DropHere marks the space a dragged one would take the place of.
+	DropHere bool
 	// Symbols draws the state as herdr's distinct glyphs rather than dots
 	// (status_indicators = "symbols").
 	Symbols bool
@@ -524,6 +526,11 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	}
 
 	x := writeString(dst, 0, y, cursor, style, limit)
+	if r.DropHere {
+		// Where the dragged space will land, in the accent herdr marks it
+		// with.
+		writeString(dst, 0, y, "▎", theme.BorderFocused, limit)
+	}
 	x = writeString(dst, x, y, indent(r.Depth), style, limit)
 	if len(r.Lines) > 0 {
 		drawTokenEntry(dst, r, x, y, limit, style, mark, theme)
