@@ -26,6 +26,7 @@ var commands = []struct{ name, help string }{
 	{"plugin", "install and run plugins"},
 	{"worktree", "give an agent a checkout of its own"},
 	{"files", "the file explorer, for its panel"},
+	{"machine", "save other machines to keep an eye on"},
 	{"view", "a file read-only with syntax colour"},
 	{"follow", "stream a session's events"},
 	{"serve", "run a session server in the foreground"},

@@ -33,6 +33,10 @@ func StatePath(name string) (string, error) {
 	return filepath.Join(dir, name+".json"), nil
 }
 
+// StateDir is where tend keeps what outlives a restart: sessions, and the
+// machines a client keeps an eye on.
+func StateDir() (string, error) { return stateDir() }
+
 func stateDir() (string, error) {
 	if dir := os.Getenv(StateDirEnv); dir != "" {
 		return dir, nil

@@ -69,6 +69,9 @@ func SocketPath(name string) (string, error) {
 	return path, nil
 }
 
+// ValidSessionName is whether a name can be a session's.
+func ValidSessionName(name string) error { return validSessionName(name) }
+
 func validSessionName(name string) error {
 	if len(name) > 64 {
 		return fmt.Errorf("transport: session name is too long")
