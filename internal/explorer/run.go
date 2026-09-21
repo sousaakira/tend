@@ -1,6 +1,7 @@
 package explorer
 
 import (
+	"context"
 	"io"
 	"os"
 	"time"
@@ -70,9 +71,33 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 		_, _ = out.Write(painter.Paint(grid, x, y, visible))
 	}
 
+	// A search runs away from this loop, so typing is never held up by
+	// git grep; a new one cancels the last, whose answer is stale anyway.
+	results := make(chan SearchResult, 1)
+	cancel := func() {}
+	defer func() { cancel() }()
+	poll := time.NewTicker(50 * time.Millisecond)
+	defer poll.Stop()
+
 	draw()
 	for !m.Quit() {
 		select {
+		case <-poll.C:
+			req, ok := m.SearchDue(time.Now())
+			if !ok {
+				continue
+			}
+			cancel()
+			ctx, stop := context.WithCancel(context.Background())
+			cancel = stop
+			go func() {
+				r := RunSearch(ctx, req)
+				if ctx.Err() == nil {
+					results <- r
+				}
+			}()
+		case r := <-results:
+			m.ApplySearch(r)
 		case data, ok := <-input:
 			if !ok {
 				return nil

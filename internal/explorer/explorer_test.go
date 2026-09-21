@@ -82,10 +82,14 @@ func screen(m *Model, cols, rows int) string {
 	return b.String()
 }
 
-type recordingOpener struct{ opened []string }
+type recordingOpener struct {
+	opened []string
+	lines  []int
+}
 
-func (o *recordingOpener) Open(path string) error {
+func (o *recordingOpener) Open(path string, line int) error {
 	o.opened = append(o.opened, path)
+	o.lines = append(o.lines, line)
 	return nil
 }
 
@@ -160,7 +164,7 @@ func TestTheTreeShowsTheProjectWithGitsNews(t *testing.T) {
 	m := New(filepath.Join(dir, "src"), nil)
 	text := screen(m, 40, 12)
 
-	if !strings.Contains(text, "files │ changes 2") {
+	if !strings.Contains(text, "files │ search │ changes 2") {
 		t.Errorf("header:\n%s", text)
 	}
 	if !strings.Contains(text, filepath.Base(dir)+" ⎇ main") {
@@ -257,7 +261,7 @@ func TestEnterOpensAFileAndSpaceShowsIt(t *testing.T) {
 		t.Errorf("the viewer:\n%s", text)
 	}
 	keys(m, "q")
-	if text := screen(m, 40, 12); !strings.Contains(text, "files │ changes") {
+	if text := screen(m, 40, 12); !strings.Contains(text, "files │ search │ changes") {
 		t.Errorf("q goes back to the list:\n%s", text)
 	}
 }
@@ -270,7 +274,7 @@ func TestTheChangesViewStagesDiffsAndCommits(t *testing.T) {
 	withIdentity(t)
 	dir := repo(t)
 	m := New(dir, nil)
-	keys(m, "tab")
+	keys(m, "3")
 	text := screen(m, 50, 14)
 	if !strings.Contains(text, "CHANGES 2") || !strings.Contains(text, "changed.go src") || !strings.Contains(text, "brandnew.md") {
 		t.Fatalf("changes:\n%s", text)
@@ -322,7 +326,7 @@ func TestTheChangesViewStagesDiffsAndCommits(t *testing.T) {
 func TestDiscardingTakesTwoPresses(t *testing.T) {
 	dir := repo(t)
 	m := New(dir, nil)
-	keys(m, "tab")
+	keys(m, "3")
 	screen(m, 50, 14)
 	pick := func(path string) {
 		for i, r := range m.changeRows {
@@ -449,7 +453,7 @@ func TestClicksSelectOpenAndSwitch(t *testing.T) {
 	if !strings.Contains(screen(m, 40, 12), "changed.go") {
 		t.Errorf("a click opens a directory")
 	}
-	m.Mouse(Mouse{X: headerSplit(m) + 3, Y: 0, Press: true})
+	m.Mouse(Mouse{X: 20, Y: 0, Press: true})
 	if m.view != ViewChanges {
 		t.Errorf("clicking changes switches to it")
 	}
@@ -495,7 +499,7 @@ func TestTheSessionOpenerOpensATabAndGoesBackToIt(t *testing.T) {
 	}()
 
 	o := &SessionOpener{Socket: sock, Pane: "p_1", Editor: "nvim -p"}
-	if err := o.Open("/work/a b.go"); err != nil {
+	if err := o.Open("/work/a b.go", 0); err != nil {
 		t.Fatal(err)
 	}
 	var got []call
@@ -515,14 +519,14 @@ func TestTheSessionOpenerOpensATabAndGoesBackToIt(t *testing.T) {
 		t.Errorf("focus = %+v", got[2].Params)
 	}
 
-	if err := o.Open("/work/a b.go"); err != nil {
+	if err := o.Open("/work/a b.go", 0); err != nil {
 		t.Fatal(err)
 	}
 	if c := <-calls; c.Method != "pane.focus" || c.Params["pane_id"] != "p_9" || len(calls) != 0 {
 		t.Errorf("a file already open is gone back to: %+v (then %d more)", c, len(calls))
 	}
 
-	if err := (&SessionOpener{}).Open("/x"); err == nil || !strings.Contains(err.Error(), "not running in a tend pane") {
+	if err := (&SessionOpener{}).Open("/x", 0); err == nil || !strings.Contains(err.Error(), "not running in a tend pane") {
 		t.Errorf("outside a pane: %v", err)
 	}
 }
@@ -540,7 +544,7 @@ func TestOutsideARepositoryThePanelIsATree(t *testing.T) {
 	if text := screen(m, 40, 10); !strings.Contains(text, "notes.txt") {
 		t.Errorf("tree:\n%s", text)
 	}
-	keys(m, "tab")
+	keys(m, "3")
 	if text := screen(m, 40, 10); !strings.Contains(text, "not a git repository") {
 		t.Errorf("changes:\n%s", text)
 	}

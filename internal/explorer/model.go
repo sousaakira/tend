@@ -25,6 +25,9 @@ type View int
 
 const (
 	ViewFiles View = iota
+	// ViewSearch looks for text in the files, as herdr-sidebar's second
+	// view does; 1, 2 and 3 are the three views in its order.
+	ViewSearch
 	ViewChanges
 )
 
@@ -40,9 +43,10 @@ const (
 )
 
 // Opener opens a file for editing somewhere other than here: in tend, an
-// editor in a tab of its own.
+// editor in a tab of its own. line, when above zero, is where to put the
+// editor's cursor.
 type Opener interface {
-	Open(path string) error
+	Open(path string, line int) error
 }
 
 // Model is the explorer's whole state.
@@ -56,8 +60,10 @@ type Model struct {
 	mode   mode
 	cols   int
 	rows   int
-	cursor [2]int
-	scroll [2]int
+	cursor [3]int
+	scroll [3]int
+
+	csearch contentSearch
 
 	// rows as last laid out, so a click lands on what was drawn.
 	fileRows   []*Node
@@ -170,15 +176,24 @@ func (m *Model) layout() {
 
 // listLen is how many rows the current list has.
 func (m *Model) listLen() int {
-	if m.view == ViewFiles {
+	switch m.view {
+	case ViewFiles:
 		return len(m.fileRows)
+	case ViewSearch:
+		return len(m.csearch.rows)
 	}
 	return len(m.changeRows)
 }
 
 // listRows is how many rows of the screen the list gets: all but the two
-// header rows and the footer.
-func (m *Model) listRows() int { return max(m.rows-3, 1) }
+// header rows and the footer, and in the search view the three rows of the
+// query, its switches and its count as well.
+func (m *Model) listRows() int {
+	if m.view == ViewSearch && m.mode == modeList {
+		return max(m.rows-searchListTop-1, 1)
+	}
+	return max(m.rows-3, 1)
+}
 
 // clamp keeps the cursor on the list, off headings, and in view.
 func (m *Model) clamp() {
@@ -276,13 +291,16 @@ func (m *Model) Key(k Key) {
 	case modeHelp:
 		m.mode = modeList
 	default:
+		if m.view == ViewSearch && m.searchViewKey(k) {
+			return
+		}
 		m.listKey(k, pending)
 	}
 }
 
 func (m *Model) listKey(k Key, pending string) {
 	switch k.Name {
-	case "up", "k", "ctrl+p":
+	case "up", "k":
 		m.move(-1)
 	case "down", "j", "ctrl+n":
 		m.move(1)
@@ -296,14 +314,20 @@ func (m *Model) listKey(k Key, pending string) {
 	case "end", "G":
 		m.cursor[m.view] = m.listLen() - 1
 		m.clamp()
-	case "tab", "shift+tab":
-		m.switchView(1 - m.view)
+	case "tab":
+		m.switchView((m.view + 1) % 3)
+	case "shift+tab":
+		m.switchView((m.view + 2) % 3)
 	case "1":
 		m.switchView(ViewFiles)
 	case "2":
+		m.openContentSearch()
+	case "3":
 		m.switchView(ViewChanges)
-	case "/", "ctrl+f":
+	case "/", "ctrl+p":
 		m.openSearch()
+	case "ctrl+f":
+		m.openContentSearch()
 	case "r":
 		m.Refresh()
 		m.say("refreshed", false)
@@ -338,7 +362,7 @@ func (m *Model) filesKey(k Key) {
 			m.clamp()
 			return
 		}
-		m.open(m.tree.Path(n))
+		m.open(m.tree.Path(n), 0)
 	case "space", "v":
 		if n == nil {
 			return
@@ -402,7 +426,7 @@ func (m *Model) changesKey(k Key, pending string) {
 		}
 	case "o":
 		if ok && !isDeleted(row.change) {
-			m.open(filepath.Join(m.git.Top, filepath.FromSlash(row.change.Path)))
+			m.open(filepath.Join(m.git.Top, filepath.FromSlash(row.change.Path)), 0)
 		}
 	case "s":
 		if !ok {
@@ -493,13 +517,16 @@ func dropLastWord(s string) string {
 	return ""
 }
 
-// open hands a file to the opener.
-func (m *Model) open(path string) {
+// openAt opens a file with the editor's cursor on a line.
+func (m *Model) openAt(path string, line int) { m.open(path, line) }
+
+// open hands a file to the opener, with the line to start on or zero.
+func (m *Model) open(path string, line int) {
 	if m.opener == nil {
 		m.say("nowhere to open files: not running in a tend pane", true)
 		return
 	}
-	if err := m.opener.Open(path); err != nil {
+	if err := m.opener.Open(path, line); err != nil {
 		m.fail(err)
 		return
 	}
@@ -516,6 +543,9 @@ type viewer struct {
 	diff  bool
 	top   int
 	left  int
+	// mark is a line to show lit, counted from one: the search result the
+	// file was opened at. Zero marks nothing.
+	mark int
 }
 
 // maxViewBytes bounds what the viewer reads: past it, a file is for an
@@ -600,7 +630,7 @@ func (m *Model) viewerKey(k Key) {
 		v.left += 8
 	case "o":
 		if v.path != "" {
-			m.open(v.path)
+			m.open(v.path, v.mark)
 		}
 	}
 	v.top = min(max(v.top, 0), max(len(v.lines)-page, 0))
@@ -739,7 +769,7 @@ func (m *Model) searchKey(k Key) {
 	case "enter":
 		if s.cursor < len(s.results) {
 			m.mode = modeList
-			m.open(filepath.Join(m.tree.Root, filepath.FromSlash(s.results[s.cursor])))
+			m.open(filepath.Join(m.tree.Root, filepath.FromSlash(s.results[s.cursor])), 0)
 		}
 	case "tab":
 		// Shows the file where it lives, which is often what was wanted: the

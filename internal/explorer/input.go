@@ -98,6 +98,11 @@ func parseEscape(data []byte) (n int, ev any, complete bool) {
 		}
 		return 3, arrowKey(data[2]), true
 	default:
+		// Escape and a printable character together is that character with
+		// alt held, which is how a terminal sends alt+c.
+		if b := data[1]; b > 0x20 && b < 0x7f {
+			return 2, Key{Name: "alt+" + string(rune(b))}, true
+		}
 		return 1, Key{Name: "esc"}, true
 	}
 }
@@ -214,13 +219,17 @@ func (m *Model) Mouse(ev Mouse) {
 		return
 	}
 	if ev.Y == 0 {
-		// The two names on the header, split at the divider drawn between
-		// them.
-		if ev.X < headerSplit(m) {
-			m.switchView(ViewFiles)
-		} else {
-			m.switchView(ViewChanges)
+		// The names on the header, each up to the divider after it.
+		switch v := headerViewAt(ev.X); v {
+		case ViewSearch:
+			m.openContentSearch()
+		default:
+			m.switchView(v)
 		}
+		return
+	}
+	if m.view == ViewSearch {
+		m.searchMouse(ev)
 		return
 	}
 	if ev.Y < 2 || ev.Y >= 2+m.listRows() {
@@ -245,7 +254,7 @@ func (m *Model) Mouse(ev Mouse) {
 			m.layout()
 			m.lastClick = time.Time{}
 		case double:
-			m.open(m.tree.Path(n))
+			m.open(m.tree.Path(n), 0)
 			m.lastClick = time.Time{}
 		}
 		m.clamp()
@@ -258,6 +267,47 @@ func (m *Model) Mouse(ev Mouse) {
 	m.clamp()
 	if double {
 		m.showDiff(m.changeRows[i])
+		m.lastClick = time.Time{}
+	}
+}
+
+// searchMouse answers a click in the search view: the query line starts
+// typing, the switches switch, a result is selected by one click and
+// opened by a second.
+func (m *Model) searchMouse(ev Mouse) {
+	c := &m.csearch
+	switch {
+	case ev.Y == 2:
+		c.editing, c.field = true, fieldQuery
+		return
+	case ev.Y == 3:
+		// "Aa ab .*" from column 1, two wide with a space between.
+		switch {
+		case ev.X >= 1 && ev.X <= 2:
+			m.toggleSearchOption("case")
+		case ev.X >= 4 && ev.X <= 5:
+			m.toggleSearchOption("word")
+		case ev.X >= 7 && ev.X <= 8:
+			m.toggleSearchOption("regex")
+		}
+		return
+	case ev.Y < searchListTop || ev.Y >= searchListTop+m.listRows():
+		return
+	}
+	i := m.scroll[ViewSearch] + ev.Y - searchListTop
+	if i >= len(c.rows) {
+		return
+	}
+	c.editing = false
+	now := m.now()
+	double := i == m.lastClickRow && now.Sub(m.lastClick) < doubleClick
+	m.lastClick, m.lastClickRow = now, i
+	m.cursor[ViewSearch] = i
+	m.clamp()
+	if double {
+		if path, line, ok := m.selectedSearchHit(); ok {
+			m.openAt(path, line)
+		}
 		m.lastClick = time.Time{}
 	}
 }

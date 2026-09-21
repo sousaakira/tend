@@ -66,29 +66,52 @@ func (m *Model) Draw(g *vt.Grid) (cx, cy int, visible bool) {
 	}
 
 	m.drawHeader(g)
-	if m.mode == modeHelp {
+	switch {
+	case m.mode == modeHelp:
 		m.drawHelp(g)
-	} else if m.view == ViewFiles {
+	case m.view == ViewFiles:
 		m.drawFiles(g)
-	} else {
+	case m.view == ViewSearch:
+		cx, cy, cursor := m.drawSearchView(g)
+		if fx, fy, fcursor := m.drawFooter(g); fcursor {
+			return fx, fy, true
+		}
+		return cx, cy, cursor
+	default:
 		m.drawChanges(g)
 	}
 	return m.drawFooter(g)
 }
 
-// headerSplit is the column the header's divider is drawn at.
-func headerSplit(m *Model) int { return len(" files ") }
+// headerNames are the views as the header names them, in order.
+var headerNames = [3]string{"files", "search", "changes"}
+
+// headerViewAt is the view whose name is at column x of the header: each
+// name runs to the divider after it, so a click between two lands on one.
+func headerViewAt(x int) View {
+	at := 1
+	for i, name := range headerNames[:2] {
+		at += len(name) + 1
+		if x <= at {
+			return View(i)
+		}
+		at += 2
+	}
+	return ViewChanges
+}
 
 func (m *Model) drawHeader(g *vt.Grid) {
-	files, changes := styleDim, styleDim
-	if m.view == ViewFiles {
-		files = styleTabOn
-	} else {
-		changes = styleTabOn
+	x := 1
+	for i, name := range headerNames {
+		style := styleDim
+		if View(i) == m.view {
+			style = styleTabOn
+		}
+		if i > 0 {
+			x = put(g, x+1, 0, "│", styleDim, m.cols) + 1
+		}
+		x = put(g, x, 0, name, style, m.cols)
 	}
-	x := put(g, 1, 0, "files", files, m.cols)
-	x = put(g, x+1, 0, "│", styleDim, m.cols)
-	x = put(g, x+1, 0, "changes", changes, m.cols)
 	if m.status != nil {
 		if n := len(m.status.Changes); n > 0 {
 			put(g, x+1, 0, strconv.Itoa(n), styleYellow, m.cols)
@@ -259,9 +282,15 @@ var helpLines = []string{
 	"  S       stage everything",
 	"  x x     discard the change",
 	"  c       commit what is staged",
+	"search (2, ctrl+f)",
+	"  type    search as you type",
+	"  tab     include, exclude globs",
+	"  alt+c   case  alt+w word  alt+r regex",
+	"  enter   open at the line",
+	"  space   view here",
 	"anywhere",
-	"  tab     files, changes",
-	"  /       find a file",
+	"  1 2 3   files, search, changes",
+	"  /       find a file by name",
 	"  r       refresh",
 	"  q       close the panel",
 }
@@ -304,8 +333,13 @@ func (m *Model) drawFooter(g *vt.Grid) (int, int, bool) {
 		return 0, 0, false
 	}
 	hint := "? keys  / find"
-	if m.view == ViewChanges && m.git.Top != "" {
+	switch {
+	case m.view == ViewChanges && m.git.Top != "":
 		hint = "s stage  c commit  ? keys"
+	case m.view == ViewSearch && m.csearch.editing:
+		hint = "enter results  tab next field"
+	case m.view == ViewSearch:
+		hint = "enter open  space view  i edit"
 	}
 	if m.mode == modeHelp {
 		hint = "any key closes this"
@@ -351,7 +385,13 @@ func (m *Model) drawViewer(g *vt.Grid) {
 			}
 		} else {
 			num := strconv.Itoa(at + 1)
-			put(g, gutter-len(num), y, num, styleDim, m.cols)
+			numStyle := styleDim
+			if at+1 == v.mark {
+				// The line a search result opened the file at.
+				numStyle = vt.Style{FG: vt.IndexedColor(3), Attrs: vt.AttrBold | vt.AttrReverse}
+				style = vt.Style{FG: vt.IndexedColor(3), Attrs: vt.AttrBold}
+			}
+			put(g, gutter-len(num), y, num, numStyle, m.cols)
 		}
 		put(g, gutter+1, y, cutLeft(line, v.left), style, m.cols)
 	}

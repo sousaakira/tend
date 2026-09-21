@@ -8,6 +8,7 @@ import (
 	"net"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -72,7 +73,9 @@ func (o *SessionOpener) call(method string, params any) (map[string]any, error) 
 }
 
 // Open opens path in the editor, or goes to the tab it is already open in.
-func (o *SessionOpener) Open(path string) error {
+// A line above zero starts the editor there, for the editors that say how
+// (see editorAt); a file already open is gone back to as it is.
+func (o *SessionOpener) Open(path string, line int) error {
 	if o.Socket == "" || o.Pane == "" {
 		return errors.New("nowhere to open files: not running in a tend pane")
 	}
@@ -102,7 +105,7 @@ func (o *SessionOpener) Open(path string) error {
 		// The editor through a shell, so an $EDITOR with flags in it works;
 		// the path as an argument, so one with spaces or quotes in it
 		// reaches the editor as it is.
-		"command":       []string{"/bin/sh", "-c", editor + ` "$1"`, "tend-edit", path},
+		"command":       []string{"/bin/sh", "-c", editorAt(editor, line) + ` "$1"`, "tend-edit", path},
 		"dir":           filepath.Dir(path),
 		"close_on_exit": true,
 	})
@@ -122,4 +125,23 @@ func (o *SessionOpener) Open(path string) error {
 	// at. Asking for focus is how the one being used goes to it.
 	_, err = o.call("pane.focus", map[string]any{"pane_id": pane})
 	return err
+}
+
+// editorAt is the editor's command with the cursor put on a line. vi and its
+// family, nano, emacs, micro and kakoune take +N before the file; an editor
+// not known to is opened at the top rather than handed an argument it
+// might read as a file name.
+func editorAt(editor string, line int) string {
+	if line <= 0 {
+		return editor
+	}
+	fields := strings.Fields(editor)
+	if len(fields) == 0 {
+		return editor
+	}
+	switch filepath.Base(fields[0]) {
+	case "vi", "vim", "nvim", "view", "nano", "emacs", "emacsclient", "micro", "kak", "mg", "joe", "ne":
+		return editor + " +" + strconv.Itoa(line)
+	}
+	return editor
 }

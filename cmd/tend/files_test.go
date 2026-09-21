@@ -70,12 +70,12 @@ func TestTheFilesPanelDocksOnTheLeftAndShowsTheProject(t *testing.T) {
 
 	a.send(t, "\x02f")
 	a.waitForScreen(t, "the panel", func(s string) bool {
-		return strings.Contains(s, "files │ changes") && strings.Contains(s, "brandnew.md") && strings.Contains(s, "kept.txt")
+		return strings.Contains(s, "files │ search │ changes") && strings.Contains(s, "brandnew.md") && strings.Contains(s, "kept.txt")
 	})
 	// Docked on the left: the panel's header is left of the shell's pane.
-	header := a.lineContaining(t, "files │ changes")
+	header := a.lineContaining(t, "files │ search │ changes")
 	line := []rune(a.lines()[header-1])
-	at := strings.Index(string(line), "files │ changes")
+	at := strings.Index(string(line), "files │ search │ changes")
 	if at < 0 || at > 60 {
 		t.Errorf("the panel should be on the left of the tab:\n%s", a.text())
 	}
@@ -96,14 +96,14 @@ func TestTheFilesPanelDocksOnTheLeftAndShowsTheProject(t *testing.T) {
 	a.waitForScreen(t, "src opened by a click", func(s string) bool { return strings.Contains(s, "changed.go") })
 
 	// The changes view lists what changed.
-	a.send(t, "\t")
+	a.send(t, "3")
 	a.waitForScreen(t, "the changes", func(s string) bool {
 		return strings.Contains(s, "CHANGES 2") && strings.Contains(s, "changed.go")
 	})
 
 	// prefix+f in the panel puts it away.
 	a.send(t, "\x02f")
-	a.waitForScreen(t, "the panel to close", func(s string) bool { return !strings.Contains(s, "files │ changes") })
+	a.waitForScreen(t, "the panel to close", func(s string) bool { return !strings.Contains(s, "files │ search │ changes") })
 }
 
 // TestAFileChosenInThePanelOpensInTheEditorInATab is the panel in a real
@@ -169,5 +169,60 @@ func TestTheFilesPanelOpensFromThePaneMenu(t *testing.T) {
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 	a.openMenuOn(t, 70, 12, "files panel")
 	a.clickAt(t, 72, a.lineContaining(t, "files panel"))
-	a.waitForScreen(t, "the panel", func(s string) bool { return strings.Contains(s, "files │ changes") })
+	a.waitForScreen(t, "the panel", func(s string) bool { return strings.Contains(s, "files │ search │ changes") })
+}
+
+// TestTextFoundInThePanelOpensTheEditorOnItsLine: ctrl+f in the panel
+// searches the project's files for text, and enter on a result opens the
+// editor there — vi is given +line. If it regresses, the panel finds where
+// something is written and then opens the file at its top.
+func TestTextFoundInThePanelOpensTheEditorOnItsLine(t *testing.T) {
+	project := gitProject(t)
+	if err := os.WriteFile(filepath.Join(project, "notes.txt"), []byte("one\ntwo\nfind-this-line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A vi that says what it was asked to open, and stays.
+	fake := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fake, "vi"), []byte("#!/bin/sh\necho \"EDITING $*\"\nsleep 60\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir, err := os.MkdirTemp("", "tf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(runtimeDir) })
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(),
+		"TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh",
+		"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"),
+		"PATH="+fake+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"EDITOR=vi", "VISUAL=",
+	)
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, []string{"attach", "-s", "grep"}, pty.Options{Size: pty.Size{Cols: 130, Rows: 30}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(130, 30, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stopSession(t, "grep")
+	})
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "cd "+project+" && echo in-project\n", "the shell in the project",
+		func(s string) bool {
+			return strings.Contains(s, "\nin-project") || strings.Contains(s, "│in-project")
+		})
+	a.send(t, "\x02f")
+	a.waitForScreen(t, "the panel", func(s string) bool { return strings.Contains(s, "notes.txt") })
+
+	a.send(t, "\x06find-this")
+	a.waitForScreen(t, "the result", func(s string) bool {
+		return strings.Contains(s, "1 in 1 files") && strings.Contains(s, "3 find-this-line")
+	})
+	a.send(t, "\r\x1b[B\r")
+	a.waitForScreen(t, "vi on line 3", func(s string) bool {
+		return strings.Contains(s, "EDITING +3 "+filepath.Join(project, "notes.txt"))
+	})
 }
