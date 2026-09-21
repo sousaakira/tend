@@ -21,6 +21,11 @@ import "strconv"
 type encoder struct {
 	buf   []byte
 	style Style
+	// links is the screen's hyperlink table, when the cells' links are to
+	// be written (OSC 8) — rendering a screen for a client — and nil when
+	// they are not: a painter's grid mixes panes whose tables differ.
+	links []string
+	link  uint16
 	// styleKnown is false until the first style is written, so the first cell
 	// always emits one rather than assuming the terminal starts clean.
 	styleKnown bool
@@ -30,6 +35,22 @@ func (e *encoder) reset() {
 	e.buf = e.buf[:0]
 	e.style = DefaultStyle
 	e.styleKnown = false
+	e.link = 0
+}
+
+// setLink emits the change to a cell's hyperlink, when links are written.
+func (e *encoder) setLink(id uint16) {
+	if e.links == nil || id == e.link {
+		return
+	}
+	uri := ""
+	if int(id) < len(e.links) {
+		uri = e.links[id]
+	}
+	e.buf = append(e.buf, "\x1b]8;;"...)
+	e.buf = append(e.buf, uri...)
+	e.buf = append(e.buf, "\x1b\\"...)
+	e.link = id
 }
 
 // moveTo emits absolute cursor positioning, which is 1-based on the wire.
@@ -151,6 +172,7 @@ func (e *encoder) row(r *Row, cols int) {
 			continue
 		}
 		e.setStyle(cell.Style)
+		e.setLink(cell.Link)
 		if cell.R == 0 {
 			e.buf = append(e.buf, ' ')
 		} else {
@@ -160,6 +182,9 @@ func (e *encoder) row(r *Row, cols int) {
 			e.buf = appendRune(e.buf, mark)
 		}
 	}
+	// A link does not carry past the row: what comes next is a cursor move
+	// or a new line, and a link open across it would claim the gap.
+	e.setLink(0)
 }
 
 func appendRune(dst []byte, r rune) []byte {
@@ -177,6 +202,7 @@ func appendRune(dst []byte, r rune) []byte {
 func RenderScreen(s *Screen) []byte {
 	var e encoder
 	e.reset()
+	e.links = s.links
 
 	g := s.Grid()
 	cols, rows := s.Size()
@@ -224,6 +250,7 @@ func RenderScrolled(s *Screen, offset int) []byte {
 	cols, rows := s.Size()
 	var e encoder
 	e.reset()
+	e.links = s.links
 	e.buf = append(e.buf, 0x1b, '[', 'H')
 	e.setStyle(DefaultStyle)
 
@@ -384,6 +411,7 @@ func RenderHistory(s *Screen, maxLines int) (ansi []byte, lines int) {
 
 	var e encoder
 	e.reset()
+	e.links = s.links
 	for at := first; at < total; at++ {
 		row := g.Line(at - history)
 		if at < history {
@@ -424,6 +452,7 @@ func trimmedLen(r *Row) int {
 func RenderResume(s *Screen, maxHistory int) []byte {
 	var e encoder
 	e.reset()
+	e.links = s.links
 	cols, rows := s.Size()
 
 	// What scrolled past, then enough line feeds to push it off the screen and

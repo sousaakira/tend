@@ -66,6 +66,12 @@ type Cursor struct {
 // goroutines must serialise access themselves, and should hold the lock for as
 // short a window as possible: this sits on a per-byte path.
 type Screen struct {
+	// links is the table of hyperlinks cells point into, and linkIDs its
+	// reverse; curLink is the link text printed now is under (OSC 8).
+	links   []string
+	linkIDs map[string]uint16
+	curLink uint16
+
 	// Reply receives what the terminal sends back upstream, such as cursor
 	// position reports. Nil means the answers are dropped, which is right for
 	// a screen used only to inspect output.
@@ -338,9 +344,9 @@ func (s *Screen) Print(r rune) {
 	s.breakWideAt(row, s.cur.X)
 	s.breakWideAt(row, s.cur.X+w-1)
 
-	row.SetCell(s.cur.X, Cell{R: r, Style: s.cur.Style, Width: uint8(w)})
+	row.SetCell(s.cur.X, Cell{R: r, Style: s.cur.Style, Width: uint8(w), Link: s.curLink})
 	for i := 1; i < w; i++ {
-		row.SetCell(s.cur.X+i, Cell{R: 0, Style: s.cur.Style, Width: 0})
+		row.SetCell(s.cur.X+i, Cell{R: 0, Style: s.cur.Style, Width: 0, Link: s.curLink})
 	}
 
 	s.cur.X += w
@@ -559,7 +565,59 @@ func (s *Screen) OSCDispatch(params [][]byte, _ bool) {
 		s.setProgress(joinParams(params[1:]))
 	case "52": // clipboard
 		s.clipboardWrite(params[1:])
+	case "8": // hyperlink
+		s.setHyperlink(params[1:])
 	}
+}
+
+// maxLinks bounds a screen's table of hyperlinks. Past it no new link is
+// kept — the text still shows, only unlinked — rather than letting a
+// program that links every line grow the table without end.
+const maxLinks = 4096
+
+// maxLinkLen bounds one URI, as terminals commonly do.
+const maxLinkLen = 2048
+
+// setHyperlink is OSC 8: "8;params;URI" starts a link for the text printed
+// after it, and an empty URI ends it. A URI may hold semicolons, which the
+// parser split on, so what follows the parameters is joined back.
+func (s *Screen) setHyperlink(params [][]byte) {
+	if len(params) < 2 {
+		s.curLink = 0
+		return
+	}
+	uri := string(params[1])
+	for _, p := range params[2:] {
+		uri += ";" + string(p)
+	}
+	if uri == "" || len(uri) > maxLinkLen {
+		s.curLink = 0
+		return
+	}
+	if id, ok := s.linkIDs[uri]; ok {
+		s.curLink = id
+		return
+	}
+	if len(s.links) >= maxLinks {
+		s.curLink = 0
+		return
+	}
+	if s.links == nil {
+		s.links = []string{""} // zero is no link
+		s.linkIDs = map[string]uint16{}
+	}
+	id := uint16(len(s.links))
+	s.links = append(s.links, uri)
+	s.linkIDs[uri] = id
+	s.curLink = id
+}
+
+// Hyperlink is the URI of a cell's link (OSC 8), or "".
+func (s *Screen) Hyperlink(id uint16) string {
+	if int(id) >= len(s.links) {
+		return ""
+	}
+	return s.links[id]
 }
 
 // clipboardWrite handles OSC 52, "put this on the clipboard".

@@ -58,3 +58,38 @@ func TestACtrlClickOpensTheLinkUnderIt(t *testing.T) {
 	}
 	t.Fatalf("nothing was opened; the screen:\n%s", a.text())
 }
+
+// TestACtrlClickOpensAHyperlinkWrittenAsWords: a program's OSC 8 link —
+// what Claude Code writes for a markdown link, the words with the URL
+// behind them — opens on ctrl+click, through the server's copy of the
+// screen and the one it renders for the client. If it regresses, those
+// links show as plain words that open nothing.
+func TestACtrlClickOpensAHyperlinkWrittenAsWords(t *testing.T) {
+	fake := t.TempDir()
+	opened := filepath.Join(fake, "opened")
+	if err := os.WriteFile(filepath.Join(fake, "xdg-open"), []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" >> "+opened+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fake+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("DISPLAY", ":99")
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf 'read \\033]8;;https://example.com/hidden\\007the docs\\033]8;;\\007 please\\n'\n", "the link",
+		func(s string) bool { return strings.Contains(s, "│read the docs please") })
+
+	row := a.lineContaining(t, "│read the docs please")
+	line := a.lines()[row-1]
+	col := len([]rune(line[:strings.Index(line, "│read the docs please")])) + len("│read t") + 1
+	a.send(t, "\x1b[<16;"+itoa(col)+";"+itoa(row)+"M\x1b[<16;"+itoa(col)+";"+itoa(row)+"m")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(opened); err == nil && strings.TrimSpace(string(data)) != "" {
+			if got := strings.TrimSpace(string(data)); got != "https://example.com/hidden" {
+				t.Errorf("opened %q", got)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("nothing was opened; the screen:\n%s", a.text())
+}

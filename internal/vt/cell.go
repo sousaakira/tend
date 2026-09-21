@@ -114,7 +114,11 @@ type Cell struct {
 	R     rune
 	Style Style
 	Width uint8
-	_     [3]uint8 // keep the padding explicit so the size test is meaningful
+	_     uint8 // keep the padding explicit so the size test is meaningful
+	// Link is the cell's hyperlink (OSC 8), an index into its screen's
+	// table, zero for none. It sits in what was padding, so a link costs
+	// the cell nothing.
+	Link uint16
 }
 
 // IsContinuation reports whether c is the right half of a wide character.

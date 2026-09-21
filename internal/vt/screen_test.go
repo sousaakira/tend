@@ -2,6 +2,7 @@ package vt
 
 import (
 	"encoding/base64"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -694,5 +695,39 @@ func TestScreenClipboardWrite(t *testing.T) {
 	_, _ = s.Write([]byte("\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(long)) + "\x07"))
 	if len(got) != 1 || string(got[0]) != long {
 		t.Errorf("a long copy was dropped or damaged: %d writes", len(got))
+	}
+}
+
+// TestHyperlinksAreKeptPerCellAndSurviveRendering: OSC 8 links the text
+// printed under it, ends on an empty URI, keeps semicolons in the URI, and
+// comes back from a render as the server sends a screen to a client. If it
+// regresses, a link Claude Code writes as words cannot be opened.
+func TestHyperlinksAreKeptPerCellAndSurviveRendering(t *testing.T) {
+	s := NewScreen(40, 3, 10)
+	_, _ = s.Write([]byte("see \x1b]8;;https://x.org/a;b\x07the docs\x1b]8;;\x07 now"))
+	cell := func(scr *Screen, x int) string { return scr.Hyperlink(scr.Grid().Line(0).Cell(x).Link) }
+	if cell(s, 0) != "" || cell(s, 4) != "https://x.org/a;b" || cell(s, 11) != "https://x.org/a;b" || cell(s, 13) != "" {
+		t.Fatalf("links: %q %q %q %q", cell(s, 0), cell(s, 4), cell(s, 11), cell(s, 13))
+	}
+
+	copy := NewScreen(40, 3, 10)
+	_, _ = copy.Write(RenderScreen(s))
+	if cell(copy, 4) != "https://x.org/a;b" || cell(copy, 12) != "" {
+		t.Errorf("after rendering: %q %q", cell(copy, 4), cell(copy, 12))
+	}
+	if !strings.Contains(copy.Grid().Line(0).Text(), "see the docs now") {
+		t.Errorf("the text: %q", copy.Grid().Line(0).Text())
+	}
+}
+
+// TestHyperlinkTableIsBounded: a program that links everything does not
+// grow the table past its bound; the text still shows.
+func TestHyperlinkTableIsBounded(t *testing.T) {
+	s := NewScreen(20, 2, 0)
+	for i := 0; i < maxLinks+10; i++ {
+		_, _ = s.Write([]byte("\x1b]8;;https://x/" + strconv.Itoa(i) + "\x07a\x1b]8;;\x07\r"))
+	}
+	if len(s.links) > maxLinks {
+		t.Errorf("%d links kept", len(s.links))
 	}
 }

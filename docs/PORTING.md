@@ -490,15 +490,21 @@ The host is ported (see "Ported, and checked"). Left:
 - `tend plugin install owner/repo[/subdir] [-ref] [-yes]` and `uninstall`
   are ported (herdr's GitHub shorthand only; clone, preview, confirm, build,
   keep under tend's state directory), and so is `plugin.log.list` (`tend
-  plugin log`, the last 200 runs). Left: the marketplace, `min_herdr_version` enforcement (tend's builds have no
+  plugin log`, the last 200 runs). The marketplace is herdr's website
+  (herdr.dev/plugins, indexing GitHub repositories by topic), not code in
+  the binary; installing from GitHub is ported. Left: `min_herdr_version` enforcement (tend's builds have no
   ordering to compare against). `link_handlers` are ported: a regex over
   the URL and an action of the plugin, checked as herdr checks them, the
   first match over plugins in id order run with TEND_PLUGIN_CLICKED_URL and
   TEND_PLUGIN_LINK_HANDLER_ID (pane.link_activate); links themselves are
   herdr's ctrl+click and ctrl+hover, web URLs only, trimmed by herdr's
   rules, found in the client's own copy of the screen, opened on the
-  client's machine when no plugin takes them. Not ported: OSC 8 hyperlinks,
-  which tend's terminal core does not keep per cell; and the hover shows
+  client's machine when no plugin takes them. OSC 8 hyperlinks are kept per
+  cell (a 16-bit index into the screen's table, in what was padding, so
+  cells did not grow and the hot paths still allocate nothing), rendered
+  back for the client, and preferred over the text under the pointer —
+  Claude Code writes markdown links this way when the terminal says it can,
+  as VTE_VERSION inherited by the owner's panes does. The hover shows
   only while the terminal reports motion, which tend asks for only when
   something wants it.
 - herdr: `plugin_command.rs`, `plugin_paths.rs`, `cli/plugin.rs`,

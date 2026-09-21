@@ -55,8 +55,39 @@ func (t *tui) linkAt(x, y int) (uint64, int, ui.LinkSpan, bool) {
 	if !ok {
 		return 0, 0, ui.LinkSpan{}, false
 	}
+	// A hyperlink the program wrote (OSC 8) first: its text need not look
+	// like a URL at all — Claude Code writes a markdown link as its words.
+	if span, found := t.hyperlinkAtLocked(pane, cx, cy); found {
+		return pane, cy, span, true
+	}
 	span, found := ui.LinkAt(t.rowTextLocked(pane, cy), cx)
 	return pane, cy, span, found
+}
+
+// hyperlinkAtLocked is the OSC 8 link on a cell, spanning the cells beside
+// it that carry the same one.
+func (t *tui) hyperlinkAtLocked(pane uint64, x, y int) (ui.LinkSpan, bool) {
+	screen := t.screenFor(pane)
+	if screen == nil {
+		return ui.LinkSpan{}, false
+	}
+	line := screen.Grid().Line(y)
+	if line == nil || x >= line.Len() {
+		return ui.LinkSpan{}, false
+	}
+	id := line.Cell(x).Link
+	uri := screen.Hyperlink(id)
+	if id == 0 || uri == "" {
+		return ui.LinkSpan{}, false
+	}
+	start, end := x, x
+	for start > 0 && line.Cell(start-1).Link == id {
+		start--
+	}
+	for end+1 < line.Len() && line.Cell(end+1).Link == id {
+		end++
+	}
+	return ui.LinkSpan{Start: start, End: end, URL: uri}, true
 }
 
 // hoverLink underlines the link under the pointer while ctrl is held, and
