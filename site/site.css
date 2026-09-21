@@ -45,9 +45,16 @@ a:focus-visible, kbd:focus-visible { outline: 2px solid var(--blue); outline-off
   font-weight: 600;
 }
 
-nav { display: flex; gap: 1.25rem; }
+nav { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: baseline; }
 nav a { color: var(--muted); text-decoration: none; }
 nav a:hover { color: var(--ink); }
+nav a[aria-current="page"] { color: var(--ink); }
+
+.langs {
+  margin-left: auto;
+  color: var(--line);
+}
+.langs a { margin: 0 0.15rem; }
 
 main {
   width: min(68rem, calc(100% - 2.5rem));
@@ -176,7 +183,15 @@ kbd {
   border-radius: 3px;
 }
 
+.cmd-wrap {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
 .cmd {
+  margin: 0;
   padding: 1rem 1.1rem;
   background: var(--frame);
   border: 1px solid var(--line);
@@ -186,6 +201,23 @@ kbd {
 }
 
 .cmd span { color: var(--muted); }
+
+.copy {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--frame);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copy:hover { border-color: var(--blue); color: var(--blue); }
+.copy:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.copy.is-done { color: var(--idle); border-color: var(--idle); }
 
 code { font-family: var(--mono); font-size: 0.92em; }
 
@@ -207,6 +239,9 @@ footer p { width: min(68rem, 100%); margin: 0 auto; }
   .pane + .pane { border-left: 0; border-top: 1px solid var(--line); }
   .facts dl { grid-template-columns: 1fr; }
   nav { gap: 0.8rem; }
+  .langs { margin-left: 0; width: 100%; }
+  .cmd-wrap { grid-template-columns: 1fr; }
+  .copy { padding: 0.55rem 0.9rem; }
   th { width: auto; display: block; border: 0; padding-bottom: 0; }
   td { display: block; padding-top: 0.15rem; }
 }

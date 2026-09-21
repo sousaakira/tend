@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tend — コーディングエージェント向けターミナルランタイム</title>
+  <meta name="description" content="tend はデタッチ後もエージェントのターミナルを動かし続け、各ペインを working / blocked / idle と表示します。">
+  <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
+  <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
+  <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
+  <link rel="alternate" hreflang="ja" href="https://sousaakira.github.io/tend/ja/">
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="mark" href="#top">tend</a>
+    <nav>
+      <a href="#session">セッション</a>
+      <a href="#keys">キー</a>
+      <a href="#install">インストール</a>
+      <a href="https://github.com/sousaakira/tend">ソース</a>
+      <span class="langs"><a href="../pt/">pt</a> · <a href="../">en</a> · <a href="../es/">es</a> · <a href="./" aria-current="page">ja</a></span>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="lead">
+      <h1>tend</h1>
+      <p class="deck">コーディングエージェント向けのターミナルランタイム。離れてもサーバーは動き続け、各ペインは working・blocked・idle と示されます。</p>
+    </section>
+
+    <section id="session" class="stage" aria-label="tend のセッション">
+      <div class="frame">
+        <aside class="side">
+          <p class="side-h">spaces</p>
+          <p class="row on"><span class="dot"></span> main</p>
+          <p class="row dim">master</p>
+          <p class="rule" aria-hidden="true"></p>
+          <p class="side-h">agents <span>flat</span></p>
+          <p class="row on"><span class="dot work"></span> claude</p>
+          <p class="row"><span class="dot block"></span> codex</p>
+        </aside>
+        <div class="panes">
+          <article class="pane focus">
+            <header><span class="id">1</span> claude <span class="st work" title="working">●</span></header>
+            <pre>⠋ Pondering the refactor…
+
+The panes belong to the server.
+Closing this window does not
+stop them.</pre>
+          </article>
+          <article class="pane">
+            <header><span class="id">2</span> codex <span class="st block" title="blocked">▲</span></header>
+            <pre>Do you want to proceed?
+
+ ❯ 1. Yes
+   2. No</pre>
+          </article>
+        </div>
+      </div>
+      <p class="status"><span>work · main · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+    </section>
+
+    <section class="facts">
+      <h2>デタッチしても残るもの</h2>
+      <dl>
+        <div>
+          <dt>プログラム</dt>
+          <dd>セッションはバックグラウンドのサーバーです。<kbd>ctrl</kbd><kbd>b</kbd> のあと <kbd>d</kbd> でエージェントは動き続けます。tend を開き直すと同じペインに戻ります。</dd>
+        </div>
+        <div>
+          <dt>状態</dt>
+          <dd>ペインは working・blocked・idle のいずれかです。印は画面が示しているもの — スピナー、許可プロンプト、待機中のシェル — であり、プロセス名からの推測ではありません。</dd>
+        </div>
+        <div>
+          <dt>レイアウト</dt>
+          <dd>space はタブを持ち、タブはペインを持ちます。横や下に分割し、ズームし、履歴をスクロールし、止まったエージェントへジャンプします。</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section id="keys">
+      <h2>プレフィックスは ctrl+b</h2>
+      <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> でセッション内の全キーを一覧します。</p>
+      <table>
+        <tbody>
+          <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>横・下に分割</td></tr>
+          <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>フォーカス移動</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>リサイズ</td></tr>
+          <tr><th><kbd>z</kbd></th><td>ペインをウィンドウいっぱいに</td></tr>
+          <tr><th><kbd>[</kbd></th><td>履歴をスクロール</td></tr>
+          <tr><th><kbd>x</kbd></th><td>ペインを閉じる</td></tr>
+          <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>タブ: 新規・次・前・番号</td></tr>
+          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>space: 新規・前・次</td></tr>
+          <tr><th><kbd>a</kbd></th><td>エージェント一覧（グループ表示）</td></tr>
+          <tr><th><kbd>g</kbd></th><td>選んでジャンプ</td></tr>
+          <tr><th><kbd>d</kbd></th><td>デタッチ（実行はそのまま）</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="install">
+      <h2>インストール</h2>
+      <div class="cmd-wrap">
+        <pre class="cmd" id="install-cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
+        <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="コピー" data-done="コピー済み">コピー</button>
+      </div>
+      <p>バイナリを <code>~/.local/bin</code>（または <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>）に置きます。このマシン向けのリリースがあればそれを使い、なければ Go でクローンしてビルドします。</p>
+      <p class="note">チェックアウトから: <code>make install</code>。</p>
+      <p>引数なしで tend を実行するとセッションを開き、サーバーがなければ起動します。<code>tend new -- claude</code> でペインを開き、<code>tend ls</code> で一覧、<code>-s NAME</code> で別セッションを並べます。</p>
+      <p>Go 製。単一バイナリ。cgo なし。</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Apache-2.0。独立した Go 実装。詳細はリポジトリの NOTICE を参照。</p>
+  </footer>
+  <script src="../site.js" defer></script>
+</body>
+</html>

@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>tend — terminal runtime for coding agents</title>
   <meta name="description" content="tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.">
+  <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
+  <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
+  <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
+  <link rel="alternate" hreflang="ja" href="https://sousaakira.github.io/tend/ja/">
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
@@ -15,6 +19,7 @@
       <a href="#keys">keys</a>
       <a href="#install">install</a>
       <a href="https://github.com/sousaakira/tend">source</a>
+      <span class="langs"><a href="pt/">pt</a> · <a href="./" aria-current="page">en</a> · <a href="es/">es</a> · <a href="ja/">ja</a></span>
     </nav>
   </header>
 
@@ -96,7 +101,10 @@ stop them.</pre>
 
     <section id="install">
       <h2>Install</h2>
-      <pre class="cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
+      <div class="cmd-wrap">
+        <pre class="cmd" id="install-cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
+        <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="copy" data-done="copied">copy</button>
+      </div>
       <p>Puts a binary in <code>~/.local/bin</code> (or <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>). Prefers a release build for this machine; otherwise clones and builds with Go.</p>
       <p class="note">From a checkout: <code>make install</code>.</p>
       <p>With no arguments, tend opens a session and starts a server if there is not one. <code>tend new -- claude</code> opens a pane. <code>tend ls</code> lists what is running. <code>-s NAME</code> runs another session beside the first.</p>
@@ -107,5 +115,6 @@ stop them.</pre>
   <footer>
     <p>Apache-2.0. An independent Go implementation; see NOTICE in the repository.</p>
   </footer>
+  <script src="site.js" defer></script>
 </body>
 </html>
