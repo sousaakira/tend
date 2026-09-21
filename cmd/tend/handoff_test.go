@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/transport"
@@ -63,13 +64,22 @@ func TestHandoffReplacesTheServerUnderARunningShell(t *testing.T) {
 	}
 
 	// Two servers have announced themselves in the one log: the one that was
-	// started, and the one that took over from it.
-	log, err := os.ReadFile(filepath.Join(runtimeDir, "relay.log"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := strings.Count(string(log), "listening on"); n != 2 {
-		t.Fatalf("%d servers announced themselves, want 2; the log says:\n%s", n, log)
+	// started, and the one that took over from it. Waited for: the
+	// replacement says it is ready once it holds the panes, which ends the
+	// handoff command, and announces itself a moment after — reading the log
+	// at once failed this test now and then under the full gate.
+	var log []byte
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		log, _ = os.ReadFile(filepath.Join(runtimeDir, "relay.log"))
+		n := strings.Count(string(log), "listening on")
+		if n == 2 {
+			break
+		}
+		if n > 2 || time.Now().After(deadline) {
+			t.Fatalf("%d servers announced themselves, want 2; the log says:\n%s", n, log)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 
 	// The client lost its connection and found the new server by itself, and
