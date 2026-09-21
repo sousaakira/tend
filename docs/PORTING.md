@@ -476,7 +476,8 @@ Copy mode is ported (see "Ported, and checked"). Left:
 - herdr refuses a motion when the pane's content changed since the client last
   looked (`stale_content`). tend does not: a pane printing while copy mode is
   up can shift the rows under the cursor.
-- Highlighting every match while searching; herdr keeps a window of them.
+- Every visible match of a search is marked (underlined, the search's own
+  case rule); a match wrapped across a row's edge is found but not marked.
 
 ### 6. Worktrees — done over the CLI and socket; no overlay yet
 

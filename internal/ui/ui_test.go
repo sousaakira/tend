@@ -1918,3 +1918,32 @@ func TestFocusReportsAreTakenOutOfTheInput(t *testing.T) {
 		t.Errorf("rest %q, reports %+v", rest, reports)
 	}
 }
+
+// TestEveryVisibleMatchOfASearchIsMarked: in copy mode every match on
+// screen is marked, not only the one the cursor is on, with the search's
+// own rule for case. If it regresses, n jumps somewhere and the user cannot
+// see where the other matches were.
+func TestEveryVisibleMatchOfASearchIsMarked(t *testing.T) {
+	screen := vt.NewScreen(30, 3, 0)
+	_, _ = screen.Write([]byte("error here, Error there\r\nno match"))
+	pane := Pane{ID: 1, Rect: Rect{Cols: 32, Rows: 5}, Screen: screen, Running: true}
+
+	marked := func(query string) []int {
+		dst := vt.NewGrid(40, 6, 0)
+		Draw(dst, Frame{Panes: []Pane{pane}, Highlight: &Highlight{Pane: 1, Query: query}}, DefaultTheme())
+		inner := innerRect(pane.Rect)
+		var cols []int
+		for x := 0; x < inner.Cols; x++ {
+			if dst.Line(inner.Y).Cell(inner.X+x).Style.Attrs&vt.AttrUnderline != 0 {
+				cols = append(cols, x)
+			}
+		}
+		return cols
+	}
+	if got := marked("error"); len(got) != 10 || got[0] != 0 || got[5] != 12 {
+		t.Errorf("lowercase query marked %v, want both words, case ignored", got)
+	}
+	if got := marked("Error"); len(got) != 5 || got[0] != 12 {
+		t.Errorf("a capital should match case: marked %v", got)
+	}
+}

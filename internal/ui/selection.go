@@ -2,6 +2,8 @@ package ui
 
 import (
 	"encoding/base64"
+	"strings"
+	"unicode"
 
 	"github.com/sousaakira/tend/internal/vt"
 )
@@ -142,4 +144,85 @@ func SetClipboard(text string) string {
 		return ""
 	}
 	return "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(text)) + "\a"
+}
+
+// Highlight marks every visible match of a copy-mode search, as herdr keeps a
+// window of them highlighted: the next one is where n goes, and the others
+// say how far there is to go and whether the one wanted is on screen at all.
+type Highlight struct {
+	Pane  uint64
+	Query string
+}
+
+// drawHighlights underlines every occurrence of the query in the pane's
+// visible rows. It reads the cells already drawn, so what is marked is what
+// is on screen, and uses the search's own rule for case: ignored unless the
+// query has a capital, as vim's smartcase does.
+//
+// Row by row: a match broken across a wrapped edge is found by the search
+// and not marked here, which costs a missing underline, never a wrong one.
+func drawHighlights(dst *vt.Grid, f Frame) {
+	h := f.Highlight
+	if h == nil || h.Query == "" {
+		return
+	}
+	needle := []rune(h.Query)
+	fold := strings.ToLower(h.Query) == h.Query
+	if fold {
+		needle = []rune(strings.ToLower(h.Query))
+	}
+	for _, p := range f.Panes {
+		if p.ID != h.Pane {
+			continue
+		}
+		inner := innerRect(p.Rect)
+		for y := 0; y < inner.Rows; y++ {
+			row := dst.Line(inner.Y + y)
+			if row == nil {
+				continue
+			}
+			// The row as runes, each with the column it starts at.
+			var runes []rune
+			var cols []int
+			for x := 0; x < inner.Cols; x++ {
+				cell := row.Cell(inner.X + x)
+				if cell.Width == 0 {
+					continue // the second half of a wide character
+				}
+				r := cell.R
+				if r == 0 {
+					r = ' '
+				}
+				if fold {
+					r = unicode.ToLower(r)
+				}
+				runes = append(runes, r)
+				cols = append(cols, x)
+			}
+			for i := 0; i+len(needle) <= len(runes); i++ {
+				if !runesEqual(runes[i:i+len(needle)], needle) {
+					continue
+				}
+				end := inner.Cols
+				if i+len(needle) < len(cols) {
+					end = cols[i+len(needle)]
+				}
+				for x := cols[i]; x < end; x++ {
+					cell := row.Cell(inner.X + x)
+					cell.Style.Attrs |= vt.AttrUnderline | vt.AttrBold
+					row.SetCell(inner.X+x, cell)
+				}
+			}
+		}
+		return
+	}
+}
+
+func runesEqual(a, b []rune) bool {
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

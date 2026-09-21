@@ -342,6 +342,8 @@ type Frame struct {
 
 	// Selection is a range of text being marked in a pane, or nil.
 	Selection *Selection
+	// Highlight marks every visible match of a copy-mode search, or nil.
+	Highlight *Highlight
 }
 
 // StatusRows is how many rows at the bottom the status bar occupies. Panes are
@@ -489,6 +491,7 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	// Over the panes but under everything that floats: the selection marks
 	// text that is already drawn.
 	drawSelection(dst, f)
+	drawHighlights(dst, f)
 
 	// Last, so they sit over the panes rather than under them. The menu is
 	// last of all: it is opened on top of whatever is already showing.

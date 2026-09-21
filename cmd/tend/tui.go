@@ -918,6 +918,9 @@ func (t *tui) buildFrame() ui.Frame {
 	if t.copy != nil {
 		frame.Copy = true
 		frame.CopyCursor = t.copyCursorLocked()
+		if t.copy != nil && t.copy.lastQuery != "" {
+			frame.Highlight = &ui.Highlight{Pane: t.copy.pane, Query: t.copy.lastQuery}
+		}
 		if prompt := t.copyPromptLocked(); prompt != "" {
 			frame.Message, frame.Alert = prompt, false
 		}
