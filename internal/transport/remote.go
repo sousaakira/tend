@@ -39,7 +39,20 @@ const remoteCloseGrace = 2 * time.Second
 // the attach found, or put, one somewhere else (see cmd/tend's
 // prepareRemote). It goes to the far side's shell as it is, so a path may
 // use $HOME.
-var RemoteTend = "tend"
+// Empty means the one tend installs itself as there (~/.local/bin/tend, as
+// herdr prefers its own managed install) when it exists, and the one on the
+// far side's PATH otherwise: a non-interactive ssh often has no
+// ~/.local/bin on its PATH, and a tend put there by an attach would be
+// invisible to every other -ssh command.
+var RemoteTend = ""
+
+// remoteTendWord is the far side's tend as a word for its shell.
+func remoteTendWord() string {
+	if RemoteTend != "" {
+		return RemoteTend
+	}
+	return `"$( [ -x "$HOME/.local/bin/tend" ] && echo "$HOME/.local/bin/tend" || echo tend )"`
+}
 
 // RemoteArgv is the command that carries a session from host.
 func RemoteArgv(host, session string) []string {
@@ -47,9 +60,14 @@ func RemoteArgv(host, session string) []string {
 	if program == "" {
 		// -T: no terminal on the far side. The protocol is binary, and a pty
 		// in the middle would translate line endings into it.
-		return []string{"ssh", "-T", host, RemoteTend, "bridge", "-s", session}
+		return []string{"ssh", "-T", host, remoteTendWord(), "bridge", "-s", session}
 	}
-	return append(strings.Fields(program), host, RemoteTend, "bridge", "-s", session)
+	// A wrapper is given the plain word: it may not run a shell at all.
+	word := RemoteTend
+	if word == "" {
+		word = "tend"
+	}
+	return append(strings.Fields(program), host, word, "bridge", "-s", session)
 }
 
 // RemoteShell runs a shell script on host and returns what it printed, with

@@ -401,9 +401,9 @@ top of it is not:
   handed to it. Verified against a real host (Ubuntu, glibc 2.35), which is
   how it was found that builds must be static. Not ported: herdr's download of
   a release for a machine of another kind (there are no releases yet), and
-  herdr's prompt to stop a server too old to hand off. The automation
-  commands' `-ssh` still run the far side's `tend` on its PATH, not the one
-  an attach installed.
+  herdr's prompt to stop a server too old to hand off. Every `-ssh` command
+  runs `~/.local/bin/tend` there when it exists, and the one on the PATH
+  otherwise.
 - A server from before this feature cannot hand off — it has no such method —
   and is replaced only by a restart. `tend handoff` says so rather than doing it.
 - Known limit: a pane resized between the manifest being written and the
