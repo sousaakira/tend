@@ -695,6 +695,9 @@ var hostname = sync.OnceValue(func() string {
 	return name
 })
 
+// Snapshot is the session as a client is sent it.
+func (s *Server) Snapshot() proto.SessionSnapshot { return s.snapshot() }
+
 // snapshot describes the whole session.
 func (s *Server) snapshot() proto.SessionSnapshot {
 	var snap proto.SessionSnapshot
@@ -757,6 +760,10 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Workspaces[i].Branch = s.branches.lookup(dir)
 		t := s.branches.tracking(dir)
 		snap.Workspaces[i].Ahead, snap.Workspaces[i].Behind = t.Ahead, t.Behind
+		for _, token := range s.workspaceTokens(session.WorkspaceID(snap.Workspaces[i].ID)) {
+			snap.Workspaces[i].Tokens = append(snap.Workspaces[i].Tokens,
+				proto.AgentToken{Key: token.Key, Value: token.Value})
+		}
 	}
 
 	// Runtime facts come from the runtimes, under their own locks, once the

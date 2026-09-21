@@ -535,3 +535,40 @@ func TestTheMethodsAHerdrPluginCalls(t *testing.T) {
 		t.Errorf("tab.focus = %v", tabs)
 	}
 }
+
+// TestAScriptCanSaySomethingAboutASpace is herdr's
+// workspace.report_metadata: a value about a space reaches the snapshot the
+// sidebar draws its $name tokens from, and one said for a while goes. If it
+// regresses, a space row configured with $jj_status is always empty.
+func TestAScriptCanSaySomethingAboutASpace(t *testing.T) {
+	h := start(t)
+	result(t, call(t, h, MethodWorkspaceReportMetadata, map[string]any{
+		"workspace_id": "w_1", "source": "jj", "tokens": map[string]any{"jj_status": "clean"},
+	}))
+	result(t, call(t, h, MethodWorkspaceReportMetadata, map[string]any{
+		"workspace_id": "w_1", "source": "ci", "tokens": map[string]any{"ci": "green"}, "ttl_ms": 50,
+	}))
+	tokens := func() string {
+		snap := h.srv.Snapshot()
+		out := ""
+		for _, tok := range snap.Workspaces[0].Tokens {
+			out += tok.Key + "=" + tok.Value + ";"
+		}
+		return out
+	}
+	if got := tokens(); got != "ci=green;jj_status=clean;" {
+		t.Errorf("tokens = %q", got)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for tokens() != "jj_status=clean;" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := tokens(); got != "jj_status=clean;" {
+		t.Errorf("after the ttl, tokens = %q", got)
+	}
+	if code := errorCode(call(t, h, MethodWorkspaceReportMetadata, map[string]any{
+		"workspace_id": "w_99", "source": "x", "tokens": map[string]any{"a": "b"},
+	})); code != "workspace_not_found" {
+		t.Errorf("an unknown space gave %q", code)
+	}
+}

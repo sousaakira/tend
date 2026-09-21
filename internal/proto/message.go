@@ -273,9 +273,12 @@ type WorkspaceInfo struct {
 	Ahead  int `json:"ahead,omitempty"`
 	Behind int `json:"behind,omitempty"`
 	// Group is what the workspace is kept with. Empty means it stands alone.
-	Group     string    `json:"group,omitempty"`
-	Tabs      []TabInfo `json:"tabs"`
-	ActiveTab uint64    `json:"active_tab,omitempty"`
+	Group string `json:"group,omitempty"`
+	// Tokens are values a script reported about the space
+	// (workspace.report_metadata), for the sidebar's $name tokens.
+	Tokens    []AgentToken `json:"tokens,omitempty"`
+	Tabs      []TabInfo    `json:"tabs"`
+	ActiveTab uint64       `json:"active_tab,omitempty"`
 }
 
 // PaneTextParams asks for the text in a region of a pane.

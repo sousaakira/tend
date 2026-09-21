@@ -326,6 +326,8 @@ type Server struct {
 	// and the clock it runs. It has its own lock: a command finishing must
 	// not wait on the lock every pane operation needs.
 	tabBar tabBar
+	// workspaceMeta is what scripts reported about each space.
+	workspaceMeta workspaceMeta
 
 	// retick carries a new detection interval to the loop, which cannot read
 	// the configuration under the lock while it is doing a round of work.
@@ -855,6 +857,18 @@ func (s *Server) moveWorkspace(id session.WorkspaceID, index, delta int) error {
 		}
 		return sess.MoveWorkspace(id, index)
 	})
+}
+
+// MoveWorkspaceBlock moves several spaces together before another, or to the
+// end.
+func (s *Server) MoveWorkspaceBlock(ids []session.WorkspaceID, before session.WorkspaceID) error {
+	err := s.rearrange(func(sess *session.Session) error { return sess.MoveWorkspaceBlock(ids, before) })
+	if err == nil {
+		for _, id := range ids {
+			s.publish(Event{Kind: EventWorkspaceMoved, Workspace: id})
+		}
+	}
+	return err
 }
 
 // announce publishes ev when err is nil, and passes err on.

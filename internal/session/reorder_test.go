@@ -168,3 +168,39 @@ func TestMovingAPaneToAnotherTabKeepsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestSpacesMoveAsABlock is herdr's workspace.move_block: the spaces named
+// keep their order and land together, before another or at the end, and the
+// one in view stays in view. If it regresses, moving a group scatters it.
+func TestSpacesMoveAsABlock(t *testing.T) {
+	s := New()
+	var ids []WorkspaceID
+	for _, name := range []string{"a", "b", "c", "d", "e"} {
+		ids = append(ids, s.AddWorkspace(name).ID)
+	}
+	names := func() string {
+		var out string
+		for _, w := range s.Workspaces() {
+			out += w.Name
+		}
+		return out
+	}
+	if err := s.MoveWorkspaceBlock([]WorkspaceID{ids[3], ids[1]}, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(); got != "dbace" {
+		t.Errorf("order = %s, want dbace", got)
+	}
+	if err := s.MoveWorkspaceBlock([]WorkspaceID{ids[3]}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(); got != "baced" {
+		t.Errorf("order = %s, want bace then d at the end", got)
+	}
+	if err := s.MoveWorkspaceBlock([]WorkspaceID{ids[0], ids[0]}, 0); err == nil {
+		t.Error("a space named twice should be refused")
+	}
+	if err := s.MoveWorkspaceBlock([]WorkspaceID{ids[0]}, ids[0]); err == nil {
+		t.Error("a space cannot go before itself")
+	}
+}

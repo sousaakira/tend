@@ -495,9 +495,9 @@ Ported (see "Ported, and checked"). Left:
 
 Ported (see "Ported, and checked"). Left:
 
-- Moving a pane into another tab or space is `pane.move` over the socket;
-  there is no key or menu for it yet.
-- `workspace.move_block`: moving a group of spaces as one.
+- Moving a pane into another tab or space is `pane.move` over the socket,
+  with no key or menu — as in herdr, which offers it only there too.
+  `workspace.move_block` is ported.
 - Dragging a tab or a space with the mouse.
 - **The rest of herdr's default keys.** tend's prefix keys are tmux's where
   herdr's differ: herdr detaches on `q` (tend `d`), renames tabs on `shift+t`
@@ -552,8 +552,9 @@ Ported (see "Ported, and checked"). Left:
 
 Keys are rebindable (see "Ported, and checked"). Left:
 
-- **Sidebar tokens**: there are no workspace metadata reports, so a `$name`
-  in a space row is always empty.
+- **Sidebar tokens**: a `$name` in a space row shows what
+  `workspace.report_metadata` said about the space (herdr's; not persisted,
+  as a value about a space is true while its reporter runs).
 - **Tab bar**: datetime uses a strftime written for tend covering the
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.

@@ -236,3 +236,62 @@ func restoreInto(root *node, id PaneID) *node {
 	next, _ := root.split(first[0], id, Columns, false)
 	return next
 }
+
+// MoveWorkspaceBlock moves several spaces together, in the order given, to
+// just before another — or to the end when before is zero: herdr's
+// workspace.move_block, which is how a group is moved as one. The space in
+// view stays in view wherever it lands.
+func (s *Session) MoveWorkspaceBlock(ids []WorkspaceID, before WorkspaceID) error {
+	if len(ids) == 0 {
+		return ErrNoMove
+	}
+	moving := make(map[WorkspaceID]bool, len(ids))
+	block := make([]*Workspace, 0, len(ids))
+	for _, id := range ids {
+		if moving[id] {
+			return fmt.Errorf("%w: space %d named twice", ErrNoMove, id)
+		}
+		w, ok := s.Workspace(id)
+		if !ok {
+			return fmt.Errorf("%w: %d", ErrNoSuchWorkspace, id)
+		}
+		moving[id] = true
+		block = append(block, w)
+	}
+	if moving[before] {
+		return fmt.Errorf("%w: a space cannot be moved before itself", ErrNoMove)
+	}
+	var active WorkspaceID
+	if s.active >= 0 && s.active < len(s.workspaces) {
+		active = s.workspaces[s.active].ID
+	}
+	rest := make([]*Workspace, 0, len(s.workspaces))
+	for _, w := range s.workspaces {
+		if !moving[w.ID] {
+			rest = append(rest, w)
+		}
+	}
+	at := len(rest)
+	if before != 0 {
+		at = -1
+		for i, w := range rest {
+			if w.ID == before {
+				at = i
+			}
+		}
+		if at < 0 {
+			return fmt.Errorf("%w: %d", ErrNoSuchWorkspace, before)
+		}
+	}
+	out := make([]*Workspace, 0, len(s.workspaces))
+	out = append(out, rest[:at]...)
+	out = append(out, block...)
+	out = append(out, rest[at:]...)
+	s.workspaces = out
+	for i, w := range s.workspaces {
+		if w.ID == active {
+			s.active = i
+		}
+	}
+	return nil
+}

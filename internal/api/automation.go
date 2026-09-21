@@ -80,16 +80,18 @@ const (
 	// herdr's, for plugins written against it: the layout of a pane's tab,
 	// text and keys in one call, a pane's name, and asking the clients to
 	// show a pane or a tab.
-	MethodPaneLayout    = "pane.layout"
-	MethodPaneSendInput = "pane.send_input"
-	MethodPaneRename    = "pane.rename"
-	MethodPaneFocus     = "pane.focus"
-	MethodTabFocus      = "tab.focus"
-	MethodPaneEdges     = "pane.edges"
-	MethodPaneProcesses = "pane.process_info"
-	MethodPaneSwap      = "pane.swap"
-	MethodTabMove       = "tab.move"
-	MethodWorkspaceMove = "workspace.move"
+	MethodWorkspaceMoveBlock      = "workspace.move_block"
+	MethodWorkspaceReportMetadata = "workspace.report_metadata"
+	MethodPaneLayout              = "pane.layout"
+	MethodPaneSendInput           = "pane.send_input"
+	MethodPaneRename              = "pane.rename"
+	MethodPaneFocus               = "pane.focus"
+	MethodTabFocus                = "tab.focus"
+	MethodPaneEdges               = "pane.edges"
+	MethodPaneProcesses           = "pane.process_info"
+	MethodPaneSwap                = "pane.swap"
+	MethodTabMove                 = "tab.move"
+	MethodWorkspaceMove           = "workspace.move"
 
 	MethodServerStop    = "server.stop"
 	MethodServerHandoff = "server.live_handoff"
@@ -377,6 +379,73 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		if err := a.srv.SendKeys(id, p.Keys); err != nil {
 			return nil, paneErr(p.PaneID, err)
+		}
+		return ok2(), nil
+
+	case MethodWorkspaceMoveBlock:
+		var p struct {
+			WorkspaceIDs      []string `json:"workspace_ids"`
+			BeforeWorkspaceID string   `json:"before_workspace_id"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if len(p.WorkspaceIDs) == 0 {
+			return nil, fail("workspace_move_block_failed", "workspace_ids must not be empty")
+		}
+		ids := make([]session.WorkspaceID, 0, len(p.WorkspaceIDs))
+		for _, raw := range p.WorkspaceIDs {
+			id, ok := parseID("w_", raw)
+			if !ok {
+				return nil, fail("workspace_not_found", "workspace %s not found", raw)
+			}
+			ids = append(ids, session.WorkspaceID(id))
+		}
+		var before session.WorkspaceID
+		if p.BeforeWorkspaceID != "" {
+			id, ok := parseID("w_", p.BeforeWorkspaceID)
+			if !ok {
+				return nil, fail("workspace_not_found", "workspace %s not found", p.BeforeWorkspaceID)
+			}
+			before = session.WorkspaceID(id)
+		}
+		if err := a.srv.MoveWorkspaceBlock(ids, before); err != nil {
+			if errors.Is(err, session.ErrNoSuchWorkspace) {
+				return nil, fail("workspace_not_found", "%v", err)
+			}
+			return nil, fail("workspace_move_block_failed", "%v", err)
+		}
+		return ok2(), nil
+
+	case MethodWorkspaceReportMetadata:
+		var p struct {
+			WorkspaceID string             `json:"workspace_id"`
+			Source      string             `json:"source"`
+			Tokens      map[string]*string `json:"tokens"`
+			Seq         *uint64            `json:"seq"`
+			TTLMs       uint64             `json:"ttl_ms"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, ok := parseID("w_", p.WorkspaceID)
+		if !ok {
+			return nil, fail("workspace_not_found", "workspace %s not found", p.WorkspaceID)
+		}
+		if p.Source == "" {
+			return nil, fail("invalid_metadata_source", "a metadata report needs a source")
+		}
+		if p.TTLMs > 86_400_000 {
+			return nil, fail("invalid_metadata_ttl", "ttl_ms may be at most 86400000")
+		}
+		if _, err := a.srv.ReportWorkspaceMetadata(session.WorkspaceID(id), agent.MetadataReport{
+			Source: p.Source, Tokens: p.Tokens, Seq: p.Seq,
+			TTL: time.Duration(p.TTLMs) * time.Millisecond,
+		}); err != nil {
+			if errors.Is(err, session.ErrNoSuchWorkspace) {
+				return nil, fail("workspace_not_found", "workspace %s not found", p.WorkspaceID)
+			}
+			return nil, fail("invalid_request", "%v", err)
 		}
 		return ok2(), nil
 

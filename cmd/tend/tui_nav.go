@@ -415,7 +415,7 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 		Label: orDash(w.Name),
 		Lines: ui.ResolveSpaceRows(t.config.UI.Sidebar.SpaceRows(), ui.SpaceTokenValues{
 			StateText: state, Workspace: orDash(w.Name), Branch: w.Branch,
-			Ahead: w.Ahead, Behind: w.Behind,
+			Ahead: w.Ahead, Behind: w.Behind, Custom: spaceTokens(w),
 		}),
 		Gap:       t.config.UI.Sidebar.Spaces.RowGap,
 		Symbols:   t.config.UI.StatusIndicators == "symbols",
@@ -565,6 +565,18 @@ func attentionPriority(state string, running bool) int {
 		return 1
 	}
 	return 0
+}
+
+// spaceTokens are the values reported about a space, for its $name tokens.
+func spaceTokens(w proto.WorkspaceInfo) map[string]string {
+	if len(w.Tokens) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(w.Tokens))
+	for _, t := range w.Tokens {
+		out[t.Key] = t.Value
+	}
+	return out
 }
 
 // agentLinesLocked lays an agent's entry out as the settings say, herdr's
