@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -229,4 +230,54 @@ func trim(s string) string {
 		return s[:maxOutput] + "\n… (output cut)"
 	}
 	return s
+}
+
+// Build runs a plugin's build steps, in order, writing their output to out as
+// it arrives.
+//
+// A plugin that needs building — the owner's sidebar is a Rust program — is
+// linked from a checkout, and the thing the manifest points at does not exist
+// until this has run. herdr builds on install and refuses to install when a
+// build fails, because a plugin whose binary is missing is one whose every
+// action fails later, somewhere else.
+func Build(installed Installed, env []string, out io.Writer) error {
+	steps := ForThisPlatform(installed.Build, func(s Step) []string { return s.Platforms })
+	for i, step := range steps {
+		fmt.Fprintf(out, "%s: build %d of %d: %s\n",
+			installed.ID, i+1, len(steps), strings.Join(step.Command, " "))
+		if err := runStreaming(installed, step.Command, env, out); err != nil {
+			return fmt.Errorf("plugin %s: build %d of %d failed: %w",
+				installed.ID, i+1, len(steps), err)
+		}
+	}
+	return nil
+}
+
+// runStreaming runs one command with its output going straight to out, which
+// is what a build wants: a compiler's progress is the point of watching it.
+func runStreaming(installed Installed, command, env []string, out io.Writer) error {
+	ctx, cancel := context.WithTimeout(context.Background(), BuildTimeout)
+	defer cancel()
+
+	name, err := resolve(installed.Root, command[0])
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, name, command[1:]...)
+	cmd.Dir = installed.Root
+	cmd.Env = append(append(os.Environ(), env...),
+		EnvPluginRoot+"="+installed.Root, EnvPluginID+"="+installed.ID)
+	cmd.Stdin = nil
+	cmd.Stdout, cmd.Stderr = out, out
+	setGroup(cmd)
+	cmd.Cancel = func() error { return killGroup(cmd) }
+	cmd.WaitDelay = cancelGrace
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("killed after %s", BuildTimeout)
+		}
+		return err
+	}
+	return nil
 }

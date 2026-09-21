@@ -56,6 +56,9 @@ const (
 	MethodAgentWait     = "agent.wait"
 	MethodAgentStart    = "agent.start"
 
+	MethodLayoutExport = "layout.export"
+	MethodLayoutApply  = "layout.apply"
+
 	MethodEventsWait = "events.wait"
 	// MethodEventsSubscribe is in subscribe.go, where the stream is.
 
@@ -492,6 +495,68 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		pend.stream = func(conn net.Conn) error { return a.subscribe(conn, p.Kinds, p.PaneID) }
 		return map[string]any{"type": "subscribed"}, nil
+
+	case MethodLayoutExport:
+		var p struct {
+			TabID string `json:"tab_id"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, ok := parseID("t_", p.TabID)
+		if !ok {
+			return nil, fail("tab_not_found", "tab %s not found", p.TabID)
+		}
+		tree, panes, err := a.srv.ExportLayout(session.TabID(id))
+		if err != nil {
+			return nil, tabErr(p.TabID, err)
+		}
+		return map[string]any{
+			"type": "layout", "tab_id": p.TabID,
+			"tree": tree, "panes": panes,
+		}, nil
+
+	case MethodLayoutApply:
+		var p struct {
+			WorkspaceID string                 `json:"workspace_id"`
+			Name        string                 `json:"name"`
+			Tree        session.LayoutSnapshot `json:"tree"`
+			Panes       []session.PaneSnapshot `json:"panes"`
+			Env         map[string]string      `json:"-"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		ws, ok := parseID("w_", p.WorkspaceID)
+		if !ok {
+			// No space named: the arrangement goes in one of its own, which
+			// is what applying a saved layout usually means.
+			id, err := a.srv.NewWorkspaceIn(p.Name, "")
+			if err != nil {
+				return nil, fail("layout_apply_failed", "%v", err)
+			}
+			ws = uint64(id)
+		}
+		specs := make(map[uint64]server.PaneSpec, len(p.Panes))
+		for _, pane := range p.Panes {
+			specs[pane.ID] = server.PaneSpec{
+				Command: pane.Command, Dir: pane.Dir, Title: pane.Title,
+				Named: pane.Named, Agent: pane.Agent,
+			}
+		}
+		name := p.Name
+		if name == "" {
+			name = "tab 1"
+		}
+		tab, err := a.srv.ApplyLayout(session.WorkspaceID(ws), name, p.Tree, specs,
+			server.PaneSpec{Command: a.shell()})
+		if err != nil {
+			return nil, fail("layout_apply_failed", "%v", err)
+		}
+		return map[string]any{
+			"type": "layout_applied", "workspace_id": WorkspaceID(session.WorkspaceID(ws)),
+			"tab_id": TabID(tab),
+		}, nil
 
 	case MethodEventsWait:
 		var p struct {

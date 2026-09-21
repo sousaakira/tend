@@ -150,6 +150,48 @@ func (s *Session) SnapshotWith(dirs map[PaneID]string, sessions map[PaneID]Agent
 	return snap
 }
 
+// TabLayout is a tab's split tree, in the same shape the state file uses.
+func (s *Session) TabLayout(id TabID) (LayoutSnapshot, bool) {
+	t, ok := s.Tab(id)
+	if !ok {
+		return LayoutSnapshot{}, false
+	}
+	return snapshotNode(t.root), true
+}
+
+// SetLayoutSizes copies the shares of a layout onto a tab that already has the
+// same shape, which is how a layout applied by rebuilding it gets the
+// proportions it was exported with.
+func (s *Session) SetLayoutSizes(id TabID, spec LayoutSnapshot) error {
+	t, ok := s.Tab(id)
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchTab, id)
+	}
+	return copySizes(t.root, spec)
+}
+
+func copySizes(n *node, spec LayoutSnapshot) error {
+	if n == nil {
+		return nil
+	}
+	if len(n.kids) == 0 || len(spec.Kids) == 0 {
+		return nil
+	}
+	if len(n.kids) != len(spec.Kids) {
+		return fmt.Errorf("session: the layout has %d children where the tab has %d",
+			len(spec.Kids), len(n.kids))
+	}
+	if len(spec.Sizes) == len(n.kids) {
+		n.sizes = append([]float64(nil), spec.Sizes...)
+	}
+	for i, kid := range n.kids {
+		if err := copySizes(kid, spec.Kids[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func snapshotNode(n *node) LayoutSnapshot {
 	if n == nil {
 		return LayoutSnapshot{}

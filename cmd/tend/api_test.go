@@ -441,3 +441,50 @@ func TestFollowingASessionsEventsFromTheShell(t *testing.T) {
 		t.Error("no event arrived on the stream")
 	}
 }
+
+// TestSavingAndRebuildingALayoutFromTheShell: setting up a session by hand
+// every morning is the thing a layout file exists to stop.
+func TestSavingAndRebuildingALayoutFromTheShell(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	if out, err := run("new", "-s", "lay", "--", "/bin/sh"); err != nil {
+		t.Fatalf("tend new: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { stopSession(t, "lay") })
+	if out, err := run("api", "-s", "lay", "pane.split",
+		`{"pane_id":"p_1","direction":"down","command":["/bin/sh","-c","sleep 30"]}`); err != nil {
+		t.Fatalf("split: %v\n%s", err, out)
+	}
+
+	file := filepath.Join(t.TempDir(), "layout.json")
+	if out, err := run("layout", "save", "-s", "lay", "-o", file); err != nil {
+		t.Fatalf("layout save: %v\n%s", err, out)
+	}
+	saved, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(saved), `"tree"`) || !strings.Contains(string(saved), "sleep 30") {
+		t.Fatalf("the saved layout does not describe the tab:\n%s", saved)
+	}
+
+	if out, err := run("layout", "apply", "-s", "lay", file, "-name", "rebuilt"); err != nil {
+		t.Fatalf("layout apply: %v\n%s", err, out)
+	}
+	out, err := run("api", "-s", "lay", "session.snapshot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(out, `"pane_id"`) < 4 {
+		t.Errorf("the rebuilt arrangement is not there:\n%s", out)
+	}
+}

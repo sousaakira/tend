@@ -18,6 +18,7 @@ var commands = []struct{ name, help string }{
 	{"handoff", "replace a session's server, keeping its programs"},
 	{"agent", "drive an agent: read, prompt, wait"},
 	{"pane", "drive a pane: read, type, wait"},
+	{"layout", "save or rebuild a tab's arrangement"},
 	{"events", "follow a session's events"},
 	{"api", "call the automation socket directly"},
 	{"plugin", "install and run plugins"},

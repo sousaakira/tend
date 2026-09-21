@@ -228,6 +228,14 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a file and opens `$EDITOR` on it in a pane of its own — herdr's
   `EditScrollback`. The file is removed by the command that opened it, so
   nothing has to remember it.
+- **Layouts**: `tend layout save [tab] [-o file]` writes a tab's shape and
+  what each pane runs; `tend layout apply <file>` builds it again in a space
+  of its own. `layout.export` and `layout.apply` over the socket. tend's tree
+  is n-ary where herdr's is binary, so the saved shape is tend's own.
+- **Plugin builds**: `tend plugin link` runs the manifest's `[[build]]` steps
+  and unlinks the plugin if one fails — a plugin whose binary does not exist
+  is one whose every action fails later, somewhere else. `tend plugin build`
+  runs them again.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -315,7 +323,7 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
-- `layout.export|apply`, `pane.move|swap|neighbor|edges|zoom|process_info`,
+- `pane.move|neighbor|edges|zoom|process_info`,
   `agent.explain|rename|view.*`, `worktree.*`, `plugin.*`, `command.invoke`,
   `notification.show`, graphics, `pane.report_metadata`.
 - A published schema (`herdr api schema`, `schemars`), which plugins read.
@@ -333,8 +341,6 @@ The host is ported (see "Ported, and checked"). Left:
   `tab.focused`) now exist; running it still needs its manifest renamed to
   `tend-plugin.toml`, its `herdr` calls pointed at `tend`, and whatever of
   herdr's API it uses that tend does not have.
-- `build` steps are parsed and not run: nothing yet decides when to build.
-  herdr builds on install.
 - Installing from a URL or GitHub (`plugin install`), the marketplace, popups
   as a placement, `link_handlers`, `plugin.log.list`, `min_herdr_version`
   enforcement (tend's builds have no ordering to compare against).

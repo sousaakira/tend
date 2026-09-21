@@ -205,3 +205,71 @@ func TestACommandThatHangsIsKilled(t *testing.T) {
 		t.Fatal("the wait outlived the command it was waiting for")
 	}
 }
+
+// TestLinkingBuildsThePlugin: a plugin linked from a checkout has not been
+// built yet, so the binary its manifest points at does not exist. Without
+// this, every action it offers fails later, somewhere else.
+func TestLinkingBuildsThePlugin(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, ManifestName, `
+id = "builds"
+name = "builds"
+version = "1"
+
+[[build]]
+command = ["/bin/sh", "-c", "printf 'built\n' > made.txt; printf 'compiling…\n'"]
+`, 0o600)
+
+	r, err := OpenRegistry(filepath.Join(t.TempDir(), "p.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installed, err := r.Link(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	if err := Build(installed, nil, &out); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if made, err := os.ReadFile(filepath.Join(dir, "made.txt")); err != nil || string(made) != "built\n" {
+		t.Errorf("the build did not run in the plugin's own directory: %q, %v", made, err)
+	}
+	// Watched rather than swallowed: a compiler's progress is the point of
+	// standing there while it runs.
+	if !strings.Contains(out.String(), "compiling…") {
+		t.Errorf("the build's output was not passed on:\n%s", out.String())
+	}
+}
+
+// TestABuildThatFailsIsReported, with what it printed — the reason is in the
+// compiler's own words and nowhere else.
+func TestABuildThatFailsIsReported(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, ManifestName, `
+id = "broken"
+name = "broken"
+version = "1"
+
+[[build]]
+command = ["/bin/sh", "-c", "printf 'no such crate\n' >&2; exit 3"]
+`, 0o600)
+
+	r, _ := OpenRegistry(filepath.Join(t.TempDir(), "p.json"))
+	installed, err := r.Link(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	err = Build(installed, nil, &out)
+	if err == nil {
+		t.Fatal("a build that exited 3 was reported as working")
+	}
+	if !strings.Contains(err.Error(), "broken") {
+		t.Errorf("the error does not name the plugin: %v", err)
+	}
+	if !strings.Contains(out.String(), "no such crate") {
+		t.Errorf("what the build said was lost:\n%s", out.String())
+	}
+}

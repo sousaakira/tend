@@ -80,6 +80,7 @@ func runPlugin(args []string) error {
 			"usage: tend plugin <command>\n\n"+
 				"  list                     installed plugins\n"+
 				"  link <directory>         install the plugin in that directory\n"+
+				"  build <id>               run its build steps again\n"+
 				"  unlink <id>              forget it (its files are left alone)\n"+
 				"  enable <id> | disable <id>\n"+
 				"  reload <id>              re-read its manifest after editing it\n"+
@@ -126,16 +127,37 @@ func runPlugin(args []string) error {
 		return nil
 
 	case "link":
-		if len(rest) == 0 {
+		fs := flag.NewFlagSet("plugin link", flag.ExitOnError)
+		skipBuild := fs.Bool("no-build", false, "record it without running its build steps")
+		rest = hoistFlags(rest, map[string]bool{"no-build": false})
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
 			return errors.New("usage: tend plugin link <directory>")
 		}
 		registry, err := openRegistry()
 		if err != nil {
 			return err
 		}
-		installed, err := registry.Link(rest[0])
+		installed, err := registry.Link(fs.Arg(0))
 		if err != nil {
 			return err
+		}
+		if !*skipBuild && len(installed.Build) > 0 {
+			// Built before it is called useful: a plugin whose binary does
+			// not exist yet is one whose every action fails later, somewhere
+			// else. A failure unlinks it rather than leaving a plugin that
+			// cannot run.
+			if err := plugin.Build(installed, nil, os.Stderr); err != nil {
+				_ = registry.Unlink(installed.ID)
+				return err
+			}
+			// Re-read: a build that writes the manifest — generating its own
+			// actions, say — has changed what was recorded a moment ago.
+			if updated, err := registry.Reload(installed.ID); err == nil {
+				installed = updated
+			}
 		}
 		fmt.Fprintf(os.Stderr, "%s linked %s %s from %s\n", tag(), installed.ID, installed.Version, installed.Root)
 		for _, w := range installed.Warnings {
@@ -145,6 +167,24 @@ func runPlugin(args []string) error {
 		// and will not see this until it re-reads it.
 		fmt.Fprintf(os.Stderr, "%s restart the session's server for a running session to pick it up\n", tag())
 		return nil
+
+	case "build":
+		if len(rest) == 0 {
+			return errors.New("usage: tend plugin build <id>")
+		}
+		registry, err := openRegistry()
+		if err != nil {
+			return err
+		}
+		installed, ok := registry.Get(rest[0])
+		if !ok {
+			return fmt.Errorf("no plugin called %q is installed", rest[0])
+		}
+		if len(installed.Build) == 0 {
+			fmt.Fprintf(os.Stderr, "%s %s has no build steps\n", tag(), installed.ID)
+			return nil
+		}
+		return plugin.Build(installed, nil, os.Stderr)
 
 	case "unlink", "enable", "disable", "reload":
 		if len(rest) == 0 {

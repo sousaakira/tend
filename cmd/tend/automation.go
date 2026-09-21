@@ -196,6 +196,95 @@ func runEvents(args []string) error {
 	return lines.Err()
 }
 
+// runLayout saves a tab's arrangement to a file, or builds one from it.
+func runLayout(args []string) error {
+	usage := func(w io.Writer) {
+		fmt.Fprint(w,
+			"usage: tend layout save [tab] [-o file]\n"+
+				"       tend layout apply <file> [-name …]\n\n"+
+				"saves the shape of a tab and what each pane runs, or builds that\n"+
+				"arrangement again in a space of its own.\n\n")
+	}
+	if len(args) == 0 {
+		usage(os.Stderr)
+		return errors.New("no command given")
+	}
+	sub, rest := args[0], args[1:]
+
+	fs := flag.NewFlagSet("layout "+sub, flag.ExitOnError)
+	name := sessionFlag(fs)
+	out := fs.String("o", "", "write to this file instead of standard output")
+	label := fs.String("name", "", "what to call the tab that is built")
+	rest = hoistFlags(rest, map[string]bool{"o": true, "name": true, "s": true, "session": true})
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+
+	switch sub {
+	case "save":
+		tab := fs.Arg(0)
+		if tab == "" {
+			// The first tab, which is what somebody in a one-tab session
+			// means by "this arrangement".
+			tabs, err := apiCall(*name, api.MethodTabList, nil, false)
+			if err != nil {
+				return err
+			}
+			list, _ := tabs["tabs"].([]any)
+			if len(list) == 0 {
+				return errors.New("the session has no tabs")
+			}
+			first, _ := list[0].(map[string]any)
+			tab = text(first["tab_id"])
+		}
+		result, err := apiCall(*name, api.MethodLayoutExport, map[string]any{"tab_id": tab}, false)
+		if err != nil {
+			return err
+		}
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			return err
+		}
+		data = append(data, '\n')
+		if *out == "" {
+			_, err = os.Stdout.Write(data)
+			return err
+		}
+		if err := os.WriteFile(*out, data, 0o600); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "%s saved %s to %s\n", tag(), tab, *out)
+		return nil
+
+	case "apply":
+		if fs.NArg() == 0 {
+			return errors.New("usage: tend layout apply <file>")
+		}
+		data, err := os.ReadFile(fs.Arg(0))
+		if err != nil {
+			return err
+		}
+		var saved map[string]any
+		if err := json.Unmarshal(data, &saved); err != nil {
+			return fmt.Errorf("%s: %w", fs.Arg(0), err)
+		}
+		params := map[string]any{"tree": saved["tree"], "panes": saved["panes"]}
+		if *label != "" {
+			params["name"] = *label
+		}
+		result, err := apiCall(*name, api.MethodLayoutApply, params, true)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "%s built %s in %s\n", tag(),
+			text(result["tab_id"]), text(result["workspace_id"]))
+		return nil
+	}
+
+	usage(os.Stderr)
+	return fmt.Errorf("unknown command %q", sub)
+}
+
 // runAPI is the escape hatch: any method, params as JSON.
 func runAPI(args []string) error {
 	fs := flag.NewFlagSet("api", flag.ExitOnError)

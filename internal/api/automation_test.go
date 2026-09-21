@@ -242,3 +242,53 @@ func text(v any) string {
 	s, _ := v.(string)
 	return s
 }
+
+// TestALayoutCanBeSavedAndBuiltAgain: an arrangement somebody set up — panes
+// in a shape, each in its own directory — is worth having back tomorrow. If
+// it regresses, setting up a session is hand work every time.
+func TestALayoutCanBeSavedAndBuiltAgain(t *testing.T) {
+	h := start(t)
+	pane := PaneID(h.pane)
+
+	// Two more panes, so the shape is worth exporting.
+	for i := 0; i < 2; i++ {
+		result(t, call(t, h, MethodPaneSplit, map[string]any{
+			"pane_id": pane, "direction": "down", "command": []string{"/bin/sh", "-c", "sleep 30"},
+		}))
+	}
+
+	tabs := result(t, call(t, h, MethodTabList, nil))
+	list, _ := tabs["tabs"].([]any)
+	first, _ := list[0].(map[string]any)
+	tabID := text(first["tab_id"])
+
+	exported := result(t, call(t, h, MethodLayoutExport, map[string]any{"tab_id": tabID}))
+	if exported["tree"] == nil {
+		t.Fatalf("export = %v", exported)
+	}
+	panes, _ := exported["panes"].([]any)
+	if len(panes) != 3 {
+		t.Fatalf("the exported layout has %d panes, want 3", len(panes))
+	}
+
+	applied := result(t, call(t, h, MethodLayoutApply, map[string]any{
+		"name": "rebuilt", "tree": exported["tree"], "panes": exported["panes"],
+	}))
+	if applied["type"] != "layout_applied" {
+		t.Fatalf("apply = %v", applied)
+	}
+
+	// The new tab has the same number of panes, in a space of its own.
+	rebuilt := result(t, call(t, h, MethodTabList, map[string]any{
+		"workspace_id": text(applied["workspace_id"]),
+	}))
+	got, _ := rebuilt["tabs"].([]any)
+	if len(got) != 1 {
+		t.Fatalf("the new space has %d tabs", len(got))
+	}
+	tab, _ := got[0].(map[string]any)
+	inPanes, _ := tab["panes"].([]any)
+	if len(inPanes) != 3 {
+		t.Errorf("the rebuilt tab has %d panes, want 3", len(inPanes))
+	}
+}
