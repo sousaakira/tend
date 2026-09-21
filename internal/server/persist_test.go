@@ -325,3 +325,52 @@ func TestANamedPaneKeepsItsNameAcrossARestart(t *testing.T) {
 		t.Errorf("after restarting, the pane is %q (named %v), want api", title, named)
 	}
 }
+
+// TestTwoPanesInOneConversationResumeOnce is herdr's dedupe_key: when two
+// panes were in the same conversation, only the first is started back in it
+// and the other gets a shell. If it regresses, a restart runs the same agent
+// twice over one history, both writing to it.
+func TestTwoPanesInOneConversationResumeOnce(t *testing.T) {
+	dir := t.TempDir()
+	stateFile := filepath.Join(dir, "session.json")
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "claude"),
+		[]byte("#!/bin/sh\nprintf 'resumed: %s\\n' \"$*\"\nsleep 30\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SHELL", "/bin/sh")
+
+	first := persistentServer(t, stateFile)
+	ws, _ := first.NewWorkspace("main")
+	var panes []session.PaneID
+	for range 2 {
+		_, pane, err := first.NewTab(ws, "t", PaneSpec{
+			Command: []string{"/bin/sh", "-c", "sleep 30"}, Agent: "claude",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := first.ReportAgentSession(pane, "tend:claude", "claude",
+			agent.SessionRefFromReport("tend:claude", "claude", "shared-7", ""), nil); err != nil {
+			t.Fatal(err)
+		}
+		panes = append(panes, pane)
+	}
+	first.saveStructure()
+	_ = first.Close()
+
+	second := persistentServer(t, stateFile)
+	waitFor(t, "both panes back", func() bool { return len(second.Statuses()) == 2 })
+	var resumes int
+	second.Session(func(sess *session.Session) {
+		for _, id := range panes {
+			if p, ok := sess.Pane(id); ok && len(p.Command) > 1 && p.Command[1] == "--resume" {
+				resumes++
+			}
+		}
+	})
+	if resumes != 1 {
+		t.Errorf("%d panes resumed shared-7, want exactly one", resumes)
+	}
+}

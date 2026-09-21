@@ -223,6 +223,7 @@ func runServe(args []string) error {
 		StateFile:      stateFile,
 		DetectInterval: detect,
 		Scrollback:     cfg.Scrollback(),
+		Shell:          cfg.Shell(),
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},
 	}
 

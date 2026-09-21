@@ -221,6 +221,9 @@ type Config struct {
 	// server runs none, which is what a test that does not care about them
 	// gets.
 	Plugins *Plugins
+	// Shell is what a pane runs when there is nothing else for it to run.
+	// Nil falls back to $SHELL, then /bin/sh.
+	Shell []string
 	// CommandEnv is added to the environment of a command the server runs
 	// for the user — a tab bar entry — so it can call back on the automation
 	// socket. Nil adds nothing.

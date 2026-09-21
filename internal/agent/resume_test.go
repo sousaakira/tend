@@ -57,3 +57,21 @@ func TestAResumeOnlyComesFromTheIntegrationWeShipped(t *testing.T) {
 		t.Error("an agent with no resume flag got one")
 	}
 }
+
+// TestCodexResumeTypedByHandIsRemembered is herdr's
+// persisted_session_from_launch_args: exactly `codex resume <id>` names the
+// conversation, and nothing else does.
+func TestCodexResumeTypedByHandIsRemembered(t *testing.T) {
+	p, ok := SessionFromLaunch([]string{"codex", "resume", "0199-abc"})
+	if !ok || p.Agent != "codex" || p.Session.ID != "0199-abc" {
+		t.Errorf("got %+v, %v", p, ok)
+	}
+	for _, argv := range [][]string{
+		{"codex", "resume", "--last"}, {"codex", "resume"}, {"claude", "resume", "x"},
+		{"codex", "resume", "x", "extra"},
+	} {
+		if _, ok := SessionFromLaunch(argv); ok {
+			t.Errorf("%v should not name a conversation", argv)
+		}
+	}
+}

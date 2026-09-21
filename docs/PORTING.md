@@ -561,16 +561,13 @@ Keys are rebindable (see "Ported, and checked"). Left:
   herdr it takes an id from the thin client's command manifest, and a script
   on tend's socket can run the command itself.
 
-### 12. Agent session resume — done for a restored pane
+### 12. Agent session resume — done
 
 Ported (see "Ported, and checked"). Left:
 
-- herdr's deduplication (`dedupe_key`): two panes restored into the same
-  conversation. tend restores each pane with what its own hook reported.
-- Resuming from the launch command (`persisted_session_from_launch_args`):
-  herdr notices `codex resume <id>` typed by hand and remembers it.
-- `agent.start` does not take a session to resume; a script that wants one
-  passes the flag itself.
+- Nothing known. herdr's `dedupe_key` (two panes in one conversation: the
+  first resumes, the other gets a shell) and `codex resume <id>` through
+  `agent.start` naming the conversation are both ported.
 
 ### 13. Kitty graphics — the path works; the hard parts of herdr's are not here
 

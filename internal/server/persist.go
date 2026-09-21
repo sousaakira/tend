@@ -92,13 +92,28 @@ func (s *Server) restore() {
 	s.session = restored
 	s.lastSaved = data
 
+	// Conversations already being resumed in this pass: two panes that were
+	// in the same one must not both be started back in it (herdr's
+	// dedupe_key), or the agent is running twice over one history.
+	resumed := make(map[string]bool)
 	for _, ws := range snap.Workspaces {
 		for _, tab := range ws.Tabs {
 			for _, p := range tab.Panes {
-				s.restartPaneLocked(p, history[p.ID])
+				s.restartPaneLocked(p, history[p.ID], resumed)
 			}
 		}
 	}
+}
+
+// shell is what a pane runs when there is nothing else.
+func (s *Server) shell() []string {
+	if len(s.cfg.Shell) > 0 {
+		return append([]string(nil), s.cfg.Shell...)
+	}
+	if sh := os.Getenv("SHELL"); sh != "" {
+		return []string{sh}
+	}
+	return []string{"/bin/sh"}
 }
 
 // restartPaneLocked starts a restored pane's process, under its old scrollback.
@@ -108,7 +123,7 @@ func (s *Server) restore() {
 // without one. A command that cannot be started at all is a pane that cannot
 // exist, and it is taken out of the session rather than left as a record with
 // nothing behind it.
-func (s *Server) restartPaneLocked(p session.PaneSnapshot, past paneHistory) {
+func (s *Server) restartPaneLocked(p session.PaneSnapshot, past paneHistory, resumed map[string]bool) {
 	id := session.PaneID(p.ID)
 	spec := PaneSpec{
 		Command: p.Command,
@@ -127,10 +142,20 @@ func (s *Server) restartPaneLocked(p session.PaneSnapshot, past paneHistory) {
 			Source: p.Session.Source, Agent: p.Session.Agent,
 			Session: agent.SessionRef{ID: p.Session.ID, Path: p.Session.Path},
 		}
+		key := p.Session.Source + "\x00" + p.Session.Agent + "\x00" + p.Session.ID + "\x00" + p.Session.Path
 		if argv, ok := agent.Resume(persisted); ok {
-			spec.Command = argv
-			spec.Agent = p.Session.Agent
-			spec.resume = &persisted
+			if resumed[key] {
+				// Another pane is already being started back in this
+				// conversation. This one gets a shell: its saved command
+				// is the resume itself, and running it would be the same
+				// agent twice over one history.
+				spec.Command, spec.Agent = s.shell(), ""
+			} else {
+				resumed[key] = true
+				spec.Command = argv
+				spec.Agent = p.Session.Agent
+				spec.resume = &persisted
+			}
 		}
 	}
 

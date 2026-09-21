@@ -107,3 +107,18 @@ func Resume(p PersistedSession) ([]string, bool) {
 	}
 	return argv, true
 }
+
+// SessionFromLaunch is herdr's persisted_session_from_launch_args: an agent
+// started as `codex resume <id>` is in that conversation from the start.
+// Only codex, and only exactly that shape, as herdr has it.
+func SessionFromLaunch(argv []string) (PersistedSession, bool) {
+	if len(argv) != 3 || filepath.Base(argv[0]) != "codex" || argv[1] != "resume" ||
+		strings.HasPrefix(argv[2], "-") {
+		return PersistedSession{}, false
+	}
+	ref := SessionRefFromReport("tend:codex", "codex", argv[2], "")
+	if ref.Empty() {
+		return PersistedSession{}, false
+	}
+	return PersistedSession{Source: "tend:codex", Agent: "codex", Session: ref}, true
+}

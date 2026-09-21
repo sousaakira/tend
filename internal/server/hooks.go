@@ -94,6 +94,21 @@ func (s *Server) AgentSession(id session.PaneID) (agent.PersistedSession, bool, 
 	return p, ok, nil
 }
 
+// RememberAgentSession gives a pane a conversation before any hook has named
+// one, as agent.start does for `codex resume <id>` (herdr's
+// persisted_session_from_launch_args): a restart before the first report
+// would otherwise start codex fresh.
+func (s *Server) RememberAgentSession(id session.PaneID, p agent.PersistedSession) error {
+	rt, err := s.runtime(id)
+	if err != nil {
+		return err
+	}
+	rt.mu.Lock()
+	rt.arbiter.RestoreSession(p)
+	rt.mu.Unlock()
+	return nil
+}
+
 // hooked applies fn to a pane's arbiter and passes on whatever that changed.
 func (s *Server) hooked(id session.PaneID, fn func(*agent.Arbiter) bool) (bool, error) {
 	rt, err := s.runtime(id)

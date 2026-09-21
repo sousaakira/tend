@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/pty"
@@ -527,6 +528,9 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		// foreground process as it does for any other pane.
 		if err := a.srv.Submit(id, strings.Join(argv, " ")); err != nil {
 			return nil, paneErr(p.PaneID, err)
+		}
+		if known, ok := agent.SessionFromLaunch(argv); ok {
+			_ = a.srv.RememberAgentSession(id, known)
 		}
 		return map[string]any{"type": "agent_started", "pane_id": p.PaneID, "argv": argv}, nil
 
