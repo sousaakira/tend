@@ -66,3 +66,96 @@ func foregroundGroup(f *os.File) (int, error) {
 	}
 	return int(pgrp), nil
 }
+
+// Process is one process in the terminal's foreground group.
+type Process struct {
+	Pid     int      `json:"pid"`
+	Name    string   `json:"name"`
+	Command []string `json:"argv,omitempty"`
+}
+
+// ProcessInfo is what the terminal knows about who is running in it: the shell
+// it was started with, the process group in charge of it now, and the
+// processes in that group. herdr reports the same (`pane.process_info`).
+type ProcessInfo struct {
+	ShellPid        int       `json:"shell_pid"`
+	ForegroundGroup int       `json:"foreground_process_group_id,omitempty"`
+	TTY             string    `json:"tty,omitempty"`
+	Foreground      []Process `json:"foreground_processes,omitempty"`
+}
+
+// maxForegroundProcesses bounds the walk through /proc: a group of thousands is
+// a build system mid-flight, and the first few are what anybody looks at.
+const maxForegroundProcesses = 64
+
+// Processes reads the terminal's foreground group from /proc.
+func (p *Pty) Processes() ProcessInfo {
+	info := ProcessInfo{ShellPid: p.pid}
+	if p.f == nil {
+		return info
+	}
+	if pgrp, err := foregroundGroup(p.f); err == nil && pgrp > 0 {
+		info.ForegroundGroup = pgrp
+	}
+	if link, err := os.Readlink("/proc/" + strconv.Itoa(p.pid) + "/fd/0"); err == nil {
+		info.TTY = link
+	}
+	if info.ForegroundGroup == 0 {
+		return info
+	}
+
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return info
+	}
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		if processGroup(pid) != info.ForegroundGroup {
+			continue
+		}
+		proc := Process{Pid: pid}
+		if name, err := os.ReadFile("/proc/" + e.Name() + "/comm"); err == nil {
+			proc.Name = strings.TrimSpace(string(name))
+		}
+		if cmdline, err := os.ReadFile("/proc/" + e.Name() + "/cmdline"); err == nil {
+			for _, arg := range strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00") {
+				if arg != "" {
+					proc.Command = append(proc.Command, arg)
+				}
+			}
+		}
+		info.Foreground = append(info.Foreground, proc)
+		if len(info.Foreground) >= maxForegroundProcesses {
+			break
+		}
+	}
+	return info
+}
+
+// processGroup reads a process's group from /proc/<pid>/stat. The name field
+// is in parentheses and may itself contain spaces and parentheses, so the
+// fields are counted from the last ")".
+func processGroup(pid int) int {
+	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return 0
+	}
+	s := string(stat)
+	end := strings.LastIndexByte(s, ')')
+	if end < 0 || end+2 >= len(s) {
+		return 0
+	}
+	fields := strings.Fields(s[end+2:])
+	// state ppid pgrp ...
+	if len(fields) < 3 {
+		return 0
+	}
+	pgrp, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return 0
+	}
+	return pgrp
+}

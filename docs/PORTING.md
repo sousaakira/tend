@@ -228,6 +228,12 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a file and opens `$EDITOR` on it in a pane of its own — herdr's
   `EditScrollback`. The file is removed by the command that opened it, so
   nothing has to remember it.
+- **Questions about a pane's place**: `pane.neighbor`, `pane.edges` and
+  `pane.process_info` — which pane is beside it, which edges of the tab it
+  touches, and what is running in it (the shell, the foreground process group,
+  the tty and each process with its arguments, read from /proc). Geometry is
+  asked of the layout at a nominal size, since which pane is beside which does
+  not depend on any window. Checked against a real `sleep 40 | cat`.
 - **Worktrees from the client**: the space menu has "new worktree…", which
   asks for the branch with a generated name already in the box (herdr's
   create overlay), "open worktree…", which lists the repository's worktrees,
@@ -278,7 +284,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Forced selection | none inside a mouse-holding program | alt+drag selects a block anywhere | fallback for programs that hold the mouse and do nothing with a drag |
 | Clipboard | OSC 52 only | local tool (`wl-copy`/`xclip`/`xsel`/`pbcopy`) when not over ssh, plus OSC 52 always | the owner's terminal refuses OSC 52 |
 | Handoff transport | pty descriptors sent as `SCM_RIGHTS` over a socket; the new server binds the socket afresh | descriptors inherited by the child (`exec.Cmd.ExtraFiles`) at fixed numbers, the **listening socket included** | inheritance needs no protocol, and handing the listener over means the socket file is never removed and recreated — there is no instant with nobody listening |
-| Focus and scroll over the API | `pane.focus`, `agent.focus`, `pane.scroll`, `pane.current` are server methods | not offered | in tend these are client state (AGENTS.md: what one person is looking at stays in the client), so the server has no focus to set and would be answering for a client that may not be attached |
+| Focus, scroll and zoom over the API | `pane.focus`, `agent.focus`, `pane.scroll`, `pane.zoom`, `pane.current` are server methods | not offered (a client reports focus with `pane.focus`, which only tells programs and plugins) | in tend these are client state (AGENTS.md: what one person is looking at stays in the client), so the server has no focus to set and would be answering for a client that may not be attached |
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
 | Claude / JSONC settings | `jsonc_parser` preserves comments and compact layout | `encoding/json`; comments lost and **keys re-sorted alphabetically** on rewrite (content otherwise identical — checked against the owner's real 44 KB `settings.json`: install adds one `SessionStart` entry, a second install adds nothing, uninstall restores it exactly) | avoid a new dependency; invalid JSON is an error, not silently stripped |
 | Integration assets | `.sh` and `.ps1` | Unix `.sh` / `.js` / `.ts` / Hermes plugin only | Windows PowerShell assets not ported yet; platform code is compile-gated when they are |
@@ -350,7 +356,7 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
-- `pane.neighbor|edges|zoom|process_info`, `agent.rename|view.*`,
+- `agent.rename|view.*`,
   `command.invoke`, and the graphics API.
 - A published schema (`herdr api schema`, `schemars`), which plugins read.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,

@@ -66,6 +66,9 @@ const (
 	// MethodEventsSubscribe is in subscribe.go, where the stream is.
 
 	MethodPaneMove      = "pane.move"
+	MethodPaneNeighbor  = "pane.neighbor"
+	MethodPaneEdges     = "pane.edges"
+	MethodPaneProcesses = "pane.process_info"
 	MethodPaneSwap      = "pane.swap"
 	MethodTabMove       = "tab.move"
 	MethodWorkspaceMove = "workspace.move"
@@ -587,6 +590,70 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			return nil, err
 		}
 		return a.eventsWait(p.Kinds, p.PaneID, p.TimeoutMs)
+
+	case MethodPaneNeighbor:
+		var p struct {
+			PaneID    string `json:"pane_id"`
+			Direction string `json:"direction"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		side, ok := sides[p.Direction]
+		if !ok {
+			return nil, fail("invalid_params", "direction %q is not left, right, up or down", p.Direction)
+		}
+		other, err := a.srv.Neighbor(id, side)
+		if err != nil {
+			return nil, paneErr(p.PaneID, err)
+		}
+		out := map[string]any{"type": "pane_neighbor", "pane_id": p.PaneID, "direction": p.Direction}
+		if other != 0 {
+			out["neighbor_pane_id"] = PaneID(other)
+		}
+		return out, nil
+
+	case MethodPaneEdges:
+		var p struct {
+			PaneID string `json:"pane_id"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		edges, err := a.srv.Edges(id)
+		if err != nil {
+			return nil, paneErr(p.PaneID, err)
+		}
+		out := map[string]any{"type": "pane_edges", "pane_id": p.PaneID}
+		for side, touches := range edges {
+			out[side] = touches
+		}
+		return out, nil
+
+	case MethodPaneProcesses:
+		var p struct {
+			PaneID string `json:"pane_id"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		info, err := a.srv.ProcessInfo(id)
+		if err != nil {
+			return nil, paneErr(p.PaneID, err)
+		}
+		return map[string]any{"type": "pane_process_info", "pane_id": p.PaneID, "process": info}, nil
 
 	case MethodPaneMove:
 		var p struct {

@@ -384,3 +384,36 @@ func TestExplainingWhyAnAgentIsShownAsItIs(t *testing.T) {
 		t.Errorf("source = %q, want the hook", explain["source"])
 	}
 }
+
+// TestAPluginCanFindItsWayAroundATab: a plugin that docks a panel on the edge
+// of a tab needs to know which pane is on the edge and what is beside what;
+// one that reacts to what is running needs to know what that is.
+func TestAPluginCanFindItsWayAroundATab(t *testing.T) {
+	h := start(t)
+	left := PaneID(h.pane)
+	made := result(t, call(t, h, MethodPaneSplit, map[string]any{
+		"pane_id": left, "direction": "right", "command": []string{"/bin/sh", "-c", "sleep 30"},
+	}))
+	pane, _ := made["pane"].(map[string]any)
+	right := text(pane["pane_id"])
+
+	n := result(t, call(t, h, MethodPaneNeighbor, map[string]any{"pane_id": left, "direction": "right"}))
+	if text(n["neighbor_pane_id"]) != right {
+		t.Errorf("the pane right of %s is %v, want %s", left, n["neighbor_pane_id"], right)
+	}
+	n = result(t, call(t, h, MethodPaneNeighbor, map[string]any{"pane_id": left, "direction": "left"}))
+	if _, has := n["neighbor_pane_id"]; has {
+		t.Errorf("a pane on the tab's left edge has a neighbour to its left: %v", n)
+	}
+
+	e := result(t, call(t, h, MethodPaneEdges, map[string]any{"pane_id": left}))
+	if e["left"] != true || e["right"] != false || e["up"] != true || e["down"] != true {
+		t.Errorf("edges of the left pane = %v", e)
+	}
+
+	info := result(t, call(t, h, MethodPaneProcesses, map[string]any{"pane_id": right}))
+	proc, _ := info["process"].(map[string]any)
+	if proc["shell_pid"] == nil || proc["shell_pid"] == float64(0) {
+		t.Errorf("process info = %v", proc)
+	}
+}
