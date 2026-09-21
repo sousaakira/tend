@@ -54,6 +54,10 @@ type Pane struct {
 	Agent string
 	// State is the last detected agent state.
 	State detect.State
+	// AgentName is what a script calls the agent in this pane (herdr's agent
+	// name): a handle that stays when two panes run the same agent and the
+	// agent's own label no longer says which is meant.
+	AgentName string
 	// Unseen marks an agent that finished — went from working or blocked to
 	// idle — while nobody was looking at its tab: herdr's "done", the one
 	// thing a list of idle agents cannot otherwise tell apart. It clears when

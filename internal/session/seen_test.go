@@ -50,3 +50,19 @@ func TestAnAgentThatFinishesUnwatchedIsUnseen(t *testing.T) {
 		t.Error("unknown to idle is not a finish")
 	}
 }
+
+// TestAnAgentsNameIsKeptInTheSnapshot: the name a script gave an agent is
+// how it addresses it; losing it on a restart or a handoff breaks the script
+// on its next call.
+func TestAnAgentsNameIsKeptInTheSnapshot(t *testing.T) {
+	s, _, a, _, _ := threePanes(t)
+	p, _ := s.Pane(a)
+	p.AgentName = "reviewer"
+	restored, err := Restore(s.Snapshot(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := restored.Pane(a); q == nil || q.AgentName != "reviewer" {
+		t.Errorf("restored pane = %+v, want the name kept", q)
+	}
+}

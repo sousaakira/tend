@@ -57,6 +57,7 @@ const (
 	MethodAgentWait     = "agent.wait"
 	MethodAgentStart    = "agent.start"
 	MethodAgentExplain  = "agent.explain"
+	MethodAgentRename   = "agent.rename"
 
 	MethodLayoutExport = "layout.export"
 	MethodLayoutApply  = "layout.apply"
@@ -467,11 +468,38 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		MethodAgentWait, MethodAgentExplain:
 		return a.agentCall(req)
 
+	case MethodAgentRename:
+		var p struct {
+			Target string  `json:"target"`
+			Name   *string `json:"name"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.target(p.Target)
+		if err != nil {
+			return nil, err
+		}
+		name := ""
+		if p.Name != nil {
+			name = *p.Name
+		}
+		if err := a.srv.RenameAgent(id, name); err != nil {
+			return nil, agentNameErr(p.Target, err)
+		}
+		st, err := a.srv.PaneStatus(id)
+		if err != nil {
+			return nil, paneErr(p.Target, err)
+		}
+		return map[string]any{"type": "agent_info", "agent": a.info(st)}, nil
+
 	case MethodAgentStart:
 		var p struct {
 			PaneID  string   `json:"pane_id"`
 			Agent   string   `json:"agent"`
 			Command []string `json:"command"`
+			// Name is what to call the agent, as herdr's agent.start takes.
+			Name string `json:"name"`
 		}
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
@@ -486,6 +514,13 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 				return nil, fail("invalid_params", "name an agent or a command to run")
 			}
 			argv = []string{p.Agent}
+		}
+		if p.Name != "" {
+			// Named before it starts, so a script can address it by name
+			// from its first report on.
+			if err := a.srv.NameAgent(id, p.Name); err != nil {
+				return nil, agentNameErr(p.Name, err)
+			}
 		}
 		// Typed into whatever is in the pane, which is how a person starts an
 		// agent: the shell runs it, and detection picks it up from the
@@ -910,6 +945,19 @@ func (a *API) target(name string) (session.PaneID, error) {
 		return 0, fail("ambiguous_target", "%v", err)
 	}
 	return id, nil
+}
+
+// agentNameErr gives naming's refusals herdr's codes.
+func agentNameErr(target string, err error) error {
+	switch {
+	case errors.Is(err, server.ErrBadAgentName):
+		return fail("invalid_agent_name", "%v", err)
+	case errors.Is(err, server.ErrDuplicateName):
+		return fail("duplicate_agent_name", "%v", err)
+	case errors.Is(err, server.ErrNotAnAgentPane):
+		return fail("not_an_agent", "%v", err)
+	}
+	return paneErr(target, err)
 }
 
 // read answers pane.read and agent.read.

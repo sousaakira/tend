@@ -405,8 +405,10 @@ func runAgent(args []string) error {
 				"  prompt <target> <text>     submit a prompt, optionally waiting for the answer\n"+
 				"  send-keys <target> <key>…  press keys in the agent's pane\n"+
 				"  wait <target>              wait until the agent is idle or blocked\n"+
-				"  explain <target>           why the agent is shown as it is\n\n"+
-				"a target is a pane (\"p_2\", or \"2\") or an agent name when only one pane runs it.\n\n")
+				"  explain <target>           why the agent is shown as it is\n"+
+				"  rename <target> [name]     name the agent, or with no name unname it\n\n"+
+				"a target is a pane (\"p_2\", or \"2\"), a name given with rename, or the\n"+
+				"agent's own name when only one pane runs it.\n\n")
 	}
 	if len(args) == 0 {
 		usage(os.Stderr)
@@ -509,6 +511,25 @@ func runAgent(args []string) error {
 			"target": fs.Arg(0), "keys": fs.Args()[1:],
 		}, false)
 		return err
+
+	case "rename":
+		fs := flag.NewFlagSet("agent rename", flag.ExitOnError)
+		name := sessionFlag(fs)
+		if err := fs.Parse(hoistFlags(rest, map[string]bool{"s": true, "session": true, "ssh": true})); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 || fs.NArg() > 2 {
+			return errors.New("usage: tend agent rename <target> [name]")
+		}
+		params := map[string]any{"target": fs.Arg(0)}
+		if fs.NArg() == 2 {
+			params["name"] = fs.Arg(1)
+		}
+		result, err := apiCall(*name, api.MethodAgentRename, params, false)
+		if err != nil {
+			return err
+		}
+		return printJSON(result["agent"])
 
 	case "explain":
 		fs := flag.NewFlagSet("agent explain", flag.ExitOnError)

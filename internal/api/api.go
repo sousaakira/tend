@@ -126,9 +126,12 @@ func ParsePaneID(s string) (session.PaneID, bool) {
 
 // PaneInfo describes a pane to a script.
 type PaneInfo struct {
-	PaneID  string `json:"pane_id"`
-	Title   string `json:"title,omitempty"`
-	Agent   string `json:"agent,omitempty"`
+	PaneID string `json:"pane_id"`
+	Title  string `json:"title,omitempty"`
+	Agent  string `json:"agent,omitempty"`
+	// Name is what a script called the agent (agent.rename), which it can
+	// then be addressed by.
+	Name    string `json:"name,omitempty"`
 	State   string `json:"agent_state"`
 	Message string `json:"message,omitempty"`
 	Running bool   `json:"running"`
@@ -358,6 +361,7 @@ func (a *API) info(st server.PaneStatus) PaneInfo {
 		PaneID: PaneID(st.ID), Title: st.Title, Agent: st.Agent, State: st.State.String(),
 		Message: st.Message, Running: st.Running, Pid: st.Pid,
 		Display: st.Presentation.DisplayAgent, Tokens: st.Presentation.Tokens,
+		Name: a.srv.AgentName(st.ID),
 	}
 	if p, ok, err := a.srv.AgentSession(st.ID); err == nil && ok {
 		info.AgentSession = &AgentSessionInfo{

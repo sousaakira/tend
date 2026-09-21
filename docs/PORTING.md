@@ -244,6 +244,12 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   behind something is done even in the tab on screen, and is announced even
   though its pane is the focused one; the terminal's theme is asked again
   when the window comes back.
+- **Agent names** (herdr's `agent.rename`, `agent.start` name): a script
+  names the agent in a pane (`tend agent rename p_2 reviewer`,
+  `agent.start` with `name`) and addresses it by that name ahead of the
+  agent's own label; herdr's name rule, `invalid_agent_name`,
+  `duplicate_agent_name`, `not_an_agent`. Kept in the snapshot, so it
+  survives a restart and a handoff.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -427,7 +433,8 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
-- `agent.rename|view.*` and the graphics API. (`command.invoke` is left out
+- `view.*` (saved agent views, herdr's `agent_view.rs`) and the graphics
+  API. (`command.invoke` is left out
   on purpose; see item 11.)
 - A published schema (`herdr api schema`, `schemars`), which plugins read.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,

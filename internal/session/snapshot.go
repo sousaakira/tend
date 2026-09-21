@@ -71,6 +71,9 @@ type PaneSnapshot struct {
 	// wants to come back there, not to where the shell was opened.
 	Dir   string `json:"dir,omitempty"`
 	Agent string `json:"agent,omitempty"`
+	// AgentName is the name a script gave the agent, which it is addressed
+	// by (`tend agent prompt reviewer …`) across a restart as before one.
+	AgentName string `json:"agent_name,omitempty"`
 	// Session names the agent's own conversation, when a hook told tend
 	// which one it was in. It is what lets a restored pane carry on rather
 	// than start over; see internal/agent's Resume.
@@ -136,7 +139,7 @@ func (s *Session) SnapshotWith(dirs map[PaneID]string, sessions map[PaneID]Agent
 				}
 				pane := PaneSnapshot{
 					ID: uint64(p.ID), Title: p.Title, Named: p.Named,
-					Command: p.Command, Dir: dir, Agent: p.Agent,
+					Command: p.Command, Dir: dir, Agent: p.Agent, AgentName: p.AgentName,
 				}
 				if conversation, ok := sessions[id]; ok {
 					pane.Session = &conversation
@@ -241,7 +244,7 @@ func Restore(snap Snapshot) (*Session, error) {
 				}
 				t.panes[id] = &Pane{
 					ID: id, Title: ps.Title, Named: ps.Named,
-					Command: ps.Command, Dir: ps.Dir, Agent: ps.Agent,
+					Command: ps.Command, Dir: ps.Dir, Agent: ps.Agent, AgentName: ps.AgentName,
 					State: detect.StateUnknown,
 				}
 				s.index[id] = t

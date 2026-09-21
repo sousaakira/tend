@@ -173,6 +173,11 @@ func (s *Server) AgentPanes() []PaneStatus {
 // two claudes and a prompt sent to the wrong one is not recoverable.
 func (s *Server) ResolvePaneAgent(name string) (session.PaneID, error) {
 	name = strings.ToLower(strings.TrimSpace(name))
+	// A name a script gave an agent first: it is the one thing that says
+	// which of two claudes is meant.
+	if id, ok := s.agentNamed(name); ok {
+		return id, nil
+	}
 	var found []PaneStatus
 	for _, st := range s.AgentPanes() {
 		if strings.ToLower(st.Agent) == name {

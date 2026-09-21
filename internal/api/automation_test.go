@@ -417,3 +417,45 @@ func TestAPluginCanFindItsWayAroundATab(t *testing.T) {
 		t.Errorf("process info = %v", proc)
 	}
 }
+
+// TestAnAgentCanBeGivenAName is herdr's agent.rename: a name addresses the
+// agent when its own label does not say which pane is meant, a bad or taken
+// name is refused with herdr's codes, and no name takes it away. If it
+// regresses, a script driving two claudes cannot tell them apart.
+func TestAnAgentCanBeGivenAName(t *testing.T) {
+	h := start(t)
+	pane := PaneID(h.pane)
+	result(t, call(t, h, "pane.report_agent", map[string]any{
+		"pane_id": pane, "source": "s", "agent": "claude", "state": "idle", "seq": 1,
+	}))
+
+	res := result(t, call(t, h, MethodAgentRename, map[string]any{"target": pane, "name": "reviewer"}))
+	if got, _ := res["agent"].(map[string]any); got["name"] != "reviewer" {
+		t.Errorf("rename returned %v", got)
+	}
+	res = result(t, call(t, h, MethodAgentGet, map[string]any{"target": "reviewer"}))
+	if got, _ := res["agent"].(map[string]any); got["pane_id"] != pane {
+		t.Errorf("agent.get by the given name returned %v", got)
+	}
+
+	if code := errorCode(call(t, h, MethodAgentRename, map[string]any{"target": pane, "name": "Bad Name"})); code != "invalid_agent_name" {
+		t.Errorf("a bad name gave %q", code)
+	}
+	other := result(t, call(t, h, MethodPaneSplit, map[string]any{"pane_id": pane, "direction": "down", "command": []string{"sleep", "30"}}))
+	otherPane, _ := other["pane"].(map[string]any)
+	otherID, _ := otherPane["pane_id"].(string)
+	if code := errorCode(call(t, h, MethodAgentRename, map[string]any{"target": otherID, "name": "x"})); code != "not_an_agent" {
+		t.Errorf("naming a pane with no agent gave %q", code)
+	}
+	result(t, call(t, h, "pane.report_agent", map[string]any{
+		"pane_id": otherID, "source": "s", "agent": "claude", "state": "idle", "seq": 1,
+	}))
+	if code := errorCode(call(t, h, MethodAgentRename, map[string]any{"target": otherID, "name": "reviewer"})); code != "duplicate_agent_name" {
+		t.Errorf("a taken name gave %q", code)
+	}
+
+	res = result(t, call(t, h, MethodAgentRename, map[string]any{"target": "reviewer"}))
+	if got, _ := res["agent"].(map[string]any); got["name"] != nil {
+		t.Errorf("no name should take it away, got %v", got)
+	}
+}
