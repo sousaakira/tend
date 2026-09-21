@@ -172,6 +172,28 @@ func (t Theme) withPalette(p Palette) Theme {
 	fg(&t.Idle, p.Green)
 	fg(&t.Done, p.Teal)
 	fg(&t.StatusAlert, p.Red)
+
+	if p.PanelBG.IsDefault() {
+		// A palette with no panel colour of its own (terminal) keeps the
+		// reversed bars and panels: without a background there is nothing
+		// else to set them apart from the panes.
+		return t
+	}
+	// herdr's surfaces: bars and panels on panel_bg, what is chosen on the
+	// accent in the panel's own colour (panel_contrast_fg), the entry in view
+	// on active_row_bg (`client/shell/tabs.rs`, `overlays.rs`,
+	// `agent_sidebar.rs`).
+	contrast := p.PanelBG
+	on := func(fg, bg vt.Color, attrs vt.Attr) vt.Style { return vt.Style{FG: fg, BG: bg, Attrs: attrs} }
+	t.Status = on(p.Overlay1, p.PanelBG, 0)
+	t.StatusKey = on(contrast, p.Accent, vt.AttrBold)
+	t.StatusAlert = on(contrast, p.Red, vt.AttrBold)
+	t.Overlay = on(p.Text, p.PanelBG, 0)
+	t.OverlayTitle = on(p.Accent, p.PanelBG, vt.AttrBold)
+	t.Menu = on(p.Text, p.PanelBG, 0)
+	t.MenuTitle = on(p.Accent, p.PanelBG, vt.AttrBold)
+	t.MenuSelected = on(contrast, p.Accent, vt.AttrBold)
+	t.SidebarSelected = on(p.Text, p.ActiveRowBG, vt.AttrBold)
 	return t
 }
 

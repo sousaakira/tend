@@ -9,9 +9,9 @@ import (
 // Palette), with the same names and the same values, so a theme picked here
 // looks the way it does there.
 //
-// tend draws with fewer of them than herdr does. Its panels mark themselves
-// by reversing rather than by a background of their own, so the background
-// tokens are kept for the day they are drawn and read by nothing yet.
+// tend draws with fewer of them than herdr does: the bars, panels and the
+// sidebar's entry in view use panel_bg, accent and active_row_bg, and the
+// finer surfaces (surface0, selection_bg, sidebar_bg) are carried unused.
 type Palette struct {
 	Accent      vt.Color
 	PanelBG     vt.Color

@@ -182,7 +182,9 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   and secondary text, yellow/red/green for states — and the five individual
   colours still override it. The settings screen's first row is the theme,
   as in herdr, and each step along it writes and applies, which is the
-  preview herdr's list gives. `auto_switch` with `dark_name`/`light_name`
+  preview herdr's list gives. A palette with a panel colour draws the bars,
+  menus and panels on it and what is chosen on its accent, as herdr does;
+  the terminal palette, which has none, keeps reverse video. `auto_switch` with `dark_name`/`light_name`
   follows the outer terminal: tend turns on mode 2031 and asks for the scheme
   and the background colour, takes a scheme report over the background's
   luminance as herdr does, and keeps both kinds of answer out of the panes.
@@ -534,10 +536,11 @@ Keys are rebindable (see "Ported, and checked"). Left:
   refused by both.
 - A title set with `tend terminal title set` is held in the server's memory
   only, so a `tend handoff` or a restart forgets it.
-- **The rest of the themes**: the palette's backgrounds (`panel_bg`,
-  `active_row_bg`, `selection_bg`, surfaces) are carried but not drawn —
-  tend's panels mark themselves by reversing, not with a background of their
-  own. Also `[theme.custom]`'s per-token overrides beyond tend's five
+- **The rest of the themes**: the backgrounds are drawn for the bars, menus,
+  panels and the sidebar's entry in view (`panel_bg`, `accent`,
+  `active_row_bg`), but not the finer surfaces — inactive tabs on
+  `surface0`, `selection_bg` for the navigation cursor, `sidebar_bg`. Also
+  `[theme.custom]`'s per-token overrides beyond tend's five
   colours, and its `custom.dark`/`custom.light` variants. herdr asks the
   terminal again when its window regains focus; tend asks at start and on
   reload, and relies on mode 2031 for changes, so a terminal without 2031

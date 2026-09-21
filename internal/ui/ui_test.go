@@ -1875,3 +1875,37 @@ func TestStatusIconsAreHerdrs(t *testing.T) {
 		t.Error("done should have its own colour")
 	}
 }
+
+// TestANamedThemeDrawsItsOwnSurfaces: a palette with a panel colour puts the
+// bars and panels on it, and what is chosen on its accent, as herdr does;
+// one without (terminal) keeps the reversed bars, which are the only thing
+// that sets them apart. If it regresses, a theme recolours the text and
+// leaves the bars in the terminal's own reverse video.
+func TestANamedThemeDrawsItsOwnSurfaces(t *testing.T) {
+	p, _ := PaletteNamed("tokyo-night")
+	th := ThemeFrom(config.Theme{Name: "tokyo-night"})
+	if th.Status.BG != p.PanelBG || th.Status.Attrs&vt.AttrReverse != 0 {
+		t.Errorf("status = %+v, want on panel_bg, not reversed", th.Status)
+	}
+	if th.StatusKey.BG != p.Accent || th.StatusKey.FG != p.PanelBG {
+		t.Errorf("active tab = %+v, want panel colour on the accent", th.StatusKey)
+	}
+	if th.MenuSelected.BG != p.Accent || th.Menu.BG != p.PanelBG {
+		t.Error("the menu should be on panel_bg with its selection on the accent")
+	}
+	if th.SidebarSelected.BG != p.ActiveRowBG {
+		t.Errorf("sidebar band = %+v, want active_row_bg", th.SidebarSelected)
+	}
+
+	term := ThemeFrom(config.Theme{Name: "terminal"})
+	if term.Status.Attrs&vt.AttrReverse == 0 || term.MenuSelected.Attrs&vt.AttrReverse == 0 {
+		t.Error("the terminal palette has no panel colour and should keep reverse video")
+	}
+
+	// And a frame draws with it: the bar's cells carry the panel colour.
+	dst := vt.NewGrid(60, 6, 0)
+	Draw(dst, Frame{Tabs: []Tab{{ID: 1, Name: "a", Active: true}, {ID: 2, Name: "b"}}}, th)
+	if got := dst.Line(0).Cell(59).Style.BG; got != p.PanelBG {
+		t.Errorf("tab bar background = %v, want %v", got, p.PanelBG)
+	}
+}
