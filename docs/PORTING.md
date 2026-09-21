@@ -387,9 +387,11 @@ effort, not a target.
 The handoff itself is ported (see "Ported, and checked"). What herdr builds on
 top of it is not:
 
-- **Handoff as part of updating.** herdr's updater installs and then hands off
-  (`update.rs`, `--handoff`). tend has no updater yet — queue item 14 — so the
-  owner runs `make install` and then `tend handoff`.
+- **Handoff as part of updating** is ported: `tend update -handoff` installs
+  and hands every running session to the new build (herdr's `--handoff`). A
+  server too old to hand off is named and left running; herdr offers to stop
+  it, tend leaves that to the user. `make install` then `tend handoff` is
+  still the way for a build made from source.
 - **Handoff on remote attach** (`remote/attach.rs`, `remote/restart_policy.rs`):
   replacing an outdated server on the far side of `-ssh` before attaching.
 - A server from before this feature cannot hand off — it has no such method —

@@ -268,3 +268,75 @@ func TestTheWindowsFocusIsReadNotTyped(t *testing.T) {
 		t.Errorf("a focus report reached the pane:\n%s", a.text())
 	}
 }
+
+// TestAnUpdateCanMoveRunningSessionsOntoItself is herdr's `update --handoff`
+// end to end: the published build is installed and every running session is
+// handed to it with its programs still running — the same process, not a
+// restart. If it regresses, updating means choosing between the new build
+// and the agents that are mid-task.
+func TestAnUpdateCanMoveRunningSessionsOntoItself(t *testing.T) {
+	// The published build is a real tend, so the replacement can take over.
+	built := buildBinary(t)
+	published, err := os.ReadFile(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(published)
+	mux := http.NewServeMux()
+	var base string
+	mux.HandleFunc("/tend", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(published) })
+	mux.HandleFunc("/latest.json", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"version":"published-build","assets":{%q:%q},"sha256":{%q:%q}}`,
+			update.Platform(), base+"/tend", update.Platform(), hex.EncodeToString(sum[:]))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	base = srv.URL
+
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte("[update]\nmanifest = \""+srv.URL+"/latest.json\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "tend")
+	if err := os.WriteFile(bin, published, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_CONFIG="+configPath, "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("tend %v: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	run("new", "-s", "live", "--", "/bin/sh", "-c", "sleep 60")
+	t.Cleanup(func() {
+		cmd := exec.Command(bin, "kill", "-s", "live", "-server")
+		cmd.Env = env
+		_ = cmd.Run()
+	})
+	pidOf := func() string {
+		out := run("api", "-s", "live", "pane.list")
+		i := strings.Index(out, `"pid":`)
+		if i < 0 {
+			t.Fatalf("no pid in %s", out)
+		}
+		rest := out[i+len(`"pid":`):]
+		return rest[:strings.IndexAny(rest, ",}")]
+	}
+	before := pidOf()
+
+	out := run("update", "-handoff")
+	if !strings.Contains(out, `session "live" is on the new build`) {
+		t.Fatalf("update -handoff said:\n%s", out)
+	}
+	if after := pidOf(); after != before {
+		t.Errorf("the pane's program is %s after the update, was %s: it was restarted, not handed over", after, before)
+	}
+}

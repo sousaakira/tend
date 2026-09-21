@@ -5,8 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/sousaakira/tend/internal/config"
+	"github.com/sousaakira/tend/internal/proto"
+	"github.com/sousaakira/tend/internal/transport"
 	"github.com/sousaakira/tend/internal/update"
 )
 
@@ -20,6 +24,7 @@ import (
 func runUpdate(args []string) error {
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
 	check := fs.Bool("check", false, "say what is published and stop")
+	handoff := fs.Bool("handoff", false, "after installing, move every running session onto the new build, keeping its programs")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(),
 			"usage: tend update [-check]\n\n"+
@@ -84,7 +89,45 @@ func runUpdate(args []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "%s installed %s at %s\n", tag(), release.Version, self)
-	fmt.Fprintf(os.Stderr, "%s run \"tend handoff\" to move running sessions onto it\n", tag())
+	if !*handoff {
+		fmt.Fprintf(os.Stderr, "%s run \"tend handoff\" (or \"tend update -handoff\") to move running sessions onto it\n", tag())
+		return nil
+	}
+	return handoffAll()
+}
+
+// handoffAll moves every running session onto the binary now installed, as
+// herdr's `update --handoff` does. A server too old to hand off is named and
+// left running: replacing it means a restart, which ends its programs, and
+// that is the user's decision, not an updater's.
+func handoffAll() error {
+	names, err := transport.Sessions()
+	if err != nil {
+		return err
+	}
+	sort.Strings(names)
+	var failed []string
+	for _, name := range names {
+		c, err := connect(name, nil)
+		if err != nil {
+			continue // a socket left by a crash, not a running server
+		}
+		err = c.Handoff()
+		_ = c.Close()
+		switch {
+		case err == nil:
+			fmt.Fprintf(os.Stderr, "%s session %q is on the new build, with its panes\n", tag(), name)
+		case errors.Is(err, proto.ErrUnknownMethod):
+			fmt.Fprintf(os.Stderr, "%s session %q runs a server from before handoff; it is left as it is (tend kill -s %s -server restarts it, ending its programs)\n",
+				tag(), name, name)
+		default:
+			fmt.Fprintf(os.Stderr, "%s session %q: %v\n", tag(), name, err)
+			failed = append(failed, name)
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("handoff failed for %s; those servers carry on on the old build", strings.Join(failed, ", "))
+	}
 	return nil
 }
 
