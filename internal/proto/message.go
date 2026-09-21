@@ -55,6 +55,9 @@ const (
 	MethodPaneFocus = "pane.focus"
 	// MethodPaneRename gives a pane a name that its program cannot overwrite.
 	MethodPaneRename = "pane.rename"
+	// MethodPaneEditScrollback opens a pane's history in an editor, in a pane
+	// of its own.
+	MethodPaneEditScrollback = "pane.edit_scrollback"
 	// MethodPaneGraphics fetches the images a pane holds and where they go.
 	MethodPaneGraphics  = "pane.graphics"
 	MethodPaneSwap      = "pane.swap"
@@ -122,6 +125,7 @@ var KnownMethods = []string{
 	MethodServerReloadConfig,
 	MethodPaneFocus,
 	MethodPaneRename,
+	MethodPaneEditScrollback,
 	MethodPaneGraphics,
 	MethodPaneSwap,
 	MethodTabMove,

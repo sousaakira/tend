@@ -434,6 +434,13 @@ func (c *Client) CopySearch(pane uint64, from proto.CopyPoint, query, direction 
 	}, &out)
 }
 
+// EditScrollback opens a pane's history in an editor, in a new pane.
+func (c *Client) EditScrollback(pane uint64) (uint64, error) {
+	var out proto.PaneSplitResult
+	err := c.Call(proto.MethodPaneEditScrollback, proto.PaneScreenParams{Pane: pane}, &out)
+	return out.Pane, err
+}
+
 // RenamePane gives a pane a name of its own.
 func (c *Client) RenamePane(pane uint64, name string) error {
 	return c.Call(proto.MethodPaneRename, proto.PaneRenameParams{Pane: pane, Name: name}, nil)

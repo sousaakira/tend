@@ -53,6 +53,7 @@ var Methods = []string{
 	proto.MethodServerReloadConfig,
 	proto.MethodPaneFocus,
 	proto.MethodPaneRename,
+	proto.MethodPaneEditScrollback,
 	proto.MethodPaneGraphics,
 	proto.MethodPaneSwap,
 	proto.MethodTabMove,
@@ -499,6 +500,14 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 
 	case proto.MethodServerReloadConfig:
 		return c.srv.ReloadFromFile(), nil
+
+	case proto.MethodPaneEditScrollback:
+		var p proto.PaneScreenParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		pane, err := c.srv.EditScrollback(session.PaneID(p.Pane), "")
+		return proto.PaneSplitResult{Pane: uint64(pane)}, err
 
 	case proto.MethodPaneRename:
 		var p proto.PaneRenameParams

@@ -82,7 +82,7 @@ func (t *tui) leaveScroll() {
 	t.scrollPane, t.scrollOffset, t.scrollDepth, t.scrollScreen = 0, 0, 0, nil
 	t.dirty = true
 	t.mu.Unlock()
-	t.painter.Invalidate()
+	t.requestRepaint()
 	t.wakeUp()
 }
 

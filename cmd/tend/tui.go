@@ -204,6 +204,10 @@ type tui struct {
 	// graphics is what this client has drawn on the outer terminal, or nil
 	// when the terminal does not take images.
 	graphics *graphicsState
+	// repaintAll asks the drawing goroutine to throw away what it thinks is
+	// on screen. It is set from anywhere; only that goroutine touches the
+	// painter itself.
+	repaintAll bool
 	// settings is the settings screen while it is open.
 	settings *settingsState
 	// notices is what was last announced about each pane, so an agent that
@@ -360,7 +364,7 @@ func (t *tui) reconnect() error {
 			t.tab, t.focus, t.zoom = 0, 0, false
 			t.mu.Unlock()
 
-			t.painter.Invalidate()
+			t.requestRepaint()
 			if err := t.ensureSession(); err != nil {
 				return err
 			}
@@ -430,7 +434,7 @@ func (t *tui) refresh() error {
 		t.rects, t.focus = nil, 0
 		t.dirty = true
 		t.mu.Unlock()
-		t.painter.Invalidate()
+		t.requestRepaint()
 		t.markDirty()
 		return nil
 	}
@@ -466,7 +470,7 @@ func (t *tui) refresh() error {
 	}
 	_ = focus
 
-	t.painter.Invalidate()
+	t.requestRepaint()
 	t.markDirty()
 	return nil
 }
@@ -613,6 +617,20 @@ func (t *tui) Event(ev proto.Event) {
 	t.markDirty()
 }
 
+// requestRepaint asks the drawing goroutine to throw away what it thinks is on
+// screen and paint everything again.
+//
+// The painter belongs to that goroutine. Invalidating it from anywhere else —
+// a resize signal, an event handler calling refresh — races with a redraw
+// already under way, and one of those crashed the client under load.
+func (t *tui) requestRepaint() {
+	t.mu.Lock()
+	t.repaintAll = true
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+}
+
 // askResync asks the main loop to re-read the session, at most once at a time.
 //
 // It never blocks: this runs on the client's reader goroutine, and the reply
@@ -714,12 +732,25 @@ func (t *tui) paint() error {
 	}
 	t.dirty = false
 	frame := t.buildFrame()
+	cols, rows := t.cols, t.rows
+	repaintAll := t.repaintAll
+	t.repaintAll = false
+
+	// Drawn under the lock, because the frame holds the panes' terminals and
+	// the goroutine reading the server writes them. Everything here is
+	// arithmetic over cells; the writing to the real terminal happens after
+	// the lock is dropped, so a slow write never holds a pane's output up.
+	buf := vt.NewGrid(cols, rows, 0)
+	ui.Draw(buf, frame, t.theme)
+	x, y, visible := ui.CursorPosition(frame, cols, rows)
 	t.mu.Unlock()
 
-	buf := vt.NewGrid(t.cols, t.rows, 0)
-	ui.Draw(buf, frame, t.theme)
+	if repaintAll {
+		// Something changed the size or the theme under this frame, and only
+		// this goroutine may say so to the painter.
+		t.painter.Invalidate()
+	}
 
-	x, y, visible := ui.CursorPosition(frame, t.cols, t.rows)
 	if _, err := os.Stdout.Write(t.painter.Paint(buf, x, y, visible)); err != nil {
 		return err
 	}
@@ -739,7 +770,7 @@ func (t *tui) toggleSidebar() error {
 	t.mu.Unlock()
 	// The panes change shape, so the screen is redrawn whole rather than
 	// patched: every column to the right of the gutter has moved.
-	t.painter.Invalidate()
+	t.requestRepaint()
 	return t.refresh()
 }
 
@@ -1241,7 +1272,7 @@ func (t *tui) command(action ui.Action) error {
 		// Redraw and re-read the settings, herdr's prefix+shift+r. One key
 		// rather than two: a reload redraws anyway, and a redraw that also
 		// picked up an edit is never the wrong answer.
-		t.painter.Invalidate()
+		t.requestRepaint()
 		return t.reloadSettings()
 
 	case ui.CommandSwapLeft, ui.CommandSwapRight, ui.CommandSwapUp, ui.CommandSwapDown:
@@ -1261,6 +1292,19 @@ func (t *tui) command(action ui.Action) error {
 			return err
 		}
 		// Focus is on the pane, not the place, so it went with the pane.
+		return t.refresh()
+
+	case ui.CommandEditScrollback:
+		if focus == 0 {
+			return nil
+		}
+		if _, err := t.client.EditScrollback(focus); err != nil {
+			if t.reportStaleServer(err) {
+				return nil
+			}
+			t.setMessage(err.Error(), true)
+			return nil
+		}
 		return t.refresh()
 
 	case ui.CommandSettings:
@@ -1477,8 +1521,17 @@ func (t *tui) watchResize() func() {
 			case <-done:
 				return
 			case <-ch:
-				t.cols, t.rows = terminalCells()
-				t.painter.Invalidate()
+				// The size and the painter belong to the drawing goroutine.
+				// Writing them here raced with a redraw already under way,
+				// which could leave the painter comparing against a frame
+				// that had just been taken from under it — a crash the gate
+				// caught once, under load.
+				cols, rows := terminalCells()
+				t.mu.Lock()
+				t.cols, t.rows = cols, rows
+				t.repaintAll = true
+				t.dirty = true
+				t.mu.Unlock()
 				if err := t.refresh(); err != nil {
 					t.setMessage(err.Error(), true)
 				}

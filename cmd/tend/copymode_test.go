@@ -115,3 +115,31 @@ func TestDoubleClickSelectsAWord(t *testing.T) {
 		t.Errorf("copied %q, want the word under the pointer", got)
 	}
 }
+
+// TestEditScrollbackOpensTheHistoryInAnEditor: reading a long answer in a pane
+// means scrolling it; reading it in an editor means searching it. If this
+// regresses, the output of a build or an agent can only be read by scrolling.
+func TestEditScrollbackOpensTheHistoryInAnEditor(t *testing.T) {
+	// A stand-in for an editor: prints the file it was given and the first
+	// line of it, so the test can see both without a real editor's screen.
+	editor := fakeAgentBin(t, "fake-editor", `printf 'EDITING %s\n' "$1"; head -1 "$1"; sleep 30`)
+	// The editor is opened by the server, so it is the server's environment
+	// that decides. In a real session the server inherits it from the client
+	// that started it; here the server runs in the test's own process.
+	t.Setenv("EDITOR", editor)
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.sendUntil(t, "printf 'THE-OUTPUT-TO-READ\\n'\n", "the output", func(s string) bool {
+		return strings.Count(s, "THE-OUTPUT-TO-READ") >= 2
+	})
+
+	a.send(t, "\x02e")
+	a.waitForScreen(t, "the editor on the history", func(s string) bool {
+		return strings.Contains(s, "EDITING") && strings.Contains(s, "tend-pane-")
+	})
+	// What it opened really holds the pane's output.
+	a.waitForScreen(t, "the history in the file", func(s string) bool {
+		return strings.Count(s, "THE-OUTPUT-TO-READ") >= 3
+	})
+}

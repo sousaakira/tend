@@ -224,6 +224,10 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   hooks, under herdr's names. Focus is the client's, so a client reports it
   and every listener hears; the same pane twice says nothing, or a hook would
   run on every keystroke that moves focus.
+- **Scrollback in an editor**: `ctrl+b e` writes the focused pane's history to
+  a file and opens `$EDITOR` on it in a pane of its own — herdr's
+  `EditScrollback`. The file is removed by the command that opened it, so
+  nothing has to remember it.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -342,11 +346,6 @@ The host is ported (see "Ported, and checked"). Left:
 
 Copy mode is ported (see "Ported, and checked"). Left:
 
-- `EditScrollback`: the pane's history opened in `$EDITOR`
-  (`server/client_commands.rs`).
-- Double-click word selection with the mouse
-  (`client/shell/word_selection.rs`, 217 lines) — the word rule it needs is
-  now in `internal/copymode`.
 - herdr refuses a motion when the pane's content changed since the client last
   looked (`stale_content`). tend does not: a pane printing while copy mode is
   up can shift the rows under the cursor.
@@ -505,6 +504,16 @@ agent's:
 ---
 
 ## Lessons already paid for
+
+- **The client draws from terminals another goroutine is writing.** `paint`
+  read the panes' screens outside the lock while the reader goroutine wrote
+  them, and a resize invalidated the painter from its own goroutine. Under
+  load that crashed the client — the gate caught a SIGSEGV once. Drawing now
+  happens under the lock and the painter is touched only by the goroutine that
+  owns it; the terminal write stays outside, so a slow write never holds a
+  pane's output up. A test resizes a real client forty times while it draws,
+  with the binary built `-race`: the detector in the test process cannot see
+  into the process it starts.
 
 Each of these cost hours. They are here so they cost nobody else any.
 

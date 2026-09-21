@@ -31,13 +31,27 @@ import (
 // buildBinary compiles the CLI once per test run.
 func buildBinary(t *testing.T) string {
 	t.Helper()
+	return buildBinaryWith(t)
+}
+
+// buildBinaryWith builds the client, optionally with the race detector. The
+// tests run the real binary in another process, so the detector in the test
+// process sees nothing of what it does: a test about the client's own
+// goroutines has to ask for a binary that is watching itself.
+func buildBinaryWith(t *testing.T, flags ...string) string {
+	t.Helper()
 	bin := filepath.Join(t.TempDir(), "tend")
-	cmd := exec.Command("go", "build", "-o", bin, ".")
+	args := append([]string{"build"}, flags...)
+	cmd := exec.Command("go", append(args, "-o", bin, ".")...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building the binary: %v\n%s", err, out)
 	}
 	return bin
 }
+
+// raceBinary is what the next session should run, when a test needs the
+// client to be watching its own goroutines.
+var raceBinary bool
 
 // configOverride is the settings file the next session should use, for the
 // tests that are about settings. withConfig sets it for one test.
@@ -201,6 +215,9 @@ func startSessionConfigured(t *testing.T, cols, rows int, cfg server.Config) *at
 	}()
 
 	bin := buildBinary(t)
+	if raceBinary {
+		bin = buildBinaryWith(t, "-race")
+	}
 	p, err := pty.Start(bin, []string{"attach", "-s", "tui"}, pty.Options{
 		Size: pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
 		Env: append(append(os.Environ(),

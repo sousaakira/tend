@@ -65,6 +65,9 @@ const (
 	// CommandNewWorktree makes a worktree for the current space's repository
 	// and opens it as a space of its own, herdr's prefix+shift+g.
 	CommandNewWorktree
+	// CommandEditScrollback opens the focused pane's history in $EDITOR,
+	// herdr's prefix+e.
+	CommandEditScrollback
 	// CommandFocusPrev goes back through the tab's panes, herdr's
 	// prefix+shift+tab; CommandFocusNext is also on prefix+tab.
 	CommandFocusPrev
@@ -154,6 +157,8 @@ func (c Command) String() string {
 		return "settings"
 	case CommandNewWorktree:
 		return "new-worktree"
+	case CommandEditScrollback:
+		return "edit-scrollback"
 	case CommandFocusPrev:
 		return "focus-prev"
 	case CommandLastPane:
@@ -189,6 +194,7 @@ var Keys = []struct {
 	{"x", CommandClosePane, "close pane"},
 	{"z", CommandZoom, "zoom pane"},
 	{"[", CommandScroll, "copy mode"},
+	{"e", CommandEditScrollback, "history in $EDITOR"},
 	{"HJKL", CommandSwapRight, "swap pane"},
 	{"r", CommandResizeMode, "resize (hjkl, esc)"},
 	{"c", CommandNewTab, "new tab"},
@@ -286,6 +292,7 @@ func DefaultBindings() map[string]Command {
 		"(":         CommandPrevSpace,
 		"a":         CommandToggleAgents,
 		"g":         CommandNavigate, "w": CommandNavigate,
+		"e": CommandEditScrollback,
 		"m": CommandMenu,
 		",": CommandRenameTab,
 		".": CommandRenameSpace,

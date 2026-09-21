@@ -72,7 +72,7 @@ func (t *tui) reloadSettings() error {
 		said = append(said, "prefix is now "+cfg.Keys.Prefix)
 	}
 
-	t.painter.Invalidate()
+	t.requestRepaint()
 	t.setMessage(strings.Join(said, " · "), false)
 	return t.refresh()
 }
