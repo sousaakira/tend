@@ -171,6 +171,8 @@ type tui struct {
 	// motionOn is whether the terminal is reporting every pointer move, as
 	// last asked by the paint goroutine, which alone touches it.
 	motionOn bool
+	// worktreeOpen is herdr's open-worktree popup while it is up.
+	worktreeOpen *worktreeOpenState
 	// toast is the notification card shown, and toastQueue those waiting.
 	toast      *toastEntry
 	toastQueue []toastEntry
@@ -882,7 +884,7 @@ func (t *tui) wantsMotionLocked() bool {
 	if !t.config.UI.Mouse {
 		return false
 	}
-	if t.menu != nil || t.navigator != nil {
+	if t.menu != nil || t.navigator != nil || t.worktreeOpen != nil {
 		return true
 	}
 	inView := make(map[uint64]bool, len(t.rects))
@@ -955,10 +957,12 @@ func (t *tui) buildFrame() ui.Frame {
 		Menu:      t.menu,
 		Navigator: t.navigatorFrameLocked(),
 		Toast:     t.toastFrameLocked(),
-		Selection: t.sel,
-		Waiting:   t.waitingLocked(),
-		Zoomed:    t.zoom,
-		Offline:   t.offline,
+
+		WorktreeOpen: t.worktreeOpenFrameLocked(),
+		Selection:    t.sel,
+		Waiting:      t.waitingLocked(),
+		Zoomed:       t.zoom,
+		Offline:      t.offline,
 	}
 	if t.prompt != promptNone {
 		frame.Prompt = t.promptLabelLocked()
@@ -1185,6 +1189,11 @@ func (t *tui) handleInput(data []byte) error {
 		if handled {
 			forward = nil
 		}
+	}
+
+	if t.worktreeOpenUp() {
+		t.worktreeOpenKeys(forward)
+		forward = nil
 	}
 
 	if t.navigatorOpen() {

@@ -2206,3 +2206,43 @@ func TestTheToastCardGoesInItsCorner(t *testing.T) {
 		}
 	}
 }
+
+// TestTheWorktreePopupFiltersAndHitsItsEntries: the filter matches label,
+// branch, path or status; the count says how many are left; a click on
+// either line of an entry is that entry. If it regresses, a click opens
+// the checkout below the one under the pointer.
+func TestTheWorktreePopupFiltersAndHitsItsEntries(t *testing.T) {
+	w := WorktreeOpen{Entries: []WorktreeEntry{
+		{Label: "main", Branch: "main", Path: "/src/app", Status: "open"},
+		{Label: "feature/login", Branch: "feature/login", Path: "/wt/app/feature-login"},
+		{Label: "old", Path: "/wt/app/old", Status: "detached"},
+	}}
+	g := vt.NewGrid(100, 30, 0)
+	drawWorktreeOpen(g, w, DefaultTheme())
+	text := strings.Join(gridText(g), "\n")
+	for _, want := range []string{"open worktree", "3 checkouts", "feature/login", "/wt/app/feature-login", "open", "detached"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q:\n%s", want, text)
+		}
+	}
+	for y, line := range gridText(g) {
+		for i, e := range w.Entries {
+			if x := strings.Index(line, e.Path); x >= 0 {
+				col := len([]rune(line[:x]))
+				if got, _, _ := WorktreeOpenAt(w, 100, 30, col, y); got != i {
+					t.Errorf("a click on %s's path hit %d", e.Label, got)
+				}
+				if got, _, _ := WorktreeOpenAt(w, 100, 30, col, y-1); got != i {
+					t.Errorf("a click on %s's name hit %d", e.Label, got)
+				}
+			}
+		}
+	}
+	w.Query = "DETACH"
+	if f := w.Filtered(); len(f) != 1 || f[0] != 2 {
+		t.Errorf("filter by status: %v", f)
+	}
+	if i, ok := w.SelectedEntry(); !ok || i != 2 {
+		t.Errorf("the selection falls to what the filter leaves: %d", i)
+	}
+}

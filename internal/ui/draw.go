@@ -373,6 +373,8 @@ type Frame struct {
 	Navigator *Navigator
 	// Toast is the notification card shown, if any.
 	Toast *Toast
+	// WorktreeOpen is herdr's open-worktree popup, when it is up.
+	WorktreeOpen *WorktreeOpen
 
 	// Selection is a range of text being marked in a pane, or nil.
 	Selection *Selection
@@ -541,6 +543,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	if f.Navigator != nil {
 		drawNavigator(dst, *f.Navigator, theme)
 	}
+	if f.WorktreeOpen != nil {
+		drawWorktreeOpen(dst, *f.WorktreeOpen, theme)
+	}
 	if f.Menu != nil {
 		drawMenu(dst, *f.Menu, theme)
 	}
@@ -695,6 +700,9 @@ func CursorPosition(f Frame, cols, rows int) (x, y int, visible bool) {
 	}
 	if f.Navigator != nil {
 		return NavigatorCursor(*f.Navigator, cols, rows)
+	}
+	if f.WorktreeOpen != nil {
+		return WorktreeOpenCursor(*f.WorktreeOpen, cols, rows)
 	}
 	if c := f.CopyCursor; c != nil {
 		for _, p := range f.Panes {

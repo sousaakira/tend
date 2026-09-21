@@ -37,9 +37,6 @@ const (
 	MenuNewWorktree    = "menu-new-worktree"
 	MenuOpenWorktree   = "menu-open-worktree"
 	MenuRemoveWorktree = "menu-remove-worktree"
-	// MenuPickWorktree is an item in the list of worktrees, with the branch or
-	// path in Arg.
-	MenuPickWorktree = "menu-pick-worktree"
 	// MenuMoveToGroup lists the groups a space can be moved into, and
 	// MenuPickGroup is one of them, with its name in Arg — or no name, for
 	// taking the space out of the group it is in.

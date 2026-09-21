@@ -8,7 +8,6 @@ import (
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/integration"
 	sessionpkg "github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/ui"
 )
 
 // The settings screen: herdr's `prefix+s`, a list of the few settings worth
@@ -414,72 +413,6 @@ func (t *tui) createWorktree(workspace uint64, branch string) {
 		t.setMessage("worktree "+text(wt["branch"])+" opened", false)
 		if err := t.refresh(); err != nil {
 			t.setMessage(err.Error(), true)
-		}
-	}()
-}
-
-// openWorktreeMenu lists the repository's worktrees to open one.
-func (t *tui) openWorktreeMenu(workspace uint64, x, y int) {
-	t.mu.Lock()
-	session := t.session
-	t.mu.Unlock()
-
-	go func() {
-		result, err := apiCall(session, api.MethodWorktreeList, map[string]any{
-			"workspace_id": api.WorkspaceID(sessionpkg.WorkspaceID(workspace)),
-		}, false)
-		if err != nil {
-			t.setMessage(err.Error(), true)
-			return
-		}
-		list, _ := result["worktrees"].([]any)
-		var items []ui.MenuItem
-		for _, raw := range list {
-			wt, _ := raw.(map[string]any)
-			if wt["is_bare"] == true || wt["is_prunable"] == true {
-				continue
-			}
-			label := text(wt["branch"])
-			if label == "" {
-				label = text(wt["path"])
-			}
-			if text(wt["open_workspace_id"]) != "" {
-				label += "  (open)"
-			}
-			items = append(items, ui.MenuItem{
-				Label: label, Action: ui.MenuPickWorktree, Arg: text(wt["path"]),
-			})
-		}
-		if len(items) == 0 {
-			t.setMessage("this repository has no worktrees to open", false)
-			return
-		}
-		t.openMenu(ui.Menu{Title: "worktrees", Items: items, X: x, Y: y, Workspace: workspace})
-	}()
-}
-
-// openWorktree opens a worktree as a space, or goes to it when it is open.
-func (t *tui) openWorktree(workspace uint64, path string) {
-	t.mu.Lock()
-	session := t.session
-	t.mu.Unlock()
-
-	go func() {
-		result, err := apiCall(session, api.MethodWorktreeOpen, map[string]any{
-			"workspace_id": api.WorkspaceID(sessionpkg.WorkspaceID(workspace)),
-			"path":         path,
-		}, false)
-		if err != nil {
-			t.setMessage(err.Error(), true)
-			return
-		}
-		if err := t.refresh(); err != nil {
-			t.setMessage(err.Error(), true)
-			return
-		}
-		ws, _ := result["workspace"].(map[string]any)
-		if id, ok := parseWorkspaceID(text(ws["workspace_id"])); ok {
-			_ = t.showWorkspace(id)
 		}
 	}()
 }

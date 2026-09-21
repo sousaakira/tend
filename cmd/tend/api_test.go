@@ -834,3 +834,59 @@ func TestAScriptsSSHReachesTheOtherMachine(t *testing.T) {
 		t.Errorf("an absent far session = %v: %s", err, out)
 	}
 }
+
+// TestOpeningAWorktreeFromThePopup: "open worktree..." on a space puts up
+// herdr's popup of the repository's checkouts, / filters them, and enter
+// opens the one chosen as a space. If it regresses, a worktree made
+// elsewhere cannot be opened without typing its path.
+func TestOpeningAWorktreeFromThePopup(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	cfg := filepath.Join(t.TempDir(), "absent.toml")
+	t.Setenv("TEND_CONFIG", cfg)
+	bin := buildBinary(t)
+
+	repo := filepath.Join(t.TempDir(), "project")
+	elsewhere := filepath.Join(t.TempDir(), "side-checkout")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitEnv := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"}, {"commit", "-q", "--allow-empty", "-m", "first"},
+		{"worktree", "add", "-q", "-b", "feature/side", elsewhere},
+		{"worktree", "add", "-q", "-b", "other/thing", elsewhere + "-2"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir, cmd.Env = repo, gitEnv
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "TEND_CONFIG="+cfg, "SHELL=/bin/sh")
+	p, err := pty.Start(bin, []string{"attach", "-s", "wto"}, pty.Options{
+		Size: pty.Size{Cols: 110, Rows: 28}, Env: env, Dir: repo,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(110, 28, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "wto") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.openMenuOn(t, 6, a.lineContaining(t, "main"), "open worktree")
+	row := a.lineContaining(t, "open worktree")
+	a.clickAt(t, columnOfString(a.lines()[row-1], "open worktree")+2, row)
+	a.waitForScreen(t, "the popup", func(s string) bool {
+		return strings.Contains(s, "/ filter worktrees") && strings.Contains(s, "3 checkouts") && strings.Contains(s, "feature/side")
+	})
+	a.send(t, "/feature")
+	a.waitForScreen(t, "the filter", func(s string) bool { return strings.Contains(s, "1/3 checkouts") })
+	a.send(t, "\r")
+	a.waitForScreen(t, "the worktree as a space", func(s string) bool {
+		return !strings.Contains(s, "checkouts") && strings.Contains(a.sidebarText(), "feature/side")
+	})
+}

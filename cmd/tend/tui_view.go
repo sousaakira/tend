@@ -275,6 +275,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 	if handled, err := t.navigatorMouse(ev); handled {
 		return err
 	}
+	if handled, err := t.worktreeOpenMouse(ev); handled {
+		return err
+	}
 	switch ev.Kind {
 	case ui.MouseWheelUp:
 		if t.scrollSidebar(ev.X, ev.Y, -sidebarScrollStep) {

@@ -511,8 +511,10 @@ Copy mode is ported (see "Ported, and checked"). Left:
 Ported (see "Ported, and checked"). Left:
 
 - The new-worktree prompt shows the checkout's path as the branch is typed
-  (herdr's create overlay), on a client on the session's own machine; herdr's
-  overlay also lists the existing worktrees, which tend's prompt does not.
+  (herdr's create overlay, which lists nothing else), on a client on the
+  session's own machine. Opening one is herdr's open overlay: a popup of
+  the checkouts two lines each with open/detached/root, a / filter, a
+  count, opening… and git's error in place.
 - A forced removal that git then refuses brings the space back — name,
   group, tabs, each pane a shell in its directory — rather than herdr's
   restore of the very runtimes it paused: tend has ended those programs by
