@@ -30,6 +30,9 @@ type Node struct {
 type Tree struct {
 	Root string
 	top  *Node
+	// repos are the repositories under the root, so a directory's ignored
+	// entries are asked of the repository it is in.
+	repos []Git
 	// Hidden hides entries whose name starts with a dot.
 	Hidden bool
 }
@@ -87,7 +90,10 @@ func (t *Tree) load(n *Node, g Git) {
 		}
 		return strings.ToLower(kids[a].Name) < strings.ToLower(kids[b].Name)
 	})
-	if g.Top != "" {
+	if r := t.repoAt(filepath.Join(t.Root, filepath.FromSlash(n.Rel))); r.Top != "" {
+		g = r
+	}
+	if g.Top != "" && t.inside(g, n.Rel) {
 		paths := make([]string, len(kids))
 		for i, k := range kids {
 			paths[i] = t.repoPath(g, k.Rel)
@@ -203,4 +209,22 @@ func (n *Node) Parent() *Node {
 // Path is the node's path on disk.
 func (t *Tree) Path(n *Node) string {
 	return filepath.Join(t.Root, filepath.FromSlash(n.Rel))
+}
+
+// repoAt is the repository a directory is in, of those the tree knows.
+func (t *Tree) repoAt(abs string) Git {
+	best := Git{}
+	for _, r := range t.repos {
+		if (abs == r.Top || strings.HasPrefix(abs, r.Top+string(filepath.Separator))) && len(r.Top) > len(best.Top) {
+			best = r
+		}
+	}
+	return best
+}
+
+// inside is whether a directory of the tree is within a repository, whose
+// ignore rules then apply to it.
+func (t *Tree) inside(g Git, rel string) bool {
+	abs := filepath.Join(t.Root, filepath.FromSlash(rel))
+	return abs == g.Top || strings.HasPrefix(abs, g.Top+string(filepath.Separator))
 }

@@ -120,10 +120,15 @@ func (m *Model) drawHeader(g *vt.Grid) {
 		}
 		x = put(g, x, 0, name, style, m.cols)
 	}
-	if m.status != nil {
-		if n := len(m.status.Changes); n > 0 {
-			put(g, x+1, 0, strconv.Itoa(n), styleYellow, m.cols)
+	// Every repository's changes, which is what the changes view lists.
+	total := 0
+	for _, r := range m.repos {
+		if r.status != nil {
+			total += len(r.status.Changes)
 		}
+	}
+	if total > 0 {
+		put(g, x+1, 0, strconv.Itoa(total), styleYellow, m.cols)
 	}
 
 	// The second line says where this is: the project, the branch and how
@@ -152,19 +157,7 @@ func (m *Model) drawFiles(g *vt.Grid) {
 			base = styleDim
 		}
 
-		var letter byte
-		if m.status != nil {
-			rel := m.tree.repoPath(m.git, n.Rel)
-			if n.Dir {
-				letter = m.status.DirLetter(rel)
-				if c, ok := m.status.Of(rel); ok {
-					// An untracked directory is one change of its own.
-					letter = c.Letter()
-				}
-			} else if c, ok := m.status.Of(rel); ok {
-				letter = c.Letter()
-			}
-		}
+		letter := m.statusFor(n)
 		nameStyle := base
 		if letter != 0 && !n.Ignored {
 			nameStyle = letterStyle(letter)
@@ -216,10 +209,10 @@ func (m *Model) drawFiles(g *vt.Grid) {
 func (m *Model) drawChanges(g *vt.Grid) {
 	v := ViewChanges
 	switch {
-	case m.git.Top == "":
-		put(g, 2, 2, "not a git repository", styleDim, m.cols)
+	case len(m.repos) == 0:
+		put(g, 2, 2, "no git repository here", styleDim, m.cols)
 		return
-	case m.statusErr != nil:
+	case m.statusErr != nil && !m.multiRepo():
 		put(g, 2, 2, truncate(m.statusErr.Error(), m.cols-3), styleErr, m.cols)
 		return
 	case len(m.changeRows) == 0:
@@ -233,14 +226,20 @@ func (m *Model) drawChanges(g *vt.Grid) {
 		}
 		r := m.changeRows[at]
 		y := 2 + i
-		if r.heading != "" {
-			count := 0
-			for _, o := range m.changeRows {
-				if o.heading == "" && o.staged == (r.heading == "staged") {
-					count++
-				}
+		if r.heading == "repo" {
+			// A repository of a folder of them: its name and branch.
+			x := put(g, 1, y, "▾ "+m.repoName(r.repo), styleBold, m.cols)
+			if st := m.repos[r.repo].status; st != nil && st.Branch != "" {
+				put(g, x+1, y, "⎇ "+st.Branch, styleCyan, m.cols)
 			}
-			put(g, 1, y, strings.ToUpper(r.heading)+" "+strconv.Itoa(count), styleAccent, m.cols)
+			continue
+		}
+		if r.heading != "" {
+			indent := 1
+			if m.multiRepo() {
+				indent = 3
+			}
+			put(g, indent, y, strings.ToUpper(r.heading)+" "+strconv.Itoa(r.count), styleAccent, m.cols)
 			continue
 		}
 		c := r.change

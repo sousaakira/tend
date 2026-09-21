@@ -67,6 +67,10 @@ func (m *Model) projectName() string {
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		name = name[i+1:]
 	}
+	// In a folder of repositories, the one the bar is about.
+	if m.multiRepo() && m.active >= 0 {
+		name += "/" + m.repoName(m.active)
+	}
 	return name
 }
 

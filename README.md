@@ -91,7 +91,8 @@ keys.
   file's history. `/` or `ctrl+p` finds a file by name.
 - **search** — `ctrl+f` searches the files' text, with case, whole word,
   regex, and include/exclude globs; Enter opens the editor on the line.
-- **changes** — staged and unstaged, each with its diff; `s` stages, `x x`
+- **changes** — staged and unstaged, each with its diff (opened on a folder
+  of projects, each repository's under its name and branch); `s` stages, `x x`
   discards, `c` commits, `A` drafts the message with the local `claude`
   (haiku), or from the file names without it.
 - **git bar** — the line under the header: click the branch (or `B`) to

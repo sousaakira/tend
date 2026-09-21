@@ -545,7 +545,7 @@ func TestOutsideARepositoryThePanelIsATree(t *testing.T) {
 		t.Errorf("tree:\n%s", text)
 	}
 	keys(m, "3")
-	if text := screen(m, 40, 10); !strings.Contains(text, "not a git repository") {
+	if text := screen(m, 40, 10); !strings.Contains(text, "no git repository here") {
 		t.Errorf("changes:\n%s", text)
 	}
 	keys(m, "/", "n", "o", "t")

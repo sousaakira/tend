@@ -90,6 +90,11 @@ type Model struct {
 
 	csearch contentSearch
 
+	// repos are the repositories shown — one, or a folder's — and active
+	// the one m.git and m.status are, the selection's.
+	repos  []repoState
+	active int
+
 	// neighbours says where the other panes of the tab are, and follow is
 	// what the panel made of it last time.
 	neighbours Neighbours
@@ -140,17 +145,21 @@ type changeRow struct {
 	heading string
 	change  Change
 	staged  bool
+	// repo is the repository the row is of; count is a heading's entries.
+	repo  int
+	count int
 }
 
 // New is an explorer of dir, which shows the whole repository when dir is in
 // one: the project, not whichever of its directories the pane was in.
 func New(dir string, opener Opener) *Model {
-	g := FindRepo(dir)
-	root := dir
-	if g.Top != "" {
-		root = g.Top
+	root, repos := reposFor(dir)
+	m := &Model{tree: NewTree(root), opener: opener, now: time.Now, active: -1}
+	for _, g := range repos {
+		m.repos = append(m.repos, repoState{git: g})
 	}
-	m := &Model{tree: NewTree(root), git: g, opener: opener, now: time.Now, repoless: g.Top == ""}
+	m.tree.repos = repos
+	m.repoless = len(repos) == 0
 	m.Refresh()
 	return m
 }
@@ -208,12 +217,20 @@ func (m *Model) Refresh() {
 	if m.view == ViewFiles && m.cursor[ViewFiles] < len(m.fileRows) {
 		keep = m.fileRows[m.cursor[ViewFiles]].Rel
 	}
-	if m.git.Top != "" {
-		st, err := m.git.Status()
-		m.statusErr = err
+	for i := range m.repos {
+		st, err := m.repos[i].git.Status()
+		m.repos[i].err = err
 		if err == nil {
-			m.status = st
+			m.repos[i].status = st
 		}
+	}
+	switch {
+	case m.active >= 0:
+		m.activate(m.active)
+	case len(m.repos) > 0:
+		m.activate(0)
+	default:
+		m.activate(-1)
 	}
 	m.tree.Reload(m.git)
 	m.layout()
@@ -231,29 +248,38 @@ func (m *Model) Refresh() {
 func (m *Model) layout() {
 	m.fileRows = m.tree.Rows(m.git)
 	m.changeRows = m.changeRows[:0]
-	if m.status == nil {
-		return
-	}
-	var staged, unstaged []Change
-	for _, c := range m.status.Changes {
-		if c.Staged() {
-			staged = append(staged, c)
+	multi := m.multiRepo()
+	for i, r := range m.repos {
+		if r.status == nil {
+			continue
 		}
-		if c.Unstaged() {
-			unstaged = append(unstaged, c)
+		var staged, unstaged []Change
+		for _, c := range r.status.Changes {
+			if c.Staged() {
+				staged = append(staged, c)
+			}
+			if c.Unstaged() {
+				unstaged = append(unstaged, c)
+			}
 		}
-	}
-	m.changesStaged = len(staged)
-	if len(staged) > 0 {
-		m.changeRows = append(m.changeRows, changeRow{heading: "staged"})
-		for _, c := range staged {
-			m.changeRows = append(m.changeRows, changeRow{change: c, staged: true})
+		if len(staged)+len(unstaged) == 0 {
+			continue
 		}
-	}
-	if len(unstaged) > 0 {
-		m.changeRows = append(m.changeRows, changeRow{heading: "changes"})
-		for _, c := range unstaged {
-			m.changeRows = append(m.changeRows, changeRow{change: c})
+		if multi {
+			// Each repository under its name, as herdr-sidebar lists them.
+			m.changeRows = append(m.changeRows, changeRow{heading: "repo", repo: i})
+		}
+		if len(staged) > 0 {
+			m.changeRows = append(m.changeRows, changeRow{heading: "staged", repo: i, count: len(staged)})
+			for _, c := range staged {
+				m.changeRows = append(m.changeRows, changeRow{change: c, staged: true, repo: i})
+			}
+		}
+		if len(unstaged) > 0 {
+			m.changeRows = append(m.changeRows, changeRow{heading: "changes", repo: i, count: len(unstaged)})
+			for _, c := range unstaged {
+				m.changeRows = append(m.changeRows, changeRow{change: c, repo: i})
+			}
 		}
 	}
 }
@@ -308,6 +334,7 @@ func (m *Model) clamp() {
 		m.scroll[v] = m.cursor[v] - visible + 1
 	}
 	m.scroll[v] = min(max(m.scroll[v], 0), max(n-visible, 0))
+	m.syncActive()
 }
 
 // move moves the cursor by delta, stepping over headings in the direction

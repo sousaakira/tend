@@ -137,18 +137,18 @@ func (m *Model) Follow() {
 // Staying in the same repository changes nothing, since the panel shows the
 // whole of it wherever in it the pane is.
 func (m *Model) Reroot(dir string) {
-	g := FindRepo(dir)
-	root := dir
-	if g.Top != "" {
-		root = g.Top
-	}
+	root, repos := reposFor(dir)
 	if root == m.tree.Root {
 		return
 	}
 	hidden := m.tree.Hidden
 	m.tree = NewTree(root)
-	m.tree.Hidden = hidden
-	m.git, m.status, m.repoless = g, nil, g.Top == ""
+	m.tree.Hidden, m.tree.repos = hidden, repos
+	m.repos, m.repoless = nil, len(repos) == 0
+	for _, g := range repos {
+		m.repos = append(m.repos, repoState{git: g})
+	}
+	m.activate(-1)
 	m.cursor, m.scroll = [3]int{}, [3]int{}
 	m.csearch.results, m.csearch.rows = nil, nil
 	m.searchChanged()
