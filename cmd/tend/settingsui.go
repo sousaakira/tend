@@ -41,6 +41,14 @@ type settingChoice struct {
 // settingRows is the screen, in order.
 var settingRows = []settingRow{
 	{
+		label: "theme", section: "ui.theme", key: "name",
+		choices: themeChoices(),
+		value: func(c config.Config) string {
+			name, _ := config.CanonicalTheme(c.UI.Theme.Name)
+			return config.Quote(name)
+		},
+	},
+	{
 		label: "sidebar", section: "ui", key: "sidebar",
 		choices: []settingChoice{{"on", "true"}, {"off", "false"}},
 		value:   func(c config.Config) string { return config.Bool(c.UI.Sidebar) },
@@ -75,6 +83,17 @@ var settingRows = []settingRow{
 		choices: []settingChoice{{"yes", "true"}, {"no", "false"}},
 		value:   func(c config.Config) string { return config.Bool(c.Server.Persist) },
 	},
+}
+
+// themeChoices is every named theme, after the terminal's own colours. Each
+// step writes the file and reloads, so moving along the row is the preview
+// herdr's theme list gives, through the one path a setting takes.
+func themeChoices() []settingChoice {
+	out := []settingChoice{{"terminal colours", `""`}}
+	for _, name := range config.ThemeNames {
+		out = append(out, settingChoice{name, config.Quote(name)})
+	}
+	return out
 }
 
 // settingsState is the screen while it is open.
@@ -194,8 +213,13 @@ func (t *tui) drawSettings() {
 			label := choice.label
 			if choice.toml == current {
 				label = "[" + label + "]"
+			} else if len(row.choices) > maxShownChoices {
+				continue // too many to list; the current one is what matters
 			}
 			shown = append(shown, label)
+		}
+		if len(row.choices) > maxShownChoices {
+			shown = []string{"‹", strings.Join(shown, ""), "›"}
 		}
 		marker := "  "
 		if i == t.settings.row {
@@ -212,6 +236,10 @@ func (t *tui) drawSettings() {
 	t.overlay = lines
 	t.dirty = true
 }
+
+// maxShownChoices is how many choices a row lists before it shows only the
+// current one: eighteen themes do not fit on a line, and do not need to.
+const maxShownChoices = 4
 
 // pad is the column padding the overlay uses, spelled here because ui's is
 // not exported and this is the only other place that needs it.

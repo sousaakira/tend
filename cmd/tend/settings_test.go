@@ -36,11 +36,17 @@ func TestTheSettingsScreenChangesTheFileAndTheSession(t *testing.T) {
 		return strings.Contains(s, "settings") && strings.Contains(s, "sidebar")
 	})
 
-	// The first row is the sidebar, and changing it turns it off in front of
-	// the user.
+	// The second row is the sidebar (the theme comes first, as in herdr), and
+	// changing it turns it off in front of the user.
+	a.send(t, "j")
+	a.waitForScreen(t, "the cursor on the sidebar row", func(s string) bool {
+		return strings.Contains(s, "▸ sidebar")
+	})
 	a.send(t, "l")
+	// The row saying off, not only "spaces" gone: the settings panel itself
+	// covers that word, and then the wait is over before the file is written.
 	a.waitForScreen(t, "the sidebar to go", func(s string) bool {
-		return !strings.Contains(s, "spaces")
+		return strings.Contains(s, "sidebar             on [off]")
 	})
 
 	// And the file says so, with what the user wrote still in it.
@@ -62,6 +68,45 @@ func TestTheSettingsScreenChangesTheFileAndTheSession(t *testing.T) {
 	})
 	a.sendUntil(t, "printf 'STILL-WORKS\\n'\n", "the pane", func(s string) bool {
 		return strings.Contains(s, "STILL-WORKS")
+	})
+}
+
+// TestPickingAThemeInTheSettingsScreen: the theme row writes the name into
+// the file and the session is drawn in it straight away. If it regresses, the
+// row either changes nothing on screen or leaves a file the next start reads
+// differently from what was shown.
+func TestPickingAThemeInTheSettingsScreen(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte("[ui]\nsidebar = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, configPath)
+
+	a := startSessionIn(t, 100, 30, t.TempDir())
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.send(t, "\x02s")
+	a.waitForScreen(t, "the theme row", func(s string) bool {
+		return strings.Contains(s, "▸ theme") && strings.Contains(s, "[terminal colours]")
+	})
+	// One step along is the first named theme, catppuccin.
+	a.send(t, "l")
+	a.waitForScreen(t, "catppuccin chosen", func(s string) bool {
+		return strings.Contains(s, "[catppuccin]")
+	})
+
+	written, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(written), "[ui.theme]\nname = \"catppuccin\"") {
+		t.Errorf("the theme was not written to the file:\n%s", written)
+	}
+
+	// The focused frame is drawn in catppuccin's accent, 137 180 250.
+	a.send(t, "q")
+	a.waitForScreen(t, "the accent on screen", func(string) bool {
+		return strings.Contains(a.raw(), "2;137;180;250")
 	})
 }
 

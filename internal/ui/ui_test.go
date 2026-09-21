@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/vt"
 )
 
@@ -1585,5 +1586,43 @@ func TestEncodeMouseSpeaksInThePanesCoordinates(t *testing.T) {
 	}
 	if got := EncodeMouse(press, -1, 0, true); got != nil {
 		t.Errorf("a position outside the pane should be dropped, got %q", got)
+	}
+}
+
+// TestEveryNamedThemeHasAPalette: a name the config accepts but no palette
+// answers to would load without complaint and draw the default colours.
+func TestEveryNamedThemeHasAPalette(t *testing.T) {
+	for _, name := range config.ThemeNames {
+		if _, ok := PaletteNamed(name); !ok {
+			t.Errorf("theme %q has no palette", name)
+		}
+	}
+	if len(palettes) != len(config.ThemeNames) {
+		t.Errorf("%d palettes for %d names; one is unreachable", len(palettes), len(config.ThemeNames))
+	}
+}
+
+// TestNamedThemeColoursTheInterfaceAndOverridesStillWin: picking a theme must
+// change what is drawn — focused frame in its accent, states in its colours —
+// and a colour set beside the name must beat the name, or "tokyo-night with a
+// brighter idle" is impossible to write.
+func TestNamedThemeColoursTheInterfaceAndOverridesStillWin(t *testing.T) {
+	p, _ := PaletteNamed("tokyo-night")
+	theme := ThemeFrom(config.Theme{Name: "Tokyo Night", Idle: "#010203"})
+
+	if theme.BorderFocused.FG != p.Accent {
+		t.Errorf("focused border = %v, want the theme's accent %v", theme.BorderFocused.FG, p.Accent)
+	}
+	if theme.Border.FG != p.Overlay0 || theme.Border.Attrs&vt.AttrDim != 0 {
+		t.Errorf("border = %+v, want overlay0 %v undimmed", theme.Border, p.Overlay0)
+	}
+	if theme.Working.FG != p.Yellow || theme.Blocked.FG != p.Red {
+		t.Error("working and blocked should take the theme's yellow and red")
+	}
+	if theme.Idle.FG != vt.RGBColor(1, 2, 3) {
+		t.Errorf("idle = %v, want the override over the theme", theme.Idle.FG)
+	}
+	if ThemeFrom(config.Theme{}) != DefaultTheme() {
+		t.Error("no name should leave the terminal-colour default alone")
 	}
 }

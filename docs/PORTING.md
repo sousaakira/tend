@@ -174,6 +174,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   file the user wrote: one line replaced in place, comments and order intact,
   refused outright if the result would not parse (herdr's
   `config/io.rs::upsert_section_raw`).
+- **Named themes** (herdr's `config/theme.rs` and `app/state.rs` Palette):
+  `[ui.theme] name = "tokyo-night"` picks one of herdr's eighteen palettes,
+  by any of herdr's spellings (`Tokyo Night`, `tokyonight`, `latte`, ...),
+  with the values transcribed from herdr's source by a script. The palette
+  colours what herdr colours with it — accent for focus, overlay0 for frames
+  and secondary text, yellow/red/green for states — and the five individual
+  colours still override it. The settings screen's first row is the theme,
+  as in herdr, and each step along it writes and applies, which is the
+  preview herdr's list gives.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -287,6 +296,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Focus, scroll and zoom over the API | `pane.focus`, `agent.focus`, `pane.scroll`, `pane.zoom`, `pane.current` are server methods | not offered (a client reports focus with `pane.focus`, which only tells programs and plugins) | in tend these are client state (AGENTS.md: what one person is looking at stays in the client), so the server has no focus to set and would be answering for a client that may not be attached |
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
 | Claude / JSONC settings | `jsonc_parser` preserves comments and compact layout | `encoding/json`; comments lost and **keys re-sorted alphabetically** on rewrite (content otherwise identical — checked against the owner's real 44 KB `settings.json`: install adds one `SessionStart` entry, a second install adds nothing, uninstall restores it exactly) | avoid a new dependency; invalid JSON is an error, not silently stripped |
+| Default theme | catppuccin | the terminal's own colours when no `name` is set | an unset theme keeps what tend has always looked like; the owner picks a palette in the settings screen or the file |
 | Integration assets | `.sh` and `.ps1` | Unix `.sh` / `.js` / `.ts` / Hermes plugin only | Windows PowerShell assets not ported yet; platform code is compile-gated when they are |
 
 ---
@@ -447,9 +457,6 @@ Ported (see "Ported, and checked"). Left:
 - **Onboarding** (`ui/onboarding.rs`) and release notes
   (`ui/release_notes.rs`): what herdr shows on a first run and after an
   update. tend has no updater yet (item 14), and nothing to announce.
-- **Themes in the screen**: herdr ships named themes (`THEME_NAMES`) and
-  previews them as you move; tend has five colours in `[ui.theme]` and no
-  names to pick from. Named themes are their own piece of work.
 - **Integrations in the screen**: herdr's settings has a section that installs
   them; tend has `tend integration install`.
 - Live reload of the prefix key is applied, but a client started with one
@@ -465,8 +472,12 @@ Keys are rebindable (see "Ported, and checked"). Left:
   what style. tend's rows are fixed.
 - **Tab bar** (`config/tab_bar.rs`) and **window title**
   (`config/window_title.rs`): what goes in them, as templates.
-- **Named themes** (`config/theme.rs`): herdr ships a set and names them; tend
-  has five colours set individually.
+- **The rest of the themes**: the palette's backgrounds (`panel_bg`,
+  `active_row_bg`, `selection_bg`, surfaces) are carried but not drawn —
+  tend's panels mark themselves by reversing, not with a background of their
+  own. Also `auto_switch` with `dark_name`/`light_name` (follows the host
+  terminal's appearance, `terminal_theme.rs`), and `[theme.custom]`'s
+  per-token overrides beyond tend's five colours.
 - A key is one byte or one escape sequence after the prefix, so `ctrl+q` and
   `alt+x` cannot be bound: the terminal sends control bytes tend forwards to
   the pane. herdr reads key events with modifiers through crossterm.

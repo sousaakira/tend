@@ -91,10 +91,14 @@ func DefaultTheme() Theme {
 	}
 }
 
-// ThemeFrom applies a user's colour choices over the defaults. An empty value
-// keeps the default, so a file naming one colour changes one colour.
+// ThemeFrom builds the theme a configuration asks for: the named palette if
+// there is one, then each colour the user set over it. An empty value keeps
+// what was there, so a file naming one colour changes one colour.
 func ThemeFrom(c config.Theme) Theme {
 	t := DefaultTheme()
+	if p, ok := PaletteNamed(c.Name); ok {
+		t = t.withPalette(p)
+	}
 	apply := func(target *vt.Style, value string) {
 		if value == "" {
 			return
@@ -118,6 +122,32 @@ func ThemeFrom(c config.Theme) Theme {
 	apply(&t.Working, c.Working)
 	apply(&t.Blocked, c.Blocked)
 	apply(&t.Idle, c.Idle)
+	return t
+}
+
+// withPalette colours a theme from a palette, using the tokens herdr uses
+// for the same things: accent for what has focus, overlay0 for frames and
+// secondary text, and yellow, red and green for working, blocked and idle
+// (`ui/panes.rs`, `client/shell.rs` status_color).
+//
+// Dimming goes wherever a colour arrives. It is how the default theme says
+// "secondary" without a colour, and on top of one it only makes the colour
+// the palette chose into another one.
+func (t Theme) withPalette(p Palette) Theme {
+	fg := func(target *vt.Style, c vt.Color) {
+		target.FG = c
+		target.Attrs &^= vt.AttrDim
+	}
+	for _, s := range []*vt.Style{&t.BorderFocused, &t.TitleFocused, &t.MenuTitle, &t.SidebarGroupActive} {
+		fg(s, p.Accent)
+	}
+	for _, s := range []*vt.Style{&t.Border, &t.Title, &t.SidebarDetail, &t.SidebarGroup, &t.Unknown, &t.Exited} {
+		fg(s, p.Overlay0)
+	}
+	fg(&t.Working, p.Yellow)
+	fg(&t.Blocked, p.Red)
+	fg(&t.Idle, p.Green)
+	fg(&t.StatusAlert, p.Red)
 	return t
 }
 

@@ -93,6 +93,7 @@ func TestInvalidValuesAreRejectedAtLoad(t *testing.T) {
 		"bad duration":   "[server]\ndetect_interval = \"soon\"\n",
 		"zero duration":  "[server]\ndetect_interval = \"0s\"\n",
 		"bad colour":     "[ui.theme]\nworking = \"chartreuse\"\n",
+		"unknown theme":  "[ui.theme]\nname = \"mauve-dreams\"\n",
 		"bad scrollback": "[pane]\nscrollback = -1\n",
 	}
 	for name, body := range cases {
@@ -249,5 +250,31 @@ func TestSidebarDefaultsOn(t *testing.T) {
 	}
 	if !c.UI.Mouse {
 		t.Error("the other ui settings should keep their defaults")
+	}
+}
+
+// TestThemeNamesAcceptTheSpellingsHerdrDoes: a theme written the way people
+// know it — "Tokyo Night", "catppuccin_mocha", "onedark" — must load, or a
+// config carried over from herdr is refused for its spelling.
+func TestThemeNamesAcceptTheSpellingsHerdrDoes(t *testing.T) {
+	cases := map[string]string{
+		"Tokyo Night":      "tokyo-night",
+		"catppuccin_mocha": "catppuccin",
+		"onedark":          "one-dark",
+		"dawn":             "rose-pine-dawn",
+		"  VESPER ":        "vesper",
+	}
+	for input, want := range cases {
+		if got, ok := CanonicalTheme(input); !ok || got != want {
+			t.Errorf("CanonicalTheme(%q) = %q, %v; want %q", input, got, ok, want)
+		}
+	}
+	for _, name := range ThemeNames {
+		if got, ok := CanonicalTheme(name); !ok || got != name {
+			t.Errorf("%q is listed but does not resolve to itself (got %q)", name, got)
+		}
+	}
+	if _, ok := CanonicalTheme("mauve-dreams"); ok {
+		t.Error("a name that is no theme should not resolve")
 	}
 }

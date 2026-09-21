@@ -115,9 +115,11 @@ type UI struct {
 	Theme   Theme `toml:"theme"`
 }
 
-// Theme names the colours. Each is a palette name, a number from 0 to 255, or
-// a #rrggbb value; empty keeps the default.
+// Theme names the colours. Name picks one of the palettes in ThemeNames; each
+// other value is a colour name, a number from 0 to 255, or a #rrggbb value,
+// and overrides that one colour of the palette. Empty keeps the default.
 type Theme struct {
+	Name          string `toml:"name"`
 	Border        string `toml:"border"`
 	BorderFocused string `toml:"border_focused"`
 	Working       string `toml:"working"`
@@ -226,6 +228,12 @@ func (c Config) validate() error {
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
+	}
+	if c.UI.Theme.Name != "" {
+		if _, ok := CanonicalTheme(c.UI.Theme.Name); !ok {
+			return fmt.Errorf("ui.theme.name is %q; use one of %s",
+				c.UI.Theme.Name, strings.Join(ThemeNames, ", "))
+		}
 	}
 	for name, value := range map[string]string{
 		"ui.theme.border":         c.UI.Theme.Border,
@@ -390,7 +398,14 @@ sidebar = true
 grouped = false
 
 [ui.theme]
-# A palette name, a number from 0 to 255, or "#rrggbb".
+# A named theme: catppuccin, catppuccin-latte, terminal, tokyo-night,
+# tokyo-night-day, dracula, nord, gruvbox, gruvbox-light, one-dark, one-light,
+# solarized, solarized-light, kanagawa, kanagawa-lotus, rose-pine,
+# rose-pine-dawn, vesper. Unset uses the terminal's own colours.
+# name = "catppuccin"
+#
+# Each colour below overrides that one colour of the theme: a colour name,
+# a number from 0 to 255, or "#rrggbb".
 # border = "brightblack"
 # border_focused = "blue"
 # working = "yellow"
