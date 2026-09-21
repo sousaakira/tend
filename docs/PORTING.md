@@ -560,12 +560,11 @@ Keys are rebindable (see "Ported, and checked"). Left:
   refused by both.
 - A title set with `tend terminal title set` survives a handoff but not a
   restart: it is not in the state file.
-- **The rest of the themes**: the backgrounds are drawn for the bars, menus,
-  panels and the sidebar's entry in view (`panel_bg`, `accent`,
-  `active_row_bg`), but not the finer surfaces — inactive tabs on
-  `surface0`, `selection_bg` for the navigation cursor, `sidebar_bg`. Also
-  `[theme.custom]`'s per-token overrides beyond tend's five
-  colours, and its `custom.dark`/`custom.light` variants.
+- **Themes**: `[ui.theme.custom]` with herdr's tokens and colour forms, and
+  its `light`/`dark` variants under auto_switch, are ported; with no name,
+  the overrides go over catppuccin, herdr's default palette. `mauve`,
+  `blue`, `peach`, `surface1` and `subtext0` are accepted and drawn by
+  nothing, since tend has no element herdr colours with them.
 - A key is one byte or one escape sequence after the prefix, so `ctrl+q` and
   `alt+x` cannot be bound: the terminal sends control bytes tend forwards to
   the pane. herdr reads key events with modifiers through crossterm.

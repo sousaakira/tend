@@ -29,6 +29,9 @@ type Theme struct {
 	Status      vt.Style
 	StatusKey   vt.Style
 	StatusAlert vt.Style
+	// TabInactive is a tab not in view, which is the bar itself unless a
+	// palette gives it a surface of its own.
+	TabInactive vt.Style
 
 	Overlay      vt.Style
 	OverlayTitle vt.Style
@@ -41,10 +44,14 @@ type Theme struct {
 	MenuTitle    vt.Style
 	MenuSelected vt.Style
 
-	Sidebar            vt.Style
-	SidebarActive      vt.Style
-	SidebarSelected    vt.Style
-	SidebarDetail      vt.Style
+	Sidebar         vt.Style
+	SidebarActive   vt.Style
+	SidebarSelected vt.Style
+	SidebarDetail   vt.Style
+	// SidebarCursor is the navigation cursor's row, when a palette gives it
+	// a background; the zero style leaves the row as it is and the cursor
+	// is the › in the margin alone.
+	SidebarCursor      vt.Style
 	SidebarGroup       vt.Style
 	SidebarGroupActive vt.Style
 
@@ -70,6 +77,7 @@ func DefaultTheme() Theme {
 		Status:      vt.Style{Attrs: vt.AttrReverse},
 		StatusKey:   vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
 		StatusAlert: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold, FG: vt.IndexedColor(1)},
+		TabInactive: vt.Style{Attrs: vt.AttrReverse},
 
 		Overlay:      vt.Style{Attrs: vt.AttrReverse},
 		OverlayTitle: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
@@ -97,10 +105,20 @@ func DefaultTheme() Theme {
 // ThemeFrom builds the theme a configuration asks for: the named palette if
 // there is one, then each colour the user set over it. An empty value keeps
 // what was there, so a file naming one colour changes one colour.
-func ThemeFrom(c config.Theme) Theme {
+func ThemeFrom(c config.Theme) Theme { return themeFrom(c, nil) }
+
+// themeFrom is ThemeFrom with the overrides for one appearance laid over the
+// rest, which only auto_switch picks.
+func themeFrom(c config.Theme, mode map[string]string) Theme {
 	t := DefaultTheme()
-	if p, ok := PaletteNamed(c.Name); ok {
-		t = t.withPalette(p)
+	name := c.Name
+	if name == "" && (len(c.Custom.All) > 0 || len(mode) > 0) {
+		// Overrides are of a palette's tokens, so there has to be a palette
+		// under them: herdr's default one, as herdr has it.
+		name = "catppuccin"
+	}
+	if p, ok := PaletteNamed(name); ok {
+		t = t.withPalette(p.withCustom(c.Custom.All).withCustom(mode))
 	}
 	apply := func(target *vt.Style, value string) {
 		if value == "" {
@@ -133,19 +151,21 @@ func ThemeFrom(c config.Theme) Theme {
 // as herdr's resolve_effective_theme does. Until the terminal has said which
 // it is, it is taken to be dark, herdr's assumption too.
 func ThemeFor(c config.Theme, light bool) Theme {
-	if c.AutoSwitch {
-		c.Name = c.DarkName
+	if !c.AutoSwitch {
+		return ThemeFrom(c)
+	}
+	mode := c.Custom.Dark
+	c.Name = c.DarkName
+	if c.Name == "" {
+		c.Name = "catppuccin"
+	}
+	if light {
+		c.Name, mode = c.LightName, c.Custom.Light
 		if c.Name == "" {
-			c.Name = "catppuccin"
-		}
-		if light {
-			c.Name = c.LightName
-			if c.Name == "" {
-				c.Name = "catppuccin-latte"
-			}
+			c.Name = "catppuccin-latte"
 		}
 	}
-	return ThemeFrom(c)
+	return themeFrom(c, mode)
 }
 
 // withPalette colours a theme from a palette, using the tokens herdr uses
@@ -186,6 +206,7 @@ func (t Theme) withPalette(p Palette) Theme {
 	contrast := p.PanelBG
 	on := func(fg, bg vt.Color, attrs vt.Attr) vt.Style { return vt.Style{FG: fg, BG: bg, Attrs: attrs} }
 	t.Status = on(p.Overlay1, p.PanelBG, 0)
+	t.TabInactive = on(p.Overlay0, p.Surface0, 0)
 	t.StatusKey = on(contrast, p.Accent, vt.AttrBold)
 	t.StatusAlert = on(contrast, p.Red, vt.AttrBold)
 	t.Overlay = on(p.Text, p.PanelBG, 0)
@@ -194,6 +215,12 @@ func (t Theme) withPalette(p Palette) Theme {
 	t.MenuTitle = on(p.Accent, p.PanelBG, vt.AttrBold)
 	t.MenuSelected = on(contrast, p.Accent, vt.AttrBold)
 	t.SidebarSelected = on(p.Text, p.ActiveRowBG, vt.AttrBold)
+	if !p.SelectionBG.IsDefault() {
+		t.SidebarCursor = on(p.Text, p.SelectionBG, 0)
+	}
+	if !p.SidebarBG.IsDefault() {
+		t.Sidebar.BG = p.SidebarBG
+	}
 	return t
 }
 
@@ -530,7 +557,7 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 			continue
 		}
 		tab := byID[seg.Tab]
-		style := theme.Status
+		style := theme.TabInactive
 		if tab.Active {
 			style = theme.StatusKey
 		}

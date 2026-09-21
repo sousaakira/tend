@@ -508,6 +508,13 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	}
 	style := theme.Sidebar
 	mark := theme.StateStyle(r.State, r.Running)
+	if r.Selected && !r.Active && theme.SidebarCursor != (vt.Style{}) {
+		// herdr's selection_bg under the navigation cursor.
+		style = theme.SidebarCursor
+		for i := 0; i < r.height()-r.Gap; i++ {
+			fill(dst, y+i, 0, limit, style)
+		}
+	}
 	if r.Active {
 		// The current entry is a band rather than a word that changed weight:
 		// scanning twenty rows, weight is not enough to find one.

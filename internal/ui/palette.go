@@ -9,9 +9,10 @@ import (
 // Palette), with the same names and the same values, so a theme picked here
 // looks the way it does there.
 //
-// tend draws with fewer of them than herdr does: the bars, panels and the
-// sidebar's entry in view use panel_bg, accent and active_row_bg, and the
-// finer surfaces (surface0, selection_bg, sidebar_bg) are carried unused.
+// The bars, panels and the sidebar's entry in view use panel_bg, accent and
+// active_row_bg; inactive tabs surface0; the navigation cursor selection_bg;
+// the sidebar sidebar_bg. mauve, blue, peach, surface1 and subtext0 are
+// carried for [ui.theme.custom] and read by nothing yet.
 type Palette struct {
 	Accent      vt.Color
 	PanelBG     vt.Color
@@ -426,4 +427,64 @@ func PaletteNamed(name string) (Palette, bool) {
 	}
 	p, ok := palettes[canonical]
 	return p, ok
+}
+
+// withCustom lays [ui.theme.custom] overrides over the palette, token by
+// token, as herdr's with_overrides does.
+func (p Palette) withCustom(custom map[string]string) Palette {
+	for token, value := range custom {
+		c, ok := config.ParseThemeColor(value)
+		if !ok {
+			continue // refused at load
+		}
+		color := vt.DefaultColor
+		switch {
+		case c.Reset:
+		case c.RGB:
+			color = vt.RGBColor(c.R, c.G, c.B)
+		default:
+			color = vt.IndexedColor(c.Index)
+		}
+		switch token {
+		case "accent":
+			p.Accent = color
+		case "panel_bg":
+			p.PanelBG = color
+		case "sidebar_bg":
+			p.SidebarBG = color
+		case "active_row_bg":
+			p.ActiveRowBG = color
+		case "selection_bg":
+			p.SelectionBG = color
+		case "surface0":
+			p.Surface0 = color
+		case "surface1":
+			p.Surface1 = color
+		case "surface_dim":
+			p.SurfaceDim = color
+		case "overlay0":
+			p.Overlay0 = color
+		case "overlay1":
+			p.Overlay1 = color
+		case "text":
+			p.Text = color
+		case "subtext0":
+			p.Subtext0 = color
+		case "mauve":
+			p.Mauve = color
+		case "green":
+			p.Green = color
+		case "yellow":
+			p.Yellow = color
+		case "red":
+			p.Red = color
+		case "blue":
+			p.Blue = color
+		case "teal":
+			p.Teal = color
+		case "peach":
+			p.Peach = color
+		}
+	}
+	return p
 }

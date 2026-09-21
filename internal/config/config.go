@@ -163,14 +163,16 @@ type Theme struct {
 	// AutoSwitch follows the outer terminal between light and dark, using
 	// DarkName and LightName (herdr's defaults: catppuccin and
 	// catppuccin-latte) in place of Name.
-	AutoSwitch    bool   `toml:"auto_switch"`
-	DarkName      string `toml:"dark_name"`
-	LightName     string `toml:"light_name"`
-	Border        string `toml:"border"`
-	BorderFocused string `toml:"border_focused"`
-	Working       string `toml:"working"`
-	Blocked       string `toml:"blocked"`
-	Idle          string `toml:"idle"`
+	AutoSwitch bool   `toml:"auto_switch"`
+	DarkName   string `toml:"dark_name"`
+	LightName  string `toml:"light_name"`
+	// Custom overrides colours of the palette one token at a time.
+	Custom        CustomColors `toml:"custom"`
+	Border        string       `toml:"border"`
+	BorderFocused string       `toml:"border_focused"`
+	Working       string       `toml:"working"`
+	Blocked       string       `toml:"blocked"`
+	Idle          string       `toml:"idle"`
 }
 
 // Server configures the session server.
@@ -256,9 +258,12 @@ func parse(data, path string) (Config, error) {
 	}
 	var keys []string
 	for _, k := range md.Undecoded() {
-		// ui.sidebar reads itself (Sidebar.UnmarshalTOML) and refuses its
-		// own unknown keys; the decoder does not see that it did.
+		// ui.sidebar and ui.theme.custom read themselves and refuse their
+		// own unknown keys; the decoder does not see that they did.
 		if len(k) >= 2 && k[0] == "ui" && k[1] == "sidebar" {
+			continue
+		}
+		if len(k) >= 3 && k[0] == "ui" && k[1] == "theme" && k[2] == "custom" {
 			continue
 		}
 		keys = append(keys, k.String())
@@ -572,6 +577,15 @@ grouped = false
 # auto_switch = true
 # dark_name = "catppuccin"
 # light_name = "catppuccin-latte"
+#
+# Override any of the palette's colours on top of the theme, herdr's tokens
+# (accent, panel_bg, sidebar_bg, active_row_bg, selection_bg, surface0,
+# surface1, surface_dim, overlay0, overlay1, text, subtext0, mauve, green,
+# yellow, red, blue, teal, peach): #rrggbb, #rgb, rgb(r,g,b), or "reset".
+# [ui.theme.custom]
+# accent = "#f5c2e7"
+# [ui.theme.custom.light]   # only while auto_switch has the light theme
+# panel_bg = "#eff1f5"
 #
 # Each colour below overrides that one colour of the theme: a colour name,
 # a number from 0 to 255, or "#rrggbb".

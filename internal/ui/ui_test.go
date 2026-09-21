@@ -1947,3 +1947,70 @@ func TestEveryVisibleMatchOfASearchIsMarked(t *testing.T) {
 		t.Errorf("a capital should match case: marked %v", got)
 	}
 }
+
+// TestThemeCustomOverridesAPalettesTokens is herdr's [theme.custom]: any
+// token of the palette, in any of herdr's colour forms, over the theme, and
+// the light or dark set only while auto_switch has that appearance. If it
+// regresses, a herdr user's colour tweaks load and change nothing.
+func TestThemeCustomOverridesAPalettesTokens(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(path, []byte(`[ui.theme]
+name = "nord"
+auto_switch = true
+dark_name = "nord"
+[ui.theme.custom]
+accent = "#f5c2e7"
+surface0 = "rgb(1, 2, 3)"
+[ui.theme.custom.light]
+accent = "#123"
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dark := ThemeFor(c.UI.Theme, false)
+	if dark.BorderFocused.FG != vt.RGBColor(0xf5, 0xc2, 0xe7) {
+		t.Errorf("dark accent = %v, want the override", dark.BorderFocused.FG)
+	}
+	if dark.TabInactive.BG != vt.RGBColor(1, 2, 3) {
+		t.Errorf("inactive tab = %+v, want the overridden surface0", dark.TabInactive)
+	}
+	light := ThemeFor(c.UI.Theme, true)
+	if light.BorderFocused.FG != vt.RGBColor(0x11, 0x22, 0x33) {
+		t.Errorf("light accent = %v, want the light override over the rest", light.BorderFocused.FG)
+	}
+
+	for name, body := range map[string]string{
+		"unknown token": "[ui.theme.custom]\nsparkle = \"#fff\"\n",
+		"bad colour":    "[ui.theme.custom]\naccent = \"rgb(1,2)\"\n",
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.LoadFile(path); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+// TestTheNavigationCursorGetsThePalettesSelection: with a palette, the row
+// under the navigation cursor sits on selection_bg, as in herdr; without
+// one, the › in the margin is the whole cursor, as before.
+func TestTheNavigationCursorGetsThePalettesSelection(t *testing.T) {
+	p, _ := PaletteNamed("tokyo-night")
+	f := Frame{Sidebar: true, Spaces: SidebarSection{Rows: []SidebarRow{
+		{Kind: SidebarSpace, Label: "api", Selected: true, Running: true},
+	}}}
+	dst := vt.NewGrid(60, 8, 0)
+	Draw(dst, f, ThemeFrom(config.Theme{Name: "tokyo-night"}))
+	if got := dst.Line(0).Cell(5).Style.BG; got != p.SelectionBG {
+		t.Errorf("cursor row background = %v, want selection_bg", got)
+	}
+	dst = vt.NewGrid(60, 8, 0)
+	Draw(dst, f, DefaultTheme())
+	if got := dst.Line(0).Cell(5).Style.BG; !got.IsDefault() {
+		t.Errorf("without a palette the row keeps its background, got %v", got)
+	}
+}
