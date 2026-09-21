@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/detect"
@@ -103,6 +104,7 @@ const (
 	MethodPaneReportAgentSession  = "pane.report_agent_session"
 	MethodPaneReleaseAgent        = "pane.release_agent"
 	MethodPaneClearAgentAuthority = "pane.clear_agent_authority"
+	MethodPaneReportMetadata      = "pane.report_metadata"
 	MethodIntegrationList         = "integration.list"
 	MethodIntegrationInstall      = "integration.install"
 	MethodIntegrationUninstall    = "integration.uninstall"
@@ -130,7 +132,10 @@ type PaneInfo struct {
 	State   string `json:"agent_state"`
 	Message string `json:"message,omitempty"`
 	Running bool   `json:"running"`
-	Pid     int    `json:"pid,omitempty"`
+	// Display and Tokens are what a hook asked to have shown about the agent.
+	Display string        `json:"display_agent,omitempty"`
+	Tokens  []agent.Token `json:"tokens,omitempty"`
+	Pid     int           `json:"pid,omitempty"`
 	// AgentSession is the conversation a hook has named for the pane.
 	AgentSession *AgentSessionInfo `json:"agent_session,omitempty"`
 }
@@ -352,6 +357,7 @@ func (a *API) info(st server.PaneStatus) PaneInfo {
 	info := PaneInfo{
 		PaneID: PaneID(st.ID), Title: st.Title, Agent: st.Agent, State: st.State.String(),
 		Message: st.Message, Running: st.Running, Pid: st.Pid,
+		Display: st.Presentation.DisplayAgent, Tokens: st.Presentation.Tokens,
 	}
 	if p, ok, err := a.srv.AgentSession(st.ID); err == nil && ok {
 		info.AgentSession = &AgentSessionInfo{
@@ -470,6 +476,41 @@ func (a *API) call(req Request, p *pending) (any, error) {
 			return nil, err
 		}
 		if _, err := a.srv.ReleaseAgent(id, p.Source, p.Agent, p.Seq); err != nil {
+			return nil, paneErr(p.PaneID, err)
+		}
+		return ok(), nil
+
+	case MethodPaneReportMetadata:
+		var p struct {
+			PaneID            string             `json:"pane_id"`
+			Source            string             `json:"source"`
+			Agent             string             `json:"agent"`
+			Title             string             `json:"title"`
+			DisplayAgent      string             `json:"display_agent"`
+			StateLabels       map[string]string  `json:"state_labels"`
+			Tokens            map[string]*string `json:"tokens"`
+			TTLMs             uint64             `json:"ttl_ms"`
+			ClearTitle        bool               `json:"clear_title"`
+			ClearDisplayAgent bool               `json:"clear_display_agent"`
+			ClearStateLabels  bool               `json:"clear_state_labels"`
+			Seq               *uint64            `json:"seq"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := a.srv.ReportMetadata(id, agent.MetadataReport{
+			Source: p.Source, Agent: p.Agent, Title: p.Title, DisplayAgent: p.DisplayAgent,
+			StateLabels: p.StateLabels, Tokens: p.Tokens,
+			TTL:               time.Duration(p.TTLMs) * time.Millisecond,
+			ClearTitle:        p.ClearTitle,
+			ClearDisplayAgent: p.ClearDisplayAgent,
+			ClearStateLabels:  p.ClearStateLabels,
+			Seq:               p.Seq,
+		}); err != nil {
 			return nil, paneErr(p.PaneID, err)
 		}
 		return ok(), nil

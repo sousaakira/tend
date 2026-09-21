@@ -488,3 +488,43 @@ func TestSavingAndRebuildingALayoutFromTheShell(t *testing.T) {
 		t.Errorf("the rebuilt arrangement is not there:\n%s", out)
 	}
 }
+
+// TestWhatAHookSaysAboutAnAgentReachesTheSidebar is the point of metadata: a
+// list that says only "working" is a list that makes you open the pane to find
+// out anything.
+func TestWhatAHookSaysAboutAnAgentReachesTheSidebar(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+
+	// A session with an agent in it, and a client watching.
+	prog := fakeAgentBin(t, "claude", "printf 'esc to interrupt\\n'; sleep 60")
+	if out, err := exec.Command(bin, "new", "-s", "meta", "--", prog).CombinedOutput(); err != nil {
+		t.Fatalf("tend new: %v\n%s", err, out)
+	}
+	p, err := pty.Start(bin, []string{"attach", "-s", "meta"}, pty.Options{
+		Size: pty.Size{Cols: 110, Rows: 16}, Env: env,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(110, 16, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "meta") })
+	a.waitForScreen(t, "the agent in the list", func(s string) bool {
+		return strings.Contains(s, "claude")
+	})
+
+	report := `{"pane_id":"p_1","source":"my-hook","agent":"claude",` +
+		`"display_agent":"claude opus","tokens":{"ctx":"23%"}}`
+	cmd := exec.Command(bin, "api", "-s", "meta", "pane.report_metadata", report)
+	cmd.Env = env
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("report: %v\n%s", err, out)
+	}
+
+	a.waitForScreen(t, "what the hook said, in the list", func(s string) bool {
+		return strings.Contains(s, "claude opus · 23%")
+	})
+}

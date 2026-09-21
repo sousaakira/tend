@@ -228,6 +228,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a file and opens `$EDITOR` on it in a pane of its own — herdr's
   `EditScrollback`. The file is removed by the command that opened it, so
   nothing has to remember it.
+- **Agent metadata** (herdr's `terminal/metadata.rs`, `metadata_tokens.rs`):
+  `pane.report_metadata` takes what a hook says about how to show a pane — the
+  name the agent goes by, values to put beside it like the model or what is
+  left of the context, labels for its states — with a lifetime, because "23%
+  of context left" is true for a minute and misleading for an hour. It shows
+  in the sidebar and in `pane.get`. Ordered per source like a state report,
+  and refused about an agent that is not the one in the pane. Values are shown
+  in key order: two reported in one message arrive in a map and have no order
+  of their own.
 - **Notifications from anything**: `notification.show` over the socket and
   `tend notify <title> [body]`, for a script, a hook or a plugin that has
   something to say and no screen to say it on. `[notify] toasts = "system"`
@@ -313,8 +322,8 @@ an agent may name one, by id, except pi and omp which resume from a path.
 
 **Still not ported:**
 - The arbiter leaves out herdr's bookkeeping for suppressed and stale
-  full-lifecycle sessions, its window after an observed process exit, agent
-  names, and `pane.report_metadata` (`terminal/state.rs`, `terminal/metadata.rs`)
+  full-lifecycle sessions, its window after an observed process exit, and
+  agent names (`terminal/state.rs`)
 - The session reference is held in memory only: it is not in the state file or
   the handoff manifest yet, which queue item 12 needs
 - Windows `.ps1` assets and Windows path branches
@@ -330,9 +339,8 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
-- `pane.neighbor|edges|zoom|process_info`,
-  `agent.explain|rename|view.*`, `worktree.*`, `plugin.*`, `command.invoke`,
-  `notification.show`, graphics, `pane.report_metadata`.
+- `pane.neighbor|edges|zoom|process_info`, `agent.explain|rename|view.*`,
+  `command.invoke`, and the graphics API.
 - A published schema (`herdr api schema`, `schemars`), which plugins read.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,
   `cli/workspace.rs`, `cli/api.rs`; user docs `socket-api.mdx`,

@@ -496,10 +496,21 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 					// to show.
 					continue
 				}
+				// What a hook asked to have shown, when one did: the name
+				// the agent goes by and the values beside it — the model,
+				// what is left of its context. The agent's own name is the
+				// fallback, which is what most panes have.
+				detail := p.Agent
+				if p.Display != "" {
+					detail = p.Display
+				}
+				for _, token := range p.Tokens {
+					detail += " · " + token.Value
+				}
 				entries = append(entries, ui.SidebarRow{
 					Kind:      ui.SidebarAgent,
 					Label:     agentLabel(w, tab),
-					Detail:    p.Agent,
+					Detail:    detail,
 					Pane:      id,
 					Tab:       tab.ID,
 					Workspace: w.ID,

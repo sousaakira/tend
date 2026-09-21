@@ -260,6 +260,9 @@ type PaneStatus struct {
 	ExitErr string
 	// Message is what a hook said alongside its state, if one is behind it.
 	Message string
+	// Presentation is what a hook said to show about the pane: a name for the
+	// agent, values beside it, labels for its states.
+	Presentation agent.Presentation
 	// Mouse is whether the pane's program asked for mouse reports at all.
 	// MouseDrag and MouseMotion say how much it asked for, and MouseSGR how
 	// it wants them written: a client forwarding the mouse has to send what

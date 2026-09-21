@@ -177,6 +177,14 @@ type Arbiter struct {
 	persisted *PersistedSession
 	seqs      map[string]uint64
 
+	// metadata is what each source said about how to show the pane, tokens
+	// are the values to show beside it, and metadataSeqs orders those
+	// reports — apart from the state ones, because a hook may send one kind
+	// without the other.
+	metadata     map[string]*metadataEntry
+	tokens       map[string]token
+	metadataSeqs map[string]uint64
+
 	// known reports whether a label names an agent tend can detect. Only such
 	// a label can disagree with the screen: a name the screen could never
 	// produce is not contradicted by the screen producing another.

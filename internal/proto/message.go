@@ -210,11 +210,23 @@ type PaneInfo struct {
 	Graphics uint64 `json:"graphics,omitempty"`
 	// Named marks a title the user gave the pane, which its program's own
 	// title does not replace.
-	Named   bool   `json:"named,omitempty"`
-	ExitErr string `json:"exit_error,omitempty"`
+	Named bool `json:"named,omitempty"`
+	// Display is what to call the agent, and Tokens are the values a hook
+	// asked to have shown beside it — the model, what is left of the
+	// context. StateLabels rename a state for this pane.
+	Display     string            `json:"display,omitempty"`
+	Tokens      []AgentToken      `json:"tokens,omitempty"`
+	StateLabels map[string]string `json:"state_labels,omitempty"`
+	ExitErr     string            `json:"exit_error,omitempty"`
 
 	Command []string `json:"command,omitempty"`
 	Dir     string   `json:"dir,omitempty"`
+}
+
+// AgentToken is one value to show beside an agent.
+type AgentToken struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // TabInfo describes a tab and the panes in it.

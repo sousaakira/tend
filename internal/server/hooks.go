@@ -49,6 +49,33 @@ func (s *Server) ReleaseAgent(id session.PaneID, source, label string, seq *uint
 	})
 }
 
+// ReportMetadata takes a hook's word on how to show a pane: what to call the
+// agent, what to show beside it, what to call the state it is in.
+func (s *Server) ReportMetadata(id session.PaneID, r agent.MetadataReport) (bool, error) {
+	if r.Agent != "" {
+		if r.Agent = agent.NormalizeLabel(r.Agent); r.Agent == "" {
+			return false, ErrBadAgent
+		}
+	}
+	now := time.Now()
+	rt, err := s.runtime(id)
+	if err != nil {
+		return false, err
+	}
+	rt.mu.Lock()
+	changed := rt.arbiter.ReportMetadata(r, now)
+	if changed {
+		rt.shownPresentation = rt.arbiter.Presentation(now)
+	}
+	rt.mu.Unlock()
+	if changed {
+		// Presentation, so the pane's record does not change; clients are
+		// told to look again, which is what the state event already means.
+		s.publish(Event{Kind: EventPaneState, Pane: id})
+	}
+	return true, nil
+}
+
 // ClearAgentAuthority drops whatever a hook last said, leaving the screen to
 // speak for the pane. An empty source clears whoever holds it.
 func (s *Server) ClearAgentAuthority(id session.PaneID, source string, seq *uint64) (bool, error) {

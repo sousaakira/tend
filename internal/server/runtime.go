@@ -44,8 +44,11 @@ type paneRuntime struct {
 	arbiter   *agent.Arbiter
 	shown     agent.Effective
 	shownRule string
-	dirty     bool
-	title     string
+	// shownPresentation is what a hook said to show beside the agent: the
+	// name it goes by, the values worth a glance, the labels for its states.
+	shownPresentation agent.Presentation
+	dirty             bool
+	title             string
 	// foreground is the program last seen in charge of the terminal, so the
 	// costly part — resolving and swapping the detector — happens only when
 	// it actually changes.
@@ -315,20 +318,21 @@ func (rt *paneRuntime) status() PaneStatus {
 
 	modes := rt.screen.Modes()
 	st := PaneStatus{
-		Mouse:       modes.Mouse != vt.MouseOff,
-		MouseDrag:   modes.Mouse >= vt.MouseButtonEvent,
-		MouseMotion: modes.Mouse >= vt.MouseAnyEvent,
-		MouseSGR:    modes.MouseEncoding == vt.MouseEncodingSGR || modes.MouseEncoding == vt.MouseEncodingSGRPixels,
-		Graphics:    rt.screen.KittyRevision(),
-		ID:          rt.id,
-		Title:       rt.title,
-		Agent:       rt.shown.Agent,
-		State:       rt.shown.State,
-		Rule:        rt.shownRule,
-		Message:     rt.shown.Message,
-		Running:     rt.running,
-		ExitErr:     rt.exitErr,
-		Pid:         rt.pty.Pid(),
+		Mouse:        modes.Mouse != vt.MouseOff,
+		MouseDrag:    modes.Mouse >= vt.MouseButtonEvent,
+		MouseMotion:  modes.Mouse >= vt.MouseAnyEvent,
+		MouseSGR:     modes.MouseEncoding == vt.MouseEncodingSGR || modes.MouseEncoding == vt.MouseEncodingSGRPixels,
+		Graphics:     rt.screen.KittyRevision(),
+		ID:           rt.id,
+		Title:        rt.title,
+		Agent:        rt.shown.Agent,
+		State:        rt.shown.State,
+		Presentation: rt.shownPresentation,
+		Rule:         rt.shownRule,
+		Message:      rt.shown.Message,
+		Running:      rt.running,
+		ExitErr:      rt.exitErr,
+		Pid:          rt.pty.Pid(),
 	}
 	return st
 }

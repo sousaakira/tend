@@ -746,6 +746,15 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Panes[i].MouseMotion = st.MouseMotion
 		snap.Panes[i].MouseSGR = st.MouseSGR
 		snap.Panes[i].Graphics = st.Graphics
+		snap.Panes[i].Display = st.Presentation.DisplayAgent
+		snap.Panes[i].StateLabels = st.Presentation.StateLabels
+		for _, token := range st.Presentation.Tokens {
+			snap.Panes[i].Tokens = append(snap.Panes[i].Tokens,
+				proto.AgentToken{Key: token.Key, Value: token.Value})
+		}
+		if st.Presentation.Title != "" && !snap.Panes[i].Named {
+			snap.Panes[i].Title = st.Presentation.Title
+		}
 		if st.Title != "" && !snap.Panes[i].Named {
 			// A pane the user named keeps that name. The program's terminal
 			// title is what a pane is called when nobody has said otherwise.

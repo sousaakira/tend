@@ -64,3 +64,39 @@ func TestAReportMustNameAnAgentAndAPane(t *testing.T) {
 		t.Error("a report for a pane that does not exist was accepted")
 	}
 }
+
+// TestAHookCanSayWhatToShowBesideTheAgent: state is one word, and the sidebar
+// in herdr is mostly the rest — the model, what is left of the context. If it
+// regresses, a hook reporting those is ignored and the list is poorer for it.
+func TestAHookCanSayWhatToShowBesideTheAgent(t *testing.T) {
+	s := newServer(t)
+	_, pane := openTab(t, s, "sleep 30")
+	sub := s.Subscribe(64)
+	defer sub.Close()
+
+	value := func(v string) *string { return &v }
+	if _, err := s.ReportMetadata(pane, agent.MetadataReport{
+		Source: "my-hook", Agent: "deploy-bot",
+		DisplayAgent: "deploy-bot (staging)",
+		Tokens:       map[string]*string{"ctx": value("23%")},
+		StateLabels:  map[string]string{"blocked": "waiting for approval"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitForEvent(t, sub, func(ev Event) bool { return ev.Kind == EventPaneState && ev.Pane == pane })
+
+	st, _ := s.PaneStatus(pane)
+	if st.Presentation.DisplayAgent != "deploy-bot (staging)" {
+		t.Errorf("display agent = %q", st.Presentation.DisplayAgent)
+	}
+	if len(st.Presentation.Tokens) != 1 || st.Presentation.Tokens[0].Value != "23%" {
+		t.Errorf("tokens = %v", st.Presentation.Tokens)
+	}
+	if st.Presentation.StateLabels["blocked"] != "waiting for approval" {
+		t.Errorf("state labels = %v", st.Presentation.StateLabels)
+	}
+	// Presentation is not state: what the pane is doing has not changed.
+	if st.State != detect.StateUnknown {
+		t.Errorf("metadata changed the pane's state to %v", st.State)
+	}
+}
