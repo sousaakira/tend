@@ -406,6 +406,22 @@ top of it is not:
   herdr's prompt to stop a server too old to hand off. Every `-ssh` command
   runs `~/.local/bin/tend` there when it exists, and the one on the PATH
   otherwise.
+- **Saved machines** (herdr's multi-endpoint client: `client/endpoint/`,
+  `client/shell/endpoint_sidebar.rs`, `endpoint_navigation.rs`, `herdr
+  machine`) are ported in part. Ported: the catalog (`machines.json` in the
+  state directory, herdr's fields and limits) and `tend machine list | add |
+  rename | remove | enable | disable`, adding a machine preparing it first as
+  attaching would; with one saved, the sidebar lists machines — "Local" first,
+  each with its spaces beneath it, folding, and the reachability glyph herdr
+  shows — each machine not in view watched over a connection of its own
+  (events only, ssh in herdr's non-interactive mode, reconnecting with
+  backoff), and a click on another machine's space, or enter on it from the
+  sidebar walk, shows that machine through the connection already open, so
+  the switch is immediate. Left: the agents of every machine in one list
+  and their notifications (`endpoint_agents.rs`, `endpoint_notices.rs`), the
+  navigator's machine rows, next/previous space and agent across machines,
+  and reloading the catalog while the client runs (herdr's `catalog_reload.rs`; tend reads it when a client
+  starts).
 - A server from before this feature cannot hand off — it has no such method —
   and is replaced only by a restart. `tend handoff` says so rather than doing it.
 - Known limit: a pane resized between the manifest being written and the

@@ -156,8 +156,11 @@ type tui struct {
 	client        *client.Client
 	painter       *vt.Painter
 
-	mu        sync.Mutex
-	snap      proto.SessionSnapshot
+	mu   sync.Mutex
+	snap proto.SessionSnapshot
+	// machines are the saved machines in the sidebar, nil when there are
+	// none (tui_machines.go).
+	machines  *machinesState
 	rects     []proto.PaneRect
 	screens   map[uint64]*vt.Screen
 	sizes     map[uint64]ui.Rect
@@ -333,6 +336,9 @@ func (t *tui) run() error {
 	}
 	t.client = c
 	defer c.Close()
+	// Going to another saved machine changes which connection is the
+	// client's; whichever it is at the end is closed with the watchers.
+	defer t.stopMachines()
 
 	restore, err := enterFullScreen(t.config.UI.Mouse)
 	if err != nil {
@@ -356,6 +362,7 @@ func (t *tui) run() error {
 	if err := t.refresh(); err != nil {
 		return err
 	}
+	t.loadMachines()
 
 	stopResize := t.watchResize()
 	defer stopResize()

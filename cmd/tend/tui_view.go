@@ -656,6 +656,14 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		return false, nil
 	}
 	switch {
+	case row.Action == ui.ActionMachine:
+		return true, t.clickMachine(row.Machine)
+	case row.Machine != "" && row.Action == ui.ActionToggleGroup:
+		t.toggleRemoteGroup(row.Machine, row.Group)
+		return true, nil
+	case row.Machine != "" && row.Workspace != 0:
+		// Another machine's space: going there is going to the machine.
+		return true, t.switchMachine(row.Machine, row.Workspace)
 	case row.Action == ui.ActionNewSpace:
 		return true, t.newWorkspace()
 	case row.Action == ui.ActionToggleGroup:
@@ -704,6 +712,8 @@ func (t *tui) dragSpace(ev ui.MouseEvent) bool {
 	target, group := uint64(0), ""
 	if row, ok := ui.SidebarRowAt(frame, 1, ev.Y, rows); ok {
 		switch {
+		case row.Machine != "":
+			// A space cannot be dragged to another machine.
 		case row.Kind == ui.SidebarSpace && row.Workspace != dragging:
 			target = row.Workspace
 		case row.Kind == ui.SidebarSpaceGroup && row.Group != t.groupOfLocked(dragging):

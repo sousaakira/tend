@@ -70,6 +70,29 @@ func RemoteArgv(host, session string) []string {
 	return append(strings.Fields(program), host, word, "bridge", "-s", session)
 }
 
+// WatchArgv is RemoteArgv for a connection nobody is watching being made: a
+// saved machine the client keeps up to date in the background. It must never
+// ask anything — the terminal is the client's screen, and a password prompt
+// written over it would be answered by whatever the user types next — so it
+// carries herdr's non-interactive options (remote/attach.rs,
+// apply_noninteractive_ssh_options). A wrapper in TEND_SSH is left alone: its
+// arguments are its own.
+func WatchArgv(host, session string) []string {
+	argv := RemoteArgv(host, session)
+	if os.Getenv(RemoteCommandEnv) != "" {
+		return argv
+	}
+	return append([]string{"ssh",
+		"-o", "BatchMode=yes",
+		"-o", "NumberOfPasswordPrompts=0",
+		"-o", "StrictHostKeyChecking=yes",
+		"-o", "ConnectTimeout=10",
+		"-o", "ConnectionAttempts=1",
+		"-o", "ServerAliveInterval=15",
+		"-o", "ServerAliveCountMax=4",
+	}, argv[1:]...)
+}
+
 // RemoteShell runs a shell script on host and returns what it printed, with
 // stdin given to it — the probe and the install of a remote tend. Only over
 // plain ssh: the script is the far side's shell's to run.

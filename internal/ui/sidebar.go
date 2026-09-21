@@ -37,6 +37,9 @@ const (
 	SidebarAction
 	// SidebarBlank is a spacer.
 	SidebarBlank
+	// SidebarMachine is a saved machine, with its spaces beneath it: herdr's
+	// endpoint row, shown once there is more than one machine to be on.
+	SidebarMachine
 )
 
 // Action names carried on an action row.
@@ -48,6 +51,9 @@ const (
 	ActionToggleGroup = "toggle-group"
 	// ActionHideSidebar puts the whole sidebar away.
 	ActionHideSidebar = "hide-sidebar"
+	// ActionMachine is a machine row's: fold the one being shown, go to
+	// another.
+	ActionMachine = "machine"
 )
 
 // SidebarRow is one entry. A two-line entry is one row: the detail is drawn
@@ -75,6 +81,15 @@ type SidebarRow struct {
 	Group  string
 	Depth  int
 	Folded bool
+
+	// Machine is the saved machine a row belongs to when it is not the one
+	// being shown, and empty for the one that is. A space's number means
+	// something only on its own machine, so a row with a Machine is one to go
+	// to, never one to act on here.
+	Machine string
+	// Stale marks a row whose machine cannot be reached: what it shows is
+	// the last that was heard, dimmed as herdr dims it.
+	Stale bool
 
 	State   string
 	Running bool
@@ -474,9 +489,27 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 			// A dragged space let go here joins the group.
 			writeString(dst, 0, y, "▎", theme.BorderFocused, limit)
 		}
-		x := writeString(dst, 1, y, marker, style, limit)
+		x := writeString(dst, 1, y, indent(r.Depth)+marker, style, limit)
 		writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
 		drawTrailing(dst, r, y, limit, theme)
+
+	case SidebarMachine:
+		// herdr's endpoint row: the triangle, the machine's name in bold, and
+		// against the edge whether it can be reached.
+		marker := "▾ "
+		if r.Folded {
+			marker = "▸ "
+		}
+		style := theme.SidebarGroupActive
+		style.Attrs |= vt.AttrBold
+		if r.Stale {
+			style = theme.SidebarDetail
+		}
+		x := writeString(dst, 1, y, marker, style, limit)
+		writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
+		if at := TrailingStart(r); at >= 0 {
+			writeString(dst, at, y, r.Trailing, machineSignalStyle(r.State, theme), limit)
+		}
 
 	case SidebarAction:
 		style := theme.SidebarGroup
@@ -489,6 +522,43 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 	case SidebarSpace, SidebarAgent:
 		drawSidebarEntry(dst, r, y, limit, theme)
 	}
+}
+
+// machineSignalStyle is the colour of a machine's reachability, herdr's
+// endpoint_status_presentation: green online, yellow on the way, red when it
+// needs somebody.
+func machineSignalStyle(state string, theme Theme) vt.Style {
+	switch state {
+	case MachineOnline:
+		return theme.Idle
+	case MachineConnecting, MachineReconnecting:
+		return theme.Working
+	case MachineAttention:
+		return theme.Blocked
+	}
+	return theme.SidebarDetail
+}
+
+// A machine row's State, and the glyph herdr shows for each.
+const (
+	MachineConnecting   = "connecting"
+	MachineOnline       = "online"
+	MachineReconnecting = "reconnecting"
+	MachineAttention    = "attention"
+	MachineDisabled     = "disabled"
+)
+
+// MachineSignal is what a machine row shows against the edge: the glyph alone
+// when it is online, the glyph and the word otherwise.
+func MachineSignal(state string) string {
+	glyph := map[string]string{
+		MachineConnecting: "◐", MachineOnline: "●", MachineReconnecting: "◐",
+		MachineAttention: "!", MachineDisabled: "·",
+	}[state]
+	if state == MachineOnline || glyph == "" {
+		return glyph
+	}
+	return glyph + " " + state
 }
 
 // drawTrailing puts a row's button against the right edge. A toggle belongs
@@ -521,6 +591,9 @@ func drawSidebarEntry(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 		for i := 0; i < r.height()-r.Gap; i++ {
 			fill(dst, y+i, 0, limit, style)
 		}
+	}
+	if r.Stale {
+		style, mark = theme.SidebarDetail, theme.SidebarDetail
 	}
 	if r.Active {
 		// The current entry is a band rather than a word that changed weight:

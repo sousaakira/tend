@@ -84,6 +84,11 @@ func (t *tui) menuFor(x, y int) (ui.Menu, bool) {
 	t.mu.Unlock()
 
 	if row, ok := ui.SidebarRowAt(frame, x, y, rows); ok {
+		if row.Machine != "" {
+			// Another machine's space: its menu would act on this session's
+			// space of the same number. Going there first is the way to it.
+			return ui.Menu{}, false
+		}
 		switch row.Kind {
 		case ui.SidebarSpace:
 			return ui.SpaceMenu(row.Workspace, groups, x, y), true

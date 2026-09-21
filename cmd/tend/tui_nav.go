@@ -333,12 +333,21 @@ func (t *tui) newTabHere() error {
 // that makes another one.
 func (t *tui) spacesSectionLocked() ui.SidebarSection {
 	rows := []ui.SidebarRow{{Kind: ui.SidebarHeading, Label: "spaces"}}
-	rows = append(rows, t.spaceRowsLocked()...)
+	newLabel := "new"
+	if t.multiMachineLocked() {
+		// herdr's: the list is of machines, and a new space goes on the
+		// one being shown, which the button says.
+		rows[0].Label = "machines"
+		rows = append(rows, t.machineRowsLocked()...)
+		newLabel = "new · " + t.activeLabelLocked()
+	} else {
+		rows = append(rows, t.spaceRowsLocked()...)
+	}
 	return ui.SidebarSection{
 		Rows: rows,
 		Footer: []ui.SidebarRow{{
 			Kind:           ui.SidebarAction,
-			Label:          "new",
+			Label:          newLabel,
 			Action:         ui.ActionNewSpace,
 			Trailing:       "menu",
 			TrailingAction: ui.ActionOpenMenu,
@@ -382,12 +391,33 @@ func (t *tui) agentsSectionLocked() ui.SidebarSection {
 // made a space expects to find it where they put it, not where an alphabet
 // puts it.
 func (t *tui) spaceRowsLocked() []ui.SidebarRow {
+	return t.spaceRowsFrom(spaceSource{snap: &t.snap, folded: t.folded, current: t.workspace})
+}
+
+// spaceSource is one machine's session as the space list reads it: the one
+// being shown, or another saved machine's, whose rows are laid out the same
+// way and point back at it.
+type spaceSource struct {
+	snap *proto.SessionSnapshot
+	// machine is empty for the session being shown.
+	machine string
+	folded  map[string]bool
+	// current is the space in view, which is none on another machine.
+	current uint64
+	// depth is where the tree starts: under a machine's row, one in.
+	depth int
+	stale bool
+}
+
+// spaceRowsFrom lays one session's spaces out as a tree.
+func (t *tui) spaceRowsFrom(src spaceSource) []ui.SidebarRow {
 	var rows []ui.SidebarRow
 	seen := make(map[string]bool)
+	here := src.machine == ""
 
-	for _, w := range t.snap.Workspaces {
+	for _, w := range src.snap.Workspaces {
 		if w.Group == "" {
-			rows = append(rows, t.spaceRowLocked(w, 0))
+			rows = append(rows, t.spaceRowFrom(src, w, src.depth))
 			continue
 		}
 		if seen[w.Group] {
@@ -395,34 +425,41 @@ func (t *tui) spaceRowsLocked() []ui.SidebarRow {
 		}
 		seen[w.Group] = true
 
-		members := t.groupMembersLocked(w.Group)
-		folded := t.folded[w.Group]
+		members := groupMembersIn(src.snap, w.Group)
+		folded := src.folded[w.Group]
+		inGroup := false
+		for _, m := range members {
+			inGroup = inGroup || m.ID == src.current
+		}
 		rows = append(rows, ui.SidebarRow{
 			Kind:     ui.SidebarSpaceGroup,
 			Label:    w.Group,
 			Group:    w.Group,
 			Folded:   folded,
-			DropHere: w.Group == t.spaceDropGroup,
+			DropHere: here && w.Group == t.spaceDropGroup,
 			Action:   ui.ActionToggleGroup,
 			// A folded group still says what is happening inside it. Hiding
 			// that would make folding a way to stop being told an agent is
 			// waiting, which is the opposite of what folding is for.
-			Trailing: t.groupStateLabel(members),
-			Active:   t.inGroupLocked(w.Group),
+			Trailing: groupStateLabel(src.snap, members),
+			Active:   inGroup,
+			Depth:    src.depth,
+			Machine:  src.machine,
+			Stale:    src.stale,
 		})
 		if folded {
 			continue
 		}
 		for _, member := range members {
-			rows = append(rows, t.spaceRowLocked(member, 1))
+			rows = append(rows, t.spaceRowFrom(src, member, src.depth+1))
 		}
 	}
 	return rows
 }
 
-// spaceRowLocked is one space, at the given depth.
-func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
-	state := t.spaceStateLocked(w)
+// spaceRowFrom is one space, at the given depth.
+func (t *tui) spaceRowFrom(src spaceSource, w proto.WorkspaceInfo, depth int) ui.SidebarRow {
+	state := spaceStateIn(src.snap, w)
 	return ui.SidebarRow{
 		Kind:  ui.SidebarSpace,
 		Label: orDash(w.Name),
@@ -435,10 +472,12 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 		Group:     w.Group,
 		Depth:     depth,
 		Workspace: w.ID,
-		DropHere:  w.ID == t.spaceDropTarget,
+		DropHere:  src.machine == "" && w.ID == t.spaceDropTarget,
 		State:     state,
 		Running:   true,
-		Active:    w.ID == t.workspace,
+		Active:    w.ID == src.current,
+		Machine:   src.machine,
+		Stale:     src.stale,
 	}
 }
 
@@ -464,8 +503,13 @@ func (t *tui) groupOfLocked(workspace uint64) string {
 
 // groupMembersLocked returns a group's spaces in session order.
 func (t *tui) groupMembersLocked(group string) []proto.WorkspaceInfo {
+	return groupMembersIn(&t.snap, group)
+}
+
+// groupMembersIn returns a group's spaces in one session, in its order.
+func groupMembersIn(snap *proto.SessionSnapshot, group string) []proto.WorkspaceInfo {
 	var out []proto.WorkspaceInfo
-	for _, w := range t.snap.Workspaces {
+	for _, w := range snap.Workspaces {
 		if w.Group == group {
 			out = append(out, w)
 		}
@@ -485,10 +529,10 @@ func (t *tui) inGroupLocked(group string) bool {
 
 // groupStateLabel is what a group heading says about its members: the number
 // of them that want attention, or nothing when none do.
-func (t *tui) groupStateLabel(members []proto.WorkspaceInfo) string {
+func groupStateLabel(snap *proto.SessionSnapshot, members []proto.WorkspaceInfo) string {
 	blocked := 0
 	for _, w := range members {
-		if t.spaceStateLocked(w) == "blocked" {
+		if spaceStateIn(snap, w) == "blocked" {
 			blocked++
 		}
 	}
@@ -720,6 +764,11 @@ func agentLabel(w proto.WorkspaceInfo, tab proto.TabInfo) string {
 // space marked idle while an agent inside it waits for an answer is worse
 // than no mark at all.
 func (t *tui) spaceStateLocked(w proto.WorkspaceInfo) string {
+	return spaceStateIn(&t.snap, w)
+}
+
+// spaceStateIn is spaceStateLocked for any machine's session.
+func spaceStateIn(snap *proto.SessionSnapshot, w proto.WorkspaceInfo) string {
 	panes := make(map[uint64]bool)
 	for _, tab := range w.Tabs {
 		for _, id := range tab.Panes {
@@ -730,7 +779,7 @@ func (t *tui) spaceStateLocked(w proto.WorkspaceInfo) string {
 	// The most urgent, by herdr's attention order: an agent waiting beats one
 	// that finished unseen, which beats one still working.
 	state, best := "", 0
-	for _, p := range t.snap.Panes {
+	for _, p := range snap.Panes {
 		if !panes[p.ID] || p.Agent == "" || !p.Running {
 			continue
 		}
@@ -753,6 +802,10 @@ type navTarget struct {
 	// group is set for a group heading, which is a place the cursor stops so
 	// that a folded group can be opened without reaching for the mouse.
 	group string
+	// machine is set for a row on another saved machine, and for a
+	// machine's own row, which header says.
+	machine string
+	header  bool
 }
 
 // targetOf returns where a row goes, and whether it goes anywhere. Headings,
@@ -762,9 +815,11 @@ func targetOf(r ui.SidebarRow) (navTarget, bool) {
 	case ui.SidebarAgent:
 		return navTarget{pane: r.Pane, workspace: r.Workspace}, true
 	case ui.SidebarSpace:
-		return navTarget{workspace: r.Workspace}, true
+		return navTarget{workspace: r.Workspace, machine: r.Machine}, true
 	case ui.SidebarSpaceGroup:
-		return navTarget{group: r.Group}, true
+		return navTarget{group: r.Group, machine: r.Machine}, true
+	case ui.SidebarMachine:
+		return navTarget{machine: r.Machine, header: true}, true
 	}
 	return navTarget{}, false
 }
@@ -904,6 +959,15 @@ func (t *tui) navigateKey(key string) (bool, error) {
 		target := t.nav
 		t.mu.Unlock()
 		t.leaveNavigate()
+		switch {
+		case target.header:
+			return true, t.clickMachine(target.machine)
+		case target.machine != "" && target.workspace != 0:
+			return true, t.switchMachine(target.machine, target.workspace)
+		case target.machine != "" && target.group != "":
+			t.toggleRemoteGroup(target.machine, target.group)
+			return true, nil
+		}
 		if target.pane != 0 {
 			return true, t.jumpToPane(target.pane)
 		}
