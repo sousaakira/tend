@@ -1,5 +1,11 @@
 package ui
 
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
 // Key handling is a state machine over raw bytes rather than a parsed key
 // event, because almost every byte belongs to the focused pane and must reach
 // it untouched. Only the prefix key and the one command key after it are the
@@ -203,6 +209,172 @@ var Keys = []struct {
 	{"?", CommandHelp, "this help"},
 }
 
+// KeyName is what a key after the prefix is called, in the settings file and
+// in the help.
+//
+// A key here is one byte or one escape sequence, because that is what a
+// terminal sends: there is no key event with modifiers to inspect. So shift+s
+// is "S", and ctrl+s is a control byte that nothing binds. The names for what
+// has no printable form are herdr's ("tab", "up", "shift+tab").
+func KeyName(b byte) string {
+	switch b {
+	case '\t':
+		return "tab"
+	case '\r':
+		return "enter"
+	case ' ':
+		return "space"
+	case 0x1b:
+		return "esc"
+	}
+	if b < 0x20 || b > 0x7e {
+		return ""
+	}
+	return string(rune(b))
+}
+
+// arrowName is what an escape sequence after the prefix is called.
+func arrowName(final byte) string {
+	switch final {
+	case 'A':
+		return "up"
+	case 'B':
+		return "down"
+	case 'C':
+		return "right"
+	case 'D':
+		return "left"
+	case 'Z':
+		return "shift+tab"
+	}
+	return ""
+}
+
+// DefaultBindings is every key this build binds, by name.
+//
+// One table, so the parser, the help and the settings file cannot disagree
+// about what a key does. A user's own bindings are laid over a copy of it.
+func DefaultBindings() map[string]Command {
+	out := make(map[string]Command, 48)
+	for name, cmd := range map[string]Command{
+		"|": CommandSplitColumns, "\\": CommandSplitColumns, "%": CommandSplitColumns,
+		"-": CommandSplitRows, "\"": CommandSplitRows,
+		"h": CommandFocusLeft, "left": CommandFocusLeft,
+		"l": CommandFocusRight, "right": CommandFocusRight,
+		"k": CommandFocusUp, "up": CommandFocusUp,
+		"j": CommandFocusDown, "down": CommandFocusDown,
+		"o": CommandFocusNext, "tab": CommandFocusNext,
+		"shift+tab": CommandFocusPrev,
+		";":         CommandLastPane,
+		"<":         CommandPrevAgent,
+		">":         CommandNextAgent,
+		"x":         CommandClosePane,
+		"z":         CommandZoom,
+		"[":         CommandScroll,
+		"H":         CommandSwapLeft,
+		"L":         CommandSwapRight,
+		"K":         CommandSwapUp,
+		"J":         CommandSwapDown,
+		"r":         CommandResizeMode,
+		"c":         CommandNewTab,
+		"n":         CommandNextTab,
+		"p":         CommandPrevTab,
+		"s":         CommandSettings,
+		"N":         CommandNewSpace,
+		"G":         CommandNewWorktree,
+		")":         CommandNextSpace,
+		"(":         CommandPrevSpace,
+		"a":         CommandToggleAgents,
+		"g":         CommandNavigate, "w": CommandNavigate,
+		"m": CommandMenu,
+		",": CommandRenameTab,
+		".": CommandRenameSpace,
+		"d": CommandDetach,
+		"R": CommandRefresh,
+		"?": CommandHelp,
+	} {
+		out[name] = cmd
+	}
+	return out
+}
+
+// ParseCommand reads a command's name, as the settings file writes it. The
+// names are what Command.String produces, so the file and the code cannot
+// drift apart.
+func ParseCommand(name string) (Command, bool) {
+	for cmd := CommandNone; cmd <= CommandNextAgent; cmd++ {
+		if cmd != CommandNone && cmd.String() == name {
+			return cmd, true
+		}
+	}
+	return CommandNone, false
+}
+
+// CommandNames is every command a key can be bound to, in the order they are
+// listed in the help.
+func CommandNames() []string {
+	seen := map[Command]bool{}
+	var out []string
+	for _, k := range Keys {
+		if !seen[k.Command] {
+			seen[k.Command] = true
+			out = append(out, k.Command.String())
+		}
+	}
+	for _, cmd := range []Command{
+		CommandSplitRows, CommandFocusLeft, CommandFocusRight, CommandFocusUp,
+		CommandFocusDown, CommandSwapLeft, CommandSwapUp, CommandSwapDown,
+		CommandPrevAgent, CommandPrevSpace, CommandPrevTab, CommandFocusPrev,
+	} {
+		if !seen[cmd] {
+			seen[cmd] = true
+			out = append(out, cmd.String())
+		}
+	}
+	return out
+}
+
+// BindingsFrom lays a user's bindings over the defaults.
+//
+// A binding is "<command> = <key>", named as the help names both. Binding a
+// key that something else already has takes it: last one wins, and the one
+// that lost is reported so a user who bound two things to one key is told
+// rather than left wondering.
+func BindingsFrom(pairs map[string]string) (map[string]Command, []string, error) {
+	out := DefaultBindings()
+	var notes []string
+	for name, key := range pairs {
+		cmd, ok := ParseCommand(name)
+		if !ok {
+			return nil, nil, fmt.Errorf("keys.bind: no command called %q", name)
+		}
+		key = strings.TrimSpace(key)
+		if !ValidKeyName(key) {
+			return nil, nil, fmt.Errorf("keys.bind.%s: %q is not a key tend can read after the prefix", name, key)
+		}
+		if previous, taken := out[key]; taken && previous != cmd {
+			notes = append(notes, key+" was "+previous.String()+", now "+cmd.String())
+		}
+		// Whatever this command was on before is left alone: a user who
+		// binds one key keeps the other, which is what "bind" means.
+		out[key] = cmd
+	}
+	return out, notes, nil
+}
+
+// ValidKeyName reports whether a key name is one the parser can produce.
+func ValidKeyName(name string) bool {
+	switch name {
+	case "tab", "enter", "space", "esc", "up", "down", "left", "right", "shift+tab":
+		return true
+	}
+	r := []rune(name)
+	if len(r) != 1 {
+		return false
+	}
+	return r[0] >= 0x21 && r[0] <= 0x7e
+}
+
 // Input turns a byte stream into pane input and client commands.
 //
 // The zero value is ready to use. It is not safe for concurrent use; one
@@ -212,6 +384,9 @@ type Input struct {
 	// expressed by setting it to a byte no keyboard produces, which Disabled
 	// does.
 	PrefixKey byte
+	// Bindings overrides what the keys after the prefix do. Nil uses
+	// DefaultBindings, which is what every key in the help comes from.
+	Bindings map[string]Command
 
 	armed bool
 	// pending holds an escape sequence being read after the prefix, so that
@@ -229,6 +404,22 @@ const maxPartialMouse = 32
 // Disabled is a prefix that no key produces, for a user who has turned the
 // prefix off and drives tend some other way.
 const Disabled byte = 0xFF
+
+// binding looks a key name up in whatever this input is bound to.
+func (in *Input) binding(name string) (Command, bool) {
+	if name == "" {
+		return CommandNone, false
+	}
+	if in.Bindings != nil {
+		cmd, ok := in.Bindings[name]
+		return cmd, ok
+	}
+	cmd, ok := defaultBindings[name]
+	return cmd, ok
+}
+
+// defaultBindings is built once: the parser asks it for every key.
+var defaultBindings = DefaultBindings()
 
 func (in *Input) prefix() byte {
 	if in.PrefixKey == 0 {
@@ -336,9 +527,10 @@ func (in *Input) command(b byte) Result {
 			}
 			return Result{}
 		default:
-			cmd := arrowCommand(in.pending[2])
+			name := arrowName(in.pending[2])
 			in.disarm()
-			if cmd == CommandNone {
+			cmd, ok := in.binding(name)
+			if !ok {
 				return Result{}
 			}
 			return Result{Command: cmd}
@@ -347,107 +539,21 @@ func (in *Input) command(b byte) Result {
 
 	in.disarm()
 
-	switch b {
-	case '|', '\\', '%':
-		return Result{Command: CommandSplitColumns}
-	case '-', '"':
-		return Result{Command: CommandSplitRows}
-	case 'h':
-		return Result{Command: CommandFocusLeft}
-	case 'l':
-		return Result{Command: CommandFocusRight}
-	case 'k':
-		return Result{Command: CommandFocusUp}
-	case 'j':
-		return Result{Command: CommandFocusDown}
-	case 'o', '\t':
-		return Result{Command: CommandFocusNext}
-	case ';':
-		return Result{Command: CommandLastPane}
-	case '<':
-		return Result{Command: CommandPrevAgent}
-	case '>':
-		return Result{Command: CommandNextAgent}
-	case 'x':
-		return Result{Command: CommandClosePane}
-	case 'z':
-		return Result{Command: CommandZoom}
-	case '[':
-		return Result{Command: CommandScroll}
-	// Shifted movement keys swap the pane that way, herdr's binding. Resizing
-	// has a mode of its own on r, where the unshifted keys do it repeatedly
-	// without the prefix before each press.
-	case 'H':
-		return Result{Command: CommandSwapLeft}
-	case 'L':
-		return Result{Command: CommandSwapRight}
-	case 'K':
-		return Result{Command: CommandSwapUp}
-	case 'J':
-		return Result{Command: CommandSwapDown}
-	case 'c':
-		return Result{Command: CommandNewTab}
-	case 's':
-		// herdr's key for settings; a new space moved to shift+n, which is
-		// herdr's key for that.
-		return Result{Command: CommandSettings}
-	case 'N':
-		return Result{Command: CommandNewSpace}
-	case 'G':
-		return Result{Command: CommandNewWorktree}
-	case ')':
-		return Result{Command: CommandNextSpace}
-	case '(':
-		return Result{Command: CommandPrevSpace}
-	case 'a':
-		return Result{Command: CommandToggleAgents}
-	case 'g', 'w':
-		// w is herdr's workspace picker, which is this: moving through the
-		// spaces with a preview. g stays, for hands that learned it here.
-		return Result{Command: CommandNavigate}
-	case 'm':
-		return Result{Command: CommandMenu}
-	case ',':
-		return Result{Command: CommandRenameTab}
-	case '.':
-		return Result{Command: CommandRenameSpace}
-	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+	// Digits pick a tab, which is a command with an argument rather than a
+	// binding, and nothing else in the table takes one.
+	if b >= '1' && b <= '9' {
 		return Result{Command: CommandSelectTab, Arg: int(b - '0')}
-	case 'n':
-		return Result{Command: CommandNextTab}
-	case 'p':
-		return Result{Command: CommandPrevTab}
-	case 'd':
-		return Result{Command: CommandDetach}
-	case 'r':
-		return Result{Command: CommandResizeMode}
-	case 'R':
-		return Result{Command: CommandRefresh}
-	case '?':
-		return Result{Command: CommandHelp}
-	case in.prefix():
+	}
+	if b == in.prefix() {
 		return Result{Command: CommandLiteralPrefix, Forward: []byte{in.prefix()}}
+	}
+	if cmd, ok := in.binding(KeyName(b)); ok {
+		return Result{Command: cmd}
 	}
 
 	// An unbound key cancels the prefix and is forwarded, so a mistyped
 	// command does not silently swallow the next keystroke.
 	return Result{Forward: []byte{b}}
-}
-
-func arrowCommand(final byte) Command {
-	switch final {
-	case 'A':
-		return CommandFocusUp
-	case 'B':
-		return CommandFocusDown
-	case 'C':
-		return CommandFocusRight
-	case 'D':
-		return CommandFocusLeft
-	case 'Z':
-		return CommandFocusPrev // shift+tab arrives as ESC [ Z
-	}
-	return CommandNone
 }
 
 // release cancels the prefix and forwards what was collected.
@@ -464,11 +570,21 @@ func (in *Input) disarm() {
 }
 
 // HelpLines renders the bindings for the help overlay.
-func HelpLines() []string {
+func HelpLines() []string { return HelpLinesFor(nil) }
+
+// HelpLinesFor renders the help for a particular set of bindings, so a user
+// who rebound a key is shown the key they have rather than the default.
+func HelpLinesFor(bindings map[string]Command) []string {
 	lines := make([]string, 0, len(Keys)+len(Gestures)+2)
 	lines = append(lines, "ctrl+b then:")
 	for _, k := range Keys {
-		lines = append(lines, "  "+pad(k.Key, 5)+" "+k.Help)
+		key := k.Key
+		if bindings != nil {
+			if bound := keysFor(bindings, k.Command); bound != "" {
+				key = bound
+			}
+		}
+		lines = append(lines, "  "+pad(key, 5)+" "+k.Help)
 	}
 	lines = append(lines, "mouse:")
 	for _, g := range Gestures {
@@ -490,6 +606,41 @@ var Gestures = []struct {
 	{"alt+drag", "select a block"},
 	{"right", "menu for what is under it"},
 	{"wheel", "scroll back"},
+}
+
+// keysFor is every key bound to a command, as the help shows them.
+func keysFor(bindings map[string]Command, cmd Command) string {
+	if cmd == CommandSelectTab {
+		// The digits are read before the table: they carry which tab, and
+		// nothing else a key can be bound to takes an argument. They are
+		// still keys, and the list would be lying to leave them out.
+		return "1-9"
+	}
+	var keys []string
+	for name, bound := range bindings {
+		if bound == cmd {
+			keys = append(keys, name)
+		}
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, " ")
+}
+
+// Bound lists every command that has a key, with the keys it has, for
+// anything that prints the bindings.
+func Bound(bindings map[string]Command) [][2]string {
+	if bindings == nil {
+		bindings = defaultBindings
+	}
+	var out [][2]string
+	for _, name := range CommandNames() {
+		cmd, ok := ParseCommand(name)
+		if !ok {
+			continue
+		}
+		out = append(out, [2]string{name, keysFor(bindings, cmd)})
+	}
+	return out
 }
 
 func pad(s string, width int) string {

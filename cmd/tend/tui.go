@@ -97,6 +97,16 @@ func runAttach(args []string) error {
 		folded:        make(map[string]bool),
 	}
 	t.keys.PrefixKey = prefix
+	if bindings, notes, err := ui.BindingsFrom(cfg.Keys.Bind); err != nil {
+		// Said and then ignored: a mistyped binding must not stop tend from
+		// starting, and the keys it did understand still work.
+		fmt.Fprintf(os.Stderr, "%s %v\n", tag(), err)
+	} else {
+		t.keys.Bindings = bindings
+		for _, note := range notes {
+			fmt.Fprintf(os.Stderr, "%s keys.bind: %s\n", tag(), note)
+		}
+	}
 	t.sidebar = cfg.UI.Sidebar
 	t.grouped = cfg.UI.Grouped
 	return t.run()
@@ -1244,7 +1254,7 @@ func (t *tui) command(action ui.Action) error {
 		return nil
 
 	case ui.CommandHelp:
-		t.toggleOverlay(ui.HelpLines())
+		t.toggleOverlay(ui.HelpLinesFor(t.keys.Bindings))
 		return nil
 	}
 	return nil

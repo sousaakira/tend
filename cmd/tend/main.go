@@ -40,6 +40,7 @@ commands:
   integration       install or remove agent hooks
 
 commands that need no server:
+  keys              list every command and the key it is on
   agents            list the agents tend can detect
   detect            report an agent's state from captured terminal output
   explain           show how every rule voted, for one capture
@@ -64,6 +65,8 @@ func main() {
 
 	var err error
 	switch cmd := args[0]; cmd {
+	case "keys":
+		err = runKeys(args[1:])
 	case "agents":
 		err = runAgents(args[1:])
 	case "detect":

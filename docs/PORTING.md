@@ -174,6 +174,12 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   file the user wrote: one line replaced in place, comments and order intact,
   refused outright if the result would not parse (herdr's
   `config/io.rs::upsert_section_raw`).
+- **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
+  command to a key — `detach = "q"` — over the defaults, `tend keys` lists
+  every command and the key it is on, and the help shows the keys in effect
+  rather than the defaults. Binding a key something else has is allowed and
+  reported. One table feeds the parser, the help and the listing, so they
+  cannot drift.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -377,14 +383,21 @@ Ported (see "Ported, and checked"). Left:
   prefix keeps any pane input already bound elsewhere; herdr rebinds
   everything through its keybind table (item 11).
 
-### 11. Configurable chrome — medium
+### 11. Configurable chrome — keys done, the rest of the chrome is not
 
-- herdr: `config/sidebar.rs` and `ui/sidebar/tokens.rs` (what each sidebar row
-  shows, as a list of styled tokens), `config/tab_bar.rs`,
-  `config/window_title.rs`, `config/keybinds.rs` (every key rebindable),
-  `config/theme.rs`.
-- tend today: the sidebar rows, the tab bar and the keys are fixed; only the
-  prefix key and a few colours can be set.
+Keys are rebindable (see "Ported, and checked"). Left:
+
+- **Sidebar rows as tokens** (`config/sidebar.rs`, 729 lines, and
+  `ui/sidebar/tokens.rs`): herdr lets the user say what each row shows and in
+  what style. tend's rows are fixed.
+- **Tab bar** (`config/tab_bar.rs`) and **window title**
+  (`config/window_title.rs`): what goes in them, as templates.
+- **Named themes** (`config/theme.rs`): herdr ships a set and names them; tend
+  has five colours set individually.
+- A key is one byte or one escape sequence after the prefix, so `ctrl+q` and
+  `alt+x` cannot be bound: the terminal sends control bytes tend forwards to
+  the pane. herdr reads key events with modifiers through crossterm.
+- herdr's remaining default keys, listed under item 7.
 
 ### 12. Agent session resume — medium
 

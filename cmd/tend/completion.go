@@ -26,6 +26,7 @@ var commands = []struct{ name, help string }{
 	{"bridge", "carry a session over stdin and stdout, for ssh"},
 	{"config", "show or write the settings file"},
 	{"integration", "install or remove agent hooks"},
+	{"keys", "list every command and the key it is on"},
 	{"agents", "list the agents tend can recognise"},
 	{"detect", "classify a screen capture"},
 	{"explain", "classify a screen capture and say why"},

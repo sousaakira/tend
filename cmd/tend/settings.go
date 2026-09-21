@@ -47,6 +47,11 @@ func (t *tui) reloadSettings() error {
 	if prefix, err := cfg.PrefixKey(); err == nil {
 		t.keys.PrefixKey = prefix
 	}
+	if bindings, _, err := ui.BindingsFrom(cfg.Keys.Bind); err != nil {
+		t.setMessage(err.Error(), true)
+	} else {
+		t.keys.Bindings = bindings
+	}
 	changedPrefix := previousPrefix != cfg.Keys.Prefix
 
 	// The server's half. An older server has never heard of the method, which

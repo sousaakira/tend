@@ -62,6 +62,15 @@ type Keys struct {
 	// Prefix arms a command. Written as "ctrl+b", or "none" to disable it —
 	// which is only sensible when something else is providing the keys.
 	Prefix string `toml:"prefix"`
+	// Bind rebinds what a key after the prefix does, as
+	// <command> = "<key>". A command not named here keeps its default key,
+	// and a key bound twice belongs to whichever command named it.
+	//
+	// What the names mean is the interface's business, not this package's:
+	// the settings file only carries the pairs, and `internal/ui` decides
+	// whether they name anything. Validating here would mean config importing
+	// ui, which already imports config for the theme.
+	Bind map[string]string `toml:"bind"`
 }
 
 // Pane configures new panes.
@@ -328,6 +337,13 @@ const Example = `# tend settings. Every value here is the default; delete what y
 [keys]
 # The key that arms a command. "ctrl+<letter>", or "none" to disable it.
 prefix = "ctrl+b"
+
+# Rebind what a key after the prefix does, as <command> = "<key>". Run
+# "tend keys" for every command and the key it is on now. A command left out
+# keeps its default.
+# [keys.bind]
+# detach = "q"
+# settings = ","
 
 [pane]
 # What a pane runs when no command is given. Empty follows $SHELL.
