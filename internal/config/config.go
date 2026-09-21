@@ -26,7 +26,28 @@ type Config struct {
 	Server    Server    `toml:"server"`
 	Worktrees Worktrees `toml:"worktrees"`
 	Notify    Notify    `toml:"notify"`
+	Update    Update    `toml:"update"`
 	Sound     Sound     `toml:"sound"`
+}
+
+// Update configures where `tend update` looks.
+//
+// There is no default URL. tend publishes no releases, and pointing the
+// updater at a guess would have it install somebody else's binary.
+type Update struct {
+	// Channel is "stable" or "preview".
+	Channel string `toml:"channel"`
+	// Manifest and Preview are the URLs of the two channels' manifests.
+	Manifest string `toml:"manifest"`
+	Preview  string `toml:"preview"`
+}
+
+// ManifestURL is the manifest for the configured channel.
+func (c Config) ManifestURL() string {
+	if c.Update.Channel == "preview" {
+		return c.Update.Preview
+	}
+	return c.Update.Manifest
 }
 
 // Notify configures being told that an agent needs you.
@@ -123,6 +144,7 @@ func Defaults() Config {
 		Server:    Server{DetectInterval: "150ms", Persist: true},
 		Worktrees: Worktrees{Directory: "~/.tend/worktrees"},
 		Notify:    Notify{Toasts: "tend"},
+		Update:    Update{Channel: "stable"},
 	}
 }
 
@@ -191,6 +213,11 @@ func (c Config) validate() error {
 	}
 	if _, err := c.DetectInterval(); err != nil {
 		return err
+	}
+	switch c.Update.Channel {
+	case "", "stable", "preview":
+	default:
+		return fmt.Errorf("update.channel is %q; use \"stable\" or \"preview\"", c.Update.Channel)
 	}
 	switch c.Notify.Toasts {
 	case "", "tend", "terminal", "off":
@@ -394,6 +421,14 @@ toasts = "tend"
 # Notify about the pane you are looking at too. Off, because being told about
 # what is already on screen is noise.
 focused = false
+
+[update]
+# Which channel "tend update" follows, and where each one's manifest is.
+# There is no default URL: tend publishes no releases, so an updater pointed
+# at a guess would install somebody else's binary.
+channel = "stable"
+# manifest = "https://example.invalid/tend/latest.json"
+# preview = "https://example.invalid/tend/preview.json"
 
 [sound]
 # Make a sound as well. With no file named, this is the terminal bell.

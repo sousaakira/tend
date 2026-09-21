@@ -1,11 +1,19 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sousaakira/tend/internal/update"
 )
 
 // TestTheSettingsScreenChangesTheFileAndTheSession: a settings screen that
@@ -84,5 +92,76 @@ func TestRebindingAKeyInTheSettingsFile(t *testing.T) {
 	case <-exited:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the rebound key did not detach")
+	}
+}
+
+// TestUpdatingFromAPublishedManifest is the updater end to end with the real
+// binary: a manifest served over HTTP, a download checked against it, and the
+// binary replaced. If it regresses, an update either does nothing or installs
+// bytes nobody checked.
+func TestUpdatingFromAPublishedManifest(t *testing.T) {
+	published := []byte("#!/bin/sh\necho i-am-the-new-tend\n")
+	sum := sha256.Sum256(published)
+
+	mux := http.NewServeMux()
+	var base string
+	mux.HandleFunc("/tend", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(published) })
+	mux.HandleFunc("/latest.json", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"version":"published-build","notes":"what changed","assets":{%q:%q},"sha256":{%q:%q}}`,
+			update.Platform(), base+"/tend", update.Platform(), hex.EncodeToString(sum[:]))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	base = srv.URL
+
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte(
+		"[update]\nchannel = \"stable\"\nmanifest = \""+srv.URL+"/latest.json\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// A copy of the binary, so the test replaces its own and not the one the
+	// suite is running from.
+	built := buildBinary(t)
+	source, err := os.ReadFile(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "tend")
+	if err := os.WriteFile(bin, source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	env := append(os.Environ(), "TEND_CONFIG="+configPath)
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	out, err := run("update", "-check")
+	if err != nil {
+		t.Fatalf("update -check: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "published-build") || !strings.Contains(out, "what changed") {
+		t.Errorf("the check does not say what is published: %s", out)
+	}
+	if after, _ := os.ReadFile(bin); string(after) != string(source) {
+		t.Error("a check installed something")
+	}
+
+	if out, err := run("update"); err != nil {
+		t.Fatalf("update: %v\n%s", err, out)
+	}
+	after, err := os.ReadFile(bin)
+	if err != nil || string(after) != string(published) {
+		t.Fatalf("after updating, the binary is %d bytes, %v", len(after), err)
+	}
+	// And nothing was left beside it.
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("the directory holds %d files after an update", len(entries))
 	}
 }

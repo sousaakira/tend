@@ -196,6 +196,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   what they would have shown anyway (`TEND_GRAPHICS=off` turns it off). A file
   transfer (`t=f`) is refused: the path would be chosen by whatever is running
   in the pane.
+- **Updater** (herdr's `update.rs`): `tend update [-check]` reads the manifest
+  for the configured channel — herdr's shape, version, notes, assets and
+  checksums by platform — downloads this platform's asset beside the binary it
+  will replace, refuses it if the checksum does not match, and installs it by
+  rename, keeping the old one until the new is in place. `tend channel
+  [stable|preview]` shows or sets the channel. **There is no default manifest
+  URL, and nothing checks or downloads on its own**: tend publishes no
+  releases, and pointing an updater at a guess would install somebody else's
+  binary. Tested against a local HTTP server.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -442,14 +451,21 @@ Ported (see "Ported, and checked"). Left:
   slow server would show as a slow redraw for that frame; herdr streams them.
 - Verified with a stand-in program, not with a real image viewer.
 
-### 14. Updater with channels — medium
+### 14. Updater with channels — the mechanism is done; publishing is not
 
-- herdr: `update.rs` (3.8k); stable and preview channels, manifests
-  `distribution/latest.json` and `distribution/preview.json`; `herdr channel
-  set`, `herdr update`.
-- tend today: `make dist` cross-compiles; there are no published releases (the
-  repository is private) and no updater. Publishing releases is the owner's
-  decision, not an agent's.
+Ported (see "Ported, and checked"). What is left is the owner's, not an
+agent's:
+
+- **Publishing releases.** The repository is private and there are no
+  published builds. Until `[update] manifest` points at a real manifest, the
+  updater says so and stops. Building and signing releases, and where they
+  live, is a decision for the owner.
+- **"Newer" versus "different".** herdr compares semantic versions; tend's
+  version is the git description it was built from, and two of those have no
+  order. `tend update` says the published build differs from this one.
+- Background checks, the "an update is available" notice, release notes on
+  first run after an update, Homebrew and the Windows installer path
+  (`update.rs` covers all of those).
 
 ### 15. Windows — large, and cannot be run from Linux
 

@@ -40,6 +40,8 @@ commands:
   integration       install or remove agent hooks
 
 commands that need no server:
+  update            install the build published on your channel
+  channel           show or set the update channel
   keys              list every command and the key it is on
   agents            list the agents tend can detect
   detect            report an agent's state from captured terminal output
@@ -65,6 +67,10 @@ func main() {
 
 	var err error
 	switch cmd := args[0]; cmd {
+	case "update":
+		err = runUpdate(args[1:])
+	case "channel":
+		err = runChannel(args[1:])
 	case "keys":
 		err = runKeys(args[1:])
 	case "agents":
