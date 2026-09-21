@@ -155,7 +155,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 - **Navigation keys**: `ctrl+b tab` / `shift+tab` cycle the tab's panes
   (herdr's `CyclePaneNext|Previous`), `ctrl+b ;` goes back to the pane focused
   before, `ctrl+b < >` step through the agents in sidebar order wherever they
-  are, and `ctrl+b w` opens the space picker beside the `g` tend already had.
+  are, and `ctrl+b w` walks the sidebar (`g` is herdr's navigator, item 8).
   herdr leaves `LastPane`, `PreviousAgent` and `NextAgent` unbound by default;
   `;`, `<` and `>` are tend's choice.
 - **Notifications and sound** (herdr's `terminal_notify.rs`, `sound.rs`,
@@ -538,11 +538,17 @@ Ported (see "Ported, and checked"). Left:
 
 Ported (see "Ported, and checked"). Left:
 
-- `OpenNavigator` / `aggregate_navigation.rs` (439 lines): one navigator over
-  several servers at once. herdr's client attaches to many endpoints; tend's
-  attaches to one, so this needs multi-endpoint first.
+- The navigator (`OpenNavigator`, prefix+g) is ported for one machine:
+  herdr's popup over the screen with every space, tab and pane, its rules for
+  what a query matches and a filter keeps (`navigator_rows`), its keys
+  (j/k, ctrl+d/u, / to search, b w i d a to filter, space to open a space,
+  enter, esc), its tree drawing, and the mouse (hover marks, click goes, a
+  click on a space's caret opens it, a click outside closes). tend's own
+  sidebar walk moved from g to w. Left: the machine rows and everything
+  across several servers at once (`aggregate_navigation.rs`), since tend's
+  client attaches to one; and the pane's foreground directory, which tend
+  does not track apart from its directory.
 - `FocusAgent(index)`: jump to the nth agent. herdr binds no key to it either.
-- Filtering by typing in the picker; tend's walks the list.
 
 ### 9. Notifications and sound — done, minus the parts that need assets
 

@@ -87,6 +87,9 @@ const (
 	// CommandFiles opens the file explorer docked on the left of the tab, goes
 	// to it when it is open, and closes it when it is where the focus is.
 	CommandFiles
+	// CommandNavigator opens herdr's navigator: every space, tab and pane in
+	// a popup, searchable and filtered by state (herdr's goto, prefix+g).
+	CommandNavigator
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
@@ -186,6 +189,8 @@ func (c Command) String() string {
 		return "literal-prefix"
 	case CommandFiles:
 		return "files"
+	case CommandNavigator:
+		return "navigator"
 	default:
 		return "none"
 	}
@@ -224,7 +229,8 @@ var Keys = []struct {
 	{"G", CommandNewWorktree, "new worktree"},
 	{"( )", CommandNextSpace, "switch space"},
 	{"a", CommandToggleAgents, "show agents"},
-	{"w g", CommandNavigate, "pick a space or agent"},
+	{"g", CommandNavigator, "find a space, tab or pane"},
+	{"w", CommandNavigate, "walk the sidebar"},
 	{"m", CommandMenu, "menu"},
 	{",", CommandRenameTab, "rename tab"},
 	{".", CommandRenameSpace, "rename space"},
@@ -309,7 +315,7 @@ func DefaultBindings() map[string]Command {
 		")":         CommandNextSpace,
 		"(":         CommandPrevSpace,
 		"a":         CommandToggleAgents,
-		"g":         CommandNavigate, "w": CommandNavigate,
+		"g":         CommandNavigator, "w": CommandNavigate,
 		"e": CommandEditScrollback,
 		"f": CommandFiles,
 		"m": CommandMenu,
@@ -328,7 +334,7 @@ func DefaultBindings() map[string]Command {
 // names are what Command.String produces, so the file and the code cannot
 // drift apart.
 func ParseCommand(name string) (Command, bool) {
-	for cmd := CommandNone; cmd <= CommandFiles; cmd++ {
+	for cmd := CommandNone; cmd < CommandLiteralPrefix; cmd++ {
 		if cmd != CommandNone && cmd.String() == name {
 			return cmd, true
 		}

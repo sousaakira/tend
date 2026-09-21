@@ -270,6 +270,11 @@ func (t *tui) leaveResize() {
 // handleMouse turns a mouse report into focus, a resize, a scroll, or input
 // for a pane's own program.
 func (t *tui) handleMouse(ev ui.MouseEvent) error {
+	// The navigator is over everything, so the mouse is all its while it is
+	// up; a press outside it puts it away.
+	if handled, err := t.navigatorMouse(ev); handled {
+		return err
+	}
 	switch ev.Kind {
 	case ui.MouseWheelUp:
 		if t.scrollSidebar(ev.X, ev.Y, -sidebarScrollStep) {

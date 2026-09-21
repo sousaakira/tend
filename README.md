@@ -58,7 +58,8 @@ is not one already, and draws it.
 | `c` `n` `p` `1-9` | tabs: new, next, previous, by number |
 | `s` `(` `)` | spaces: new, previous, next |
 | `a` | show every agent, grouped |
-| `g` | pick one and jump to it |
+| `g` | find any space, tab or pane: search, filter by state, jump |
+| `w` | walk the agent list from the keyboard |
 | `,` `.` | rename this tab, this space |
 | `f` | the files panel: the project, git, a diff, a search |
 | `d` | detach, leaving everything running |
@@ -67,7 +68,7 @@ A **space** holds tabs, a tab holds panes. Tabs belong to their space, so
 `ctrl+b n` stays where you are and `ctrl+b )` is how you leave.
 
 `ctrl+b a` opens the agent list down the left: every agent in the session,
-grouped by space and tab, with what it is doing. `ctrl+b g` walks it and Enter
+grouped by space and tab, with what it is doing. `ctrl+b w` walks it and Enter
 jumps — which is the point, since the agent that stopped is rarely the one you
 are looking at.
 
@@ -77,6 +78,11 @@ tree with git's letter beside each changed file, the changes with their diffs
 opens a file in `$EDITOR` in a tab of its own. It runs on the machine the
 session is on, so over `--remote` it shows the server's project. `ctrl+b f`
 again goes to it, and once more puts it away.
+
+`ctrl+b g` is the navigator: every space, tab and pane in one list over the
+screen, each pane with its agent's state. `/` searches by name or directory,
+`b` `w` `i` `d` keep only blocked, working, idle or done agents (`a` shows all
+again), space opens a space, Enter goes there.
 
 The mouse works throughout. Click a tab to switch to it, `+` to make one,
 click a pane to focus it, drag a border to resize, scroll to look back. In the

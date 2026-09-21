@@ -168,6 +168,8 @@ type tui struct {
 	grouped    bool
 	navigating bool
 	nav        navTarget
+	// navigator is herdr's navigator popup while it is up (prefix+g).
+	navigator *navigatorState
 	// menu is the context menu, open on the thing it acts on. Nil when none.
 	menu *ui.Menu
 	// staleServer marks that the notice about an older server is up and has
@@ -918,6 +920,7 @@ func (t *tui) buildFrame() ui.Frame {
 		Prefix:    t.keys.Armed(),
 		Overlay:   t.overlay,
 		Menu:      t.menu,
+		Navigator: t.navigatorFrameLocked(),
 		Selection: t.sel,
 		Waiting:   t.waitingLocked(),
 		Zoomed:    t.zoom,
@@ -1150,6 +1153,16 @@ func (t *tui) handleInput(data []byte) error {
 		}
 	}
 
+	if t.navigatorOpen() {
+		// Every key is the navigator's while it is up, as in herdr: typing
+		// is searching, and a key reaching the pane under it would go to
+		// something the user cannot see.
+		if err := t.navigatorKeys(forward); err != nil {
+			return err
+		}
+		forward = nil
+	}
+
 	if t.prompting() {
 		handled, err := t.promptKeys(forward)
 		if err != nil {
@@ -1269,6 +1282,14 @@ func (t *tui) command(action ui.Action) error {
 
 	case ui.CommandRenameSpace:
 		t.startPrompt(promptRenameSpace)
+		return nil
+
+	case ui.CommandNavigator:
+		if t.navigatorOpen() {
+			t.closeNavigator()
+			return nil
+		}
+		t.openNavigator()
 		return nil
 
 	case ui.CommandNavigate:

@@ -1102,7 +1102,7 @@ func TestAttachNavigateJumpsAcrossSpaces(t *testing.T) {
 	})
 
 	// Walk the list back to the first space and jump to it.
-	a.send(t, "\x02g")
+	a.send(t, "\x02w")
 	a.waitForScreen(t, "navigate mode", func(s string) bool {
 		return strings.Contains(s, "NAVIGATE")
 	})
@@ -1657,7 +1657,7 @@ func TestAttachNavigatesIntoAFoldedGroup(t *testing.T) {
 	})
 
 	// Walk to the heading and open it from the keyboard.
-	a.send(t, "\x02g")
+	a.send(t, "\x02w")
 	a.waitForScreen(t, "navigate mode", func(s string) bool {
 		return strings.Contains(s, "NAVIGATE")
 	})

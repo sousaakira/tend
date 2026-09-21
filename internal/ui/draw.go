@@ -369,6 +369,8 @@ type Frame struct {
 	// Menu is a context menu, opened on the thing it acts on. Nil when none
 	// is open.
 	Menu *Menu
+	// Navigator is herdr's navigator popup (prefix+g), when it is up.
+	Navigator *Navigator
 
 	// Selection is a range of text being marked in a pane, or nil.
 	Selection *Selection
@@ -531,6 +533,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	if len(f.Overlay) > 0 {
 		drawOverlay(dst, f.Overlay, theme)
 	}
+	if f.Navigator != nil {
+		drawNavigator(dst, *f.Navigator, theme)
+	}
 	if f.Menu != nil {
 		drawMenu(dst, *f.Menu, theme)
 	}
@@ -682,6 +687,9 @@ func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
 func CursorPosition(f Frame, cols, rows int) (x, y int, visible bool) {
 	if x, y, ok := PromptCursor(f, cols, rows); ok {
 		return x, y, true
+	}
+	if f.Navigator != nil {
+		return NavigatorCursor(*f.Navigator, cols, rows)
 	}
 	if c := f.CopyCursor; c != nil {
 		for _, p := range f.Panes {

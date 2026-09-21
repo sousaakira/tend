@@ -674,7 +674,9 @@ func TestInputSpaceAndAgentCommands(t *testing.T) {
 		')': CommandNextSpace,
 		'(': CommandPrevSpace,
 		'a': CommandToggleAgents,
-		'g': CommandNavigate,
+		// g is herdr's navigator popup; w walks the sidebar, tend's.
+		'g': CommandNavigator,
+		'w': CommandNavigate,
 	}
 	for key, want := range cases {
 		var in Input
@@ -1752,7 +1754,7 @@ func TestAUserCommandTakesItsKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	if joined := strings.Join(notes, "\n"); !strings.Contains(joined, "z was zoom, now runs build") ||
-		!strings.Contains(joined, "g was navigate, now runs lazygit") {
+		!strings.Contains(joined, "g was navigator, now runs lazygit") {
 		t.Errorf("notes = %q, want both taken keys reported", notes)
 	}
 	in := Input{Custom: custom}
@@ -2057,5 +2059,127 @@ func TestTheNavigationCursorGetsThePalettesSelection(t *testing.T) {
 	Draw(dst, f, DefaultTheme())
 	if got := dst.Line(0).Cell(5).Style.BG; !got.IsDefault() {
 		t.Errorf("without a palette the row keeps its background, got %v", got)
+	}
+}
+
+// --- the navigator ---------------------------------------------------------
+
+func navSource() NavSource {
+	return NavSource{
+		Focused: 3,
+		Workspaces: []NavWorkspace{
+			{ID: 1, Label: "api", Branch: "main", Tabs: []NavTab{
+				{ID: 10, Label: "tab 1", Panes: []NavPane{
+					{ID: 1, Label: "claude", Meta: "/work/api", State: "blocked"},
+					{ID: 2, Label: "pane 2", Meta: "/work/api/cmd", State: "unknown"},
+				}},
+			}},
+			{ID: 2, Label: "web", Branch: "feat/login", Tabs: []NavTab{
+				{ID: 20, Label: "tab 1", Panes: []NavPane{
+					{ID: 3, Label: "codex", Meta: "/work/web", State: "working"},
+				}},
+				{ID: 21, Label: "logs", Panes: []NavPane{
+					{ID: 4, Label: "pane 1", Meta: "/var/log", State: "idle"},
+				}},
+			}},
+		},
+	}
+}
+
+func navLabels(rows []NavigatorRow) string {
+	var out []string
+	for _, r := range rows {
+		out = append(out, strings.Repeat(".", r.Depth)+r.Label)
+	}
+	return strings.Join(out, " ")
+}
+
+// TestNavigatorListsTheSessionAsATree: every space, and the tabs and panes
+// of the open ones, with the focused pane marked. If it regresses, the
+// navigator hides what it is for.
+func TestNavigatorListsTheSessionAsATree(t *testing.T) {
+	rows := BuildNavigatorRows(navSource(), "", "", map[uint64]bool{2: true})
+	if got, want := navLabels(rows), "api web .tab 1 ..codex .logs ..pane 1"; got != want {
+		t.Errorf("rows = %q, want %q", got, want)
+	}
+	for _, r := range rows {
+		if r.Current != (r.Target.Pane == 3) {
+			t.Errorf("%s current = %v", r.Label, r.Current)
+		}
+	}
+	if rows[1].Meta != "feat/login" || rows[2].Meta != "1 panes" {
+		t.Errorf("meta: space %q, tab %q", rows[1].Meta, rows[2].Meta)
+	}
+}
+
+// TestNavigatorSearchesAndFiltersLikeHerdr: a query matches a pane by name
+// or directory, a tab by name, a space by name or branch, and opens every
+// space while it is on; a filter keeps one state, with the tabs and spaces
+// around what it keeps. If it regresses, a search finds a pane and then
+// hides it inside a closed space.
+func TestNavigatorSearchesAndFiltersLikeHerdr(t *testing.T) {
+	closed := map[uint64]bool{}
+	cases := []struct {
+		query  string
+		filter NavFilter
+		want   string
+	}{
+		{"claude", "", "api .tab 1 ..claude"},
+		{"/var", "", "web .logs ..pane 1"},
+		{"login", "", "web"},
+		{"LOGS", "", "web .logs"},
+		{"", "blocked", "api .tab 1 ..claude"},
+		{"", "working", "web .tab 1 ..codex"},
+		{"", "done", ""},
+		{"nothing", "", ""},
+	}
+	for _, c := range cases {
+		got := navLabels(BuildNavigatorRows(navSource(), c.query, c.filter, closed))
+		if got != c.want {
+			t.Errorf("query %q filter %q: %q, want %q", c.query, c.filter, got, c.want)
+		}
+	}
+}
+
+// TestNavigatorDrawsBranchesAndHitsWhatItDraws: a tab's panes hang off ├──
+// and └── as in herdr, and a click lands on the row drawn under it, on the
+// caret of a space or on the search line. If it regresses, a click opens a
+// different pane from the one under the pointer.
+func TestNavigatorDrawsBranchesAndHitsWhatItDraws(t *testing.T) {
+	expanded := map[uint64]bool{1: true, 2: true}
+	n := Navigator{Rows: BuildNavigatorRows(navSource(), "", "", expanded), Selected: NavTarget{Workspace: 2, Tab: 20, Pane: 3}}
+	g := vt.NewGrid(80, 24, 0)
+	drawNavigator(g, n, DefaultTheme())
+	text := strings.Join(gridText(g), "\n")
+	for _, want := range []string{"/ search panes", "4 panes", "├── ", "└── ", "◆ ", "claude", "feat/login"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q:\n%s", want, text)
+		}
+	}
+	for y, line := range gridText(g) {
+		for _, label := range []string{"codex", "logs"} {
+			x := strings.Index(line, label)
+			if x < 0 || !strings.Contains(line, "──") {
+				continue // the detail line names the selection too
+			}
+			hit := NavigatorAt(n, 80, 24, len([]rune(line[:x])), y)
+			if hit.Row < 0 || n.Rows[hit.Row].Label != label {
+				t.Errorf("a click on %q hit %+v", label, hit)
+			}
+		}
+		if x := strings.Index(line, "▸ web"); x >= 0 || strings.Contains(line, "▾ web") {
+			x = strings.Index(line, "▾ web")
+			hit := NavigatorAt(n, 80, 24, len([]rune(line[:x])), y)
+			if !hit.Caret || n.Rows[hit.Row].Label != "web" {
+				t.Errorf("a click on web's caret: %+v", hit)
+			}
+		}
+	}
+	r := NavigatorRect(80, 24)
+	if hit := NavigatorAt(n, 80, 24, r.X+4, r.Y+1); !hit.Search {
+		t.Errorf("the search line: %+v", hit)
+	}
+	if hit := NavigatorAt(n, 80, 24, 0, 0); hit.Inside {
+		t.Errorf("outside the popup: %+v", hit)
 	}
 }
