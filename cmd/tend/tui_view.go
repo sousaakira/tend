@@ -371,9 +371,16 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return err
 
 	case ui.MouseMove:
-		// Nothing but an open menu follows the pointer, and motion reporting
-		// is only on while one is.
-		t.hoverMenu(ev.X, ev.Y)
+		// An open menu follows the pointer; otherwise the move is for the
+		// program under it, if it asked for motion (forwardMouse drops it
+		// for one that did not), as herdr forwards it.
+		if t.hoverMenu(ev.X, ev.Y) {
+			return nil
+		}
+		if pane := t.paneAt(ev.X, ev.Y); pane != 0 {
+			_, err := t.forwardMouse(pane, ev, false)
+			return err
+		}
 		return nil
 
 	case ui.MouseDrag:

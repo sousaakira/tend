@@ -5,6 +5,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/sousaakira/tend/internal/vt"
 )
 
 // TestTheNavigatorFindsAPaneByNameAndGoesThere: prefix+g puts herdr's
@@ -62,4 +64,30 @@ func TestTheNavigatorAnswersTheMouse(t *testing.T) {
 	a.waitForScreen(t, "the first space", func(s string) bool {
 		return strings.Contains(s, "FIRST-SPACE") && !strings.Contains(s, "/ search panes")
 	})
+}
+
+// TestPointerMovesReachAProgramThatAskedForThem: a program in view that asked
+// for every pointer move (DECSET 1003, as Claude Code does for hover) gets
+// them, which means the client turns motion on at the outer terminal and
+// forwards a move to the pane under it; with no such program, motion stays
+// off. If it regresses, hover in Claude Code never happens under tend.
+func TestPointerMovesReachAProgramThatAskedForThem(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.mu.Lock()
+	early := a.screen.Modes().Mouse
+	a.mu.Unlock()
+	if early == vt.MouseAnyEvent {
+		t.Fatal("motion is on with no program asking for it")
+	}
+	// A program that asks for motion in SGR and shows what it receives.
+	a.sendUntil(t, `printf 'READY\n\033[?1003h\033[?1006h'; stty raw -echo; cat -v`+"\n", "the program",
+		func(s string) bool { return strings.Contains(s, "READY") })
+	a.waitForScreen(t, "motion on at the outer terminal", func(string) bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.screen.Modes().Mouse == vt.MouseAnyEvent
+	})
+	// A move with no button over the pane: SGR button 35.
+	a.sendUntil(t, "\x1b[<35;40;10M", "the move to reach the program", func(s string) bool { return strings.Contains(s, "^[[<35;") })
 }

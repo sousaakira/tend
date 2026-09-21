@@ -168,6 +168,9 @@ type tui struct {
 	grouped    bool
 	navigating bool
 	nav        navTarget
+	// motionOn is whether the terminal is reporting every pointer move, as
+	// last asked by the paint goroutine, which alone touches it.
+	motionOn bool
 	// navigator is herdr's navigator popup while it is up (prefix+g).
 	navigator *navigatorState
 	// menu is the context menu, open on the thing it acts on. Nil when none.
@@ -832,7 +835,9 @@ func (t *tui) paint() error {
 	ui.Draw(buf, frame, t.theme)
 	x, y, visible := ui.CursorPosition(frame, cols, rows)
 	title, titled := t.windowTitleLocked()
+	motion := t.wantsMotionLocked()
 	t.mu.Unlock()
+	t.syncMotion(motion)
 
 	if repaintAll {
 		// Something changed the size or the theme under this frame, and only
@@ -864,17 +869,41 @@ func (t *tui) toggleSidebar() error {
 	return t.refresh()
 }
 
-// trackPointer turns motion reporting on or off.
-//
-// Written straight to the terminal rather than through the painter: it is a
-// request to the terminal about what to send, not part of the frame, and the
-// painter only knows how to describe cells.
-func (t *tui) trackPointer(on bool) {
+// wantsMotionLocked says whether the terminal should report every move of
+// the pointer: while a menu or the navigator follows it, and while a pane in
+// view runs a program that asked for motion — Claude Code does, for hover,
+// and herdr forwards it motion. Otherwise it is off: a report per cell
+// crossed is a cost with nobody to pay it to. The caller holds the lock.
+func (t *tui) wantsMotionLocked() bool {
 	if !t.config.UI.Mouse {
+		return false
+	}
+	if t.menu != nil || t.navigator != nil {
+		return true
+	}
+	inView := make(map[uint64]bool, len(t.rects))
+	for _, r := range t.rects {
+		inView[r.Pane] = true
+	}
+	for _, p := range t.snap.Panes {
+		if inView[p.ID] && p.Running && p.MouseMotion {
+			return true
+		}
+	}
+	return false
+}
+
+// syncMotion turns motion reporting on or off to match what is wanted. It
+// runs on the paint goroutine, the only one that writes to the terminal, and
+// is written straight to it rather than through the painter: it is a request
+// about what to send, not part of the frame.
+func (t *tui) syncMotion(want bool) {
+	if want == t.motionOn {
 		return
 	}
+	t.motionOn = want
 	seq := ui.DisableMotion
-	if on {
+	if want {
 		seq = ui.EnableMotion
 	}
 	_, _ = io.WriteString(os.Stdout, seq)

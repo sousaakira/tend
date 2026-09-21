@@ -27,7 +27,6 @@ func (t *tui) openMenu(m ui.Menu) {
 	t.menu = &m
 	t.dirty = true
 	t.mu.Unlock()
-	t.trackPointer(true)
 	t.wakeUp()
 }
 
@@ -65,7 +64,6 @@ func (t *tui) closeMenu() {
 	if !had {
 		return
 	}
-	t.trackPointer(false)
 	t.wakeUp()
 }
 

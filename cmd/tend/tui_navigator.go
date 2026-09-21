@@ -50,9 +50,6 @@ func (t *tui) openNavigator() {
 	}
 	t.dirty = true
 	t.mu.Unlock()
-	// Motion, so the row under the pointer is marked as it moves, as a
-	// menu's are.
-	t.trackPointer(true)
 	t.wakeUp()
 }
 
@@ -63,7 +60,6 @@ func (t *tui) closeNavigator() {
 	t.dirty = true
 	t.mu.Unlock()
 	if had {
-		t.trackPointer(false)
 		t.wakeUp()
 	}
 }

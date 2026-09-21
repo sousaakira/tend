@@ -494,8 +494,15 @@ The host is ported (see "Ported, and checked"). Left:
 Copy mode is ported (see "Ported, and checked"). Left:
 
 - herdr refuses a motion when the pane's content changed since the client last
-  looked (`stale_content`). tend does not: a pane printing while copy mode is
-  up can shift the rows under the cursor.
+  looked (`stale_content`): the revision is taken when copy mode starts, and
+  every motion the server answers carries it. tend does not, and porting it
+  as it is needs a decision: in tend every motion, j and k included, is the
+  server's, and rows are counted from the top of the history, so output
+  appended below does not move them. Refusing on any change would stop copy
+  mode dead over an agent that is writing. What does move rows under the
+  cursor is the history dropping its oldest lines when full, a reflow on
+  resize, and a clear; a revision that counts only those would be the
+  useful half of herdr's rule.
 - Every visible match of a search is marked (underlined, the search's own
   case rule); a match wrapped across a row's edge is found but not marked.
 
@@ -663,8 +670,12 @@ agent's:
 
 ### Smaller gaps in what already exists
 
-- Claude Code asks for any-motion mouse reports; tend enables motion reporting
-  on the outer terminal only while a menu is open, so hover never reaches it.
+- Pointer motion is ported as herdr forwards it: the client turns on
+  any-motion reporting (1003) at the outer terminal while a pane in view runs
+  a program that asked for it, and forwards each move to the pane under the
+  pointer. herdr leaves 1003 on always; tend only while something wants it,
+  since each cell crossed is a report. Verified with the real Claude Code,
+  which asks for 1000/1002/1003/1006 once past the folder-trust prompt.
 - `tend attach -ssh` interactively, and the mismatch notice's restart over
   it, have not been tried against a real sshd yet. Checked against one
   (root@10.8.0.110): `tend ls -ssh`, `tend new -ssh`, and the automation
