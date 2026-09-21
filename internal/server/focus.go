@@ -1,6 +1,9 @@
 package server
 
-import "github.com/sousaakira/tend/internal/session"
+import (
+	"github.com/sousaakira/tend/internal/detect"
+	"github.com/sousaakira/tend/internal/session"
+)
 
 // A program can ask to be told when its terminal gains or loses focus (mode
 // 1004): an editor dims its cursor, an agent stops animating, a shell reloads
@@ -124,4 +127,16 @@ func (s *Server) watchedTabLocked() session.TabID {
 		return 0
 	}
 	return s.focusedTab
+}
+
+// setPaneStateLocked records a pane's agent and state and reports whether an
+// agent was newly recognised in it, which is herdr's pane.agent_detected.
+// The caller holds the lock.
+func (s *Server) setPaneStateLocked(id session.PaneID, agentLabel string, state detect.State) bool {
+	previous := ""
+	if p, ok := s.session.Pane(id); ok {
+		previous = p.Agent
+	}
+	_ = s.session.SetPaneStateWatched(id, agentLabel, state, s.watchedTabLocked())
+	return agentLabel != "" && agentLabel != previous
 }

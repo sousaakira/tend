@@ -219,8 +219,9 @@ func TestSubscribingFollowsTheSessionWithoutGaps(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 3; i++ {
 		ev := watcher.next(t)
-		if ev["event"] != "pane.opened" {
-			t.Fatalf("event %d = %v, want pane.opened", i, ev)
+		// Asked for by tend's older name, named by herdr's.
+		if ev["event"] != "pane.created" {
+			t.Fatalf("event %d = %v, want pane.created", i, ev)
 		}
 		seen[text(ev["pane_id"])] = true
 	}
@@ -457,5 +458,30 @@ func TestAnAgentCanBeGivenAName(t *testing.T) {
 	res = result(t, call(t, h, MethodAgentRename, map[string]any{"target": "reviewer"}))
 	if got, _ := res["agent"].(map[string]any); got["name"] != nil {
 		t.Errorf("no name should take it away, got %v", got)
+	}
+}
+
+// TestHerdrsLifecycleEventsAreSent: renaming and closing are announced by
+// herdr's names, which is what a plugin written for herdr hooks on. If it
+// regresses, such a plugin installs, loads, and never runs.
+func TestHerdrsLifecycleEventsAreSent(t *testing.T) {
+	h := start(t)
+	watcher := h.another(t)
+	res := result(t, call(t, watcher, MethodEventsSubscribe, map[string]any{
+		"kinds": []string{"tab.renamed", "tab.closed", "workspace.renamed"},
+	}))
+	if res["type"] != "subscribed" {
+		t.Fatalf("subscribe = %v", res)
+	}
+	made := result(t, call(t, h, "tab.create", map[string]any{"workspace_id": "w_1", "command": []string{"sleep", "30"}}))
+	tab, _ := made["tab"].(map[string]any)
+	tabID := text(tab["tab_id"])
+	result(t, call(t, h, "tab.rename", map[string]any{"tab_id": tabID, "name": "build"}))
+	result(t, call(t, h, "tab.close", map[string]any{"tab_id": tabID}))
+
+	for _, want := range []string{"tab.renamed", "tab.closed"} {
+		if ev := watcher.next(t); ev["event"] != want || ev["tab_id"] != tabID {
+			t.Fatalf("event = %v, want %s for %s", ev, want, tabID)
+		}
 	}
 }

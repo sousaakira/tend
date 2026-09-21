@@ -11,6 +11,7 @@ import (
 	"github.com/sousaakira/tend/internal/agent"
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/detect"
+	"github.com/sousaakira/tend/internal/plugin"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/server"
 	"github.com/sousaakira/tend/internal/session"
@@ -1270,10 +1271,7 @@ func (a *API) eventsWait(kinds []string, paneID string, ms uint64) (any, error) 
 		}
 		only = id
 	}
-	want := make(map[string]bool, len(kinds))
-	for _, k := range kinds {
-		want[k] = true
-	}
+	want := wantedEvents(kinds)
 
 	sub := a.srv.Subscribe(64)
 	defer sub.Close()
@@ -1311,33 +1309,20 @@ func (a *API) eventsWait(kinds []string, paneID string, ms uint64) (any, error) 
 	}
 }
 
-// eventName is how an event is named on this socket.
+// eventName is how an event is named on this socket: herdr's names.
 func eventName(k server.EventKind) string {
-	switch k {
-	case server.EventPaneOpened:
-		return "pane.opened"
-	case server.EventPaneClosed:
-		return "pane.closed"
-	case server.EventPaneExited:
-		return "pane.exited"
-	case server.EventPaneOutput:
-		return "pane.output"
-	case server.EventPaneState:
-		return "agent.state"
-	case server.EventPaneClipboard:
-		return "pane.clipboard"
-	case server.EventNotify:
-		return "notification"
-	case server.EventPaneFocused:
-		return "pane.focused"
-	case server.EventTabFocused:
-		return "tab.focused"
-	case server.EventWorkspaceFocused:
-		return "workspace.focused"
-	case server.EventTabCreated:
-		return "tab.created"
-	case server.EventWorkspaceCreated:
-		return "workspace.created"
+	if name := server.EventName(k); name != "" {
+		return name
 	}
 	return fmt.Sprintf("event.%d", int(k))
+}
+
+// wantedEvents is the set a caller asked for, with tend's older names
+// read as herdr's.
+func wantedEvents(kinds []string) map[string]bool {
+	want := make(map[string]bool, len(kinds))
+	for _, k := range kinds {
+		want[plugin.CanonicalEvent(k)] = true
+	}
+	return want
 }

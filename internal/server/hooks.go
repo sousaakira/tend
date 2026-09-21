@@ -121,10 +121,14 @@ func (s *Server) hooked(id session.PaneID, fn func(*agent.Arbiter) bool) (bool, 
 	}
 
 	s.mu.Lock()
+	detected := false
 	if _, live := s.runtimes[id]; live {
-		_ = s.session.SetPaneStateWatched(id, eff.Agent, eff.State, s.watchedTabLocked())
+		detected = s.setPaneStateLocked(id, eff.Agent, eff.State)
 	}
 	s.mu.Unlock()
+	if detected {
+		s.publish(Event{Kind: EventAgentDetected, Pane: id})
+	}
 	s.publish(Event{Kind: EventPaneState, Pane: id, State: eff.State, Rule: rule})
 	return accepted, nil
 }

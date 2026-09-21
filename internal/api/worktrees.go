@@ -159,12 +159,22 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		// must not go on running in a directory being deleted under them.
 		// Not forced, git is asked first, and a refusal — changes that would
 		// be lost — leaves the space and the agent in it where they were.
+		var closed spaceShape
 		if p.Force {
+			closed = a.shapeOf(session.WorkspaceID(id))
 			if err := a.srv.CloseWorkspace(session.WorkspaceID(id)); err != nil {
 				return nil, true, workspaceErr(p.WorkspaceID, err)
 			}
 		}
 		if err := worktree.Remove(repo, repo.Checkout, p.Force); err != nil {
+			if p.Force {
+				// git refused after the space was shut for it. The space
+				// comes back, as herdr brings back what it shut down
+				// (restore_shutdown_worktree_panes): its programs were
+				// ended, but the place and its tabs are not lost to a
+				// removal that did not happen.
+				a.reopenShape(closed)
+			}
 			if errors.Is(err, worktree.ErrDirty) {
 				return nil, true, fail("worktree_dirty",
 					"%s has changes that would be lost; pass force to remove it anyway", repo.Checkout)
@@ -176,12 +186,74 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 				return nil, true, workspaceErr(p.WorkspaceID, err)
 			}
 		}
+		a.srv.AnnounceWorktree(server.EventWorktreeRemoved, session.WorkspaceID(id))
 		return map[string]any{
 			"type": "worktree_removed", "workspace_id": p.WorkspaceID,
 			"path": repo.Checkout, "forced": p.Force,
 		}, true, nil
 	}
 	return nil, false, nil
+}
+
+// spaceShape is enough of a space to open it again: its name, directory,
+// group, and each tab's name and panes' directories.
+type spaceShape struct {
+	name, dir, group string
+	tabs             []tabShape
+}
+
+type tabShape struct {
+	name string
+	dirs []string
+}
+
+// shapeOf records a space before it is closed.
+func (a *API) shapeOf(id session.WorkspaceID) spaceShape {
+	var out spaceShape
+	a.srv.Session(func(sess *session.Session) {
+		w, ok := sess.Workspace(id)
+		if !ok {
+			return
+		}
+		out = spaceShape{name: w.Name, dir: w.Dir, group: w.Group}
+		for _, t := range w.Tabs() {
+			tab := tabShape{name: t.Name}
+			for _, pid := range t.Panes() {
+				if p, ok := t.Pane(pid); ok {
+					tab.dirs = append(tab.dirs, p.Dir)
+				}
+			}
+			out.tabs = append(out.tabs, tab)
+		}
+	})
+	return out
+}
+
+// reopenShape opens a recorded space again, each pane a shell in the
+// directory it had: the programs are gone, the place is not.
+func (a *API) reopenShape(shape spaceShape) {
+	if shape.dir == "" {
+		return
+	}
+	id, err := a.srv.NewWorkspaceIn(shape.name, shape.dir)
+	if err != nil {
+		return
+	}
+	if shape.group != "" {
+		_ = a.srv.GroupWorkspace(id, shape.group)
+	}
+	for _, tab := range shape.tabs {
+		if len(tab.dirs) == 0 {
+			continue
+		}
+		_, first, err := a.srv.NewTab(id, tab.name, PaneSpecIn(a.shell(), tab.dirs[0]))
+		if err != nil {
+			continue
+		}
+		for _, dir := range tab.dirs[1:] {
+			_, _ = a.srv.SplitPane(first, session.Columns, PaneSpecIn(a.shell(), dir))
+		}
+	}
 }
 
 // defaultWorktreeRoot is used when nothing configured one.
@@ -253,6 +325,10 @@ func (a *API) openWorktree(repo worktree.Repo, wt worktree.Worktree, label, kind
 		if err != nil {
 			return nil, true, err
 		}
+		if kind == "worktree_created" {
+			a.srv.AnnounceWorktree(server.EventWorktreeCreated, session.WorkspaceID(id))
+		}
+		a.srv.AnnounceWorktree(server.EventWorktreeOpened, session.WorkspaceID(id))
 		return map[string]any{
 			"type": kind, "workspace": result.(map[string]any)["workspace"],
 			"worktree": info, "already_open": true,
@@ -278,6 +354,10 @@ func (a *API) openWorktree(repo worktree.Repo, wt worktree.Worktree, label, kind
 	if err != nil {
 		return nil, true, err
 	}
+	if kind == "worktree_created" {
+		a.srv.AnnounceWorktree(server.EventWorktreeCreated, id)
+	}
+	a.srv.AnnounceWorktree(server.EventWorktreeOpened, id)
 	return map[string]any{
 		"type": kind, "workspace": result.(map[string]any)["workspace"],
 		"worktree": info, "already_open": false,

@@ -190,29 +190,66 @@ func (s *Server) notifyPlugins(ev Event) {
 }
 
 // PluginEventName is how an event is named to plugins, or empty for one they
-// are not told about.
+// are not told about: herdr's hook events, and tend's clipboard.
 func PluginEventName(k EventKind) string {
 	switch k {
+	case EventPaneOutput, EventNotify, EventSessionChanged:
+		return "" // too frequent, or not a lifecycle event
+	}
+	return EventName(k)
+}
+
+// EventName is an event's name, herdr's where herdr has one.
+func EventName(k EventKind) string {
+	switch k {
 	case EventPaneOpened:
-		return "pane.opened"
+		return "pane.created"
 	case EventPaneClosed:
 		return "pane.closed"
 	case EventPaneExited:
 		return "pane.exited"
+	case EventPaneOutput:
+		return "pane.output_changed"
 	case EventPaneState:
-		return "agent.state"
+		return "pane.agent_status_changed"
 	case EventPaneClipboard:
 		return "pane.clipboard"
 	case EventPaneFocused:
 		return "pane.focused"
-	case EventTabFocused:
-		return "tab.focused"
-	case EventWorkspaceFocused:
-		return "workspace.focused"
+	case EventPaneMoved:
+		return "pane.moved"
+	case EventAgentDetected:
+		return "pane.agent_detected"
 	case EventTabCreated:
 		return "tab.created"
+	case EventTabClosed:
+		return "tab.closed"
+	case EventTabRenamed:
+		return "tab.renamed"
+	case EventTabMoved:
+		return "tab.moved"
+	case EventTabFocused:
+		return "tab.focused"
 	case EventWorkspaceCreated:
 		return "workspace.created"
+	case EventWorkspaceClosed:
+		return "workspace.closed"
+	case EventWorkspaceRenamed:
+		return "workspace.renamed"
+	case EventWorkspaceMoved:
+		return "workspace.moved"
+	case EventWorkspaceFocused:
+		return "workspace.focused"
+	case EventWorktreeCreated:
+		return "worktree.created"
+	case EventWorktreeOpened:
+		return "worktree.opened"
+	case EventWorktreeRemoved:
+		return "worktree.removed"
+	case EventNotify:
+		return "notification"
+	case EventSessionChanged:
+		return "session.changed"
 	}
 	return ""
 }

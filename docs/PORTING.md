@@ -250,6 +250,13 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   agent's own label; herdr's name rule, `invalid_agent_name`,
   `duplicate_agent_name`, `not_an_agent`. Kept in the snapshot, so it
   survives a restart and a handoff.
+- **herdr's event names** (`api/schema/events.rs`): events and plugin hooks
+  go by herdr's names — `pane.created`, `pane.agent_status_changed`,
+  `pane.output_changed` and the rest — so a hook written for herdr fires;
+  tend's older `pane.opened`, `agent.state` and `pane.output` are read as
+  aliases. Added: `workspace.closed|renamed|moved`, `tab.closed|renamed|
+  moved`, `pane.moved`, `pane.agent_detected`, `worktree.created|opened|
+  removed`.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -473,10 +480,11 @@ Ported (see "Ported, and checked"). Left:
 
 - A list with the checkout path shown live as the branch is typed, which
   herdr's create overlay has; tend's prompt shows the branch only.
-- A forced removal that git then refuses leaves the space closed. herdr
-  restores the panes it shut down (`restore_shutdown_worktree_panes`).
+- A forced removal that git then refuses brings the space back — name,
+  group, tabs, each pane a shell in its directory — rather than herdr's
+  restore of the very runtimes it paused: tend has ended those programs by
+  then.
 - `trust_repository` (`safe.directory`) for repositories owned by another user.
-- The `worktree.*` events.
 
 ### 7. Moving and swapping — done over the API; the mouse and a few keys are not
 

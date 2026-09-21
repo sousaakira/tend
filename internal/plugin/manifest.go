@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -92,20 +93,37 @@ type Pane struct {
 	Command   []string `toml:"command" json:"command"`
 }
 
-// Events a hook may name. A manifest naming anything else is kept, and the
-// unknown name is reported as a warning: a plugin written for a newer tend
-// should still install and do the rest of what it does.
+// Events a hook may name: herdr's names (`api/schema/events.rs`), so a hook
+// written for herdr fires here. A manifest naming anything else is kept, and
+// the unknown name is reported as a warning: a plugin written for a newer
+// tend should still install and do the rest of what it does.
 var knownEvents = map[string]bool{
-	"pane.opened":       true,
-	"pane.closed":       true,
-	"pane.exited":       true,
-	"agent.state":       true,
-	"pane.clipboard":    true,
-	"pane.focused":      true,
-	"tab.focused":       true,
-	"tab.created":       true,
-	"workspace.focused": true,
-	"workspace.created": true,
+	"workspace.created": true, "workspace.closed": true, "workspace.renamed": true,
+	"workspace.moved": true, "workspace.focused": true,
+	"worktree.created": true, "worktree.opened": true, "worktree.removed": true,
+	"tab.created": true, "tab.closed": true, "tab.renamed": true, "tab.moved": true,
+	"tab.focused":  true,
+	"pane.created": true, "pane.closed": true, "pane.focused": true, "pane.moved": true,
+	"pane.exited": true, "pane.agent_detected": true, "pane.agent_status_changed": true,
+	// tend's own: a program asked for the clipboard.
+	"pane.clipboard": true,
+}
+
+// eventAliases are the names tend used before it took herdr's, still
+// accepted so a hook or a script written against them keeps working.
+var eventAliases = map[string]string{
+	"pane.opened": "pane.created",
+	"agent.state": "pane.agent_status_changed",
+	"pane.output": "pane.output_changed",
+}
+
+// CanonicalEvent is the name an event goes by, from an older one if that is
+// what was written.
+func CanonicalEvent(name string) string {
+	if canonical, ok := eventAliases[name]; ok {
+		return canonical
+	}
+	return name
 }
 
 // KnownEvents is the set a hook may wait for, for anything that has to list
@@ -115,6 +133,7 @@ func KnownEvents() []string {
 	for name := range knownEvents {
 		out = append(out, name)
 	}
+	sort.Strings(out)
 	return out
 }
 
@@ -190,10 +209,12 @@ func (m *Manifest) check() ([]string, error) {
 		}
 	}
 
-	for _, h := range m.Events {
+	for i, h := range m.Events {
 		if err := checkCommand("event "+h.On, h.Command); err != nil {
 			return nil, err
 		}
+		h.On = CanonicalEvent(h.On)
+		m.Events[i].On = h.On
 		if !knownEvents[h.On] {
 			warnings = append(warnings, fmt.Sprintf(
 				"this build has no event called %q, so that hook never runs", h.On))

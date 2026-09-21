@@ -378,13 +378,40 @@ func TestAWorktreeBecomesASpace(t *testing.T) {
 		t.Fatal("a refused removal closed the space anyway")
 	}
 
-	if out, err := run("worktree", "remove", "-s", "wt", "-force", "w_2"); err != nil {
+	// A locked worktree makes even a forced remove refuse, after the space
+	// was shut for it. The space comes back, in the same place (herdr's
+	// restore_shutdown_worktree_panes); losing it to a removal that did not
+	// happen is the bug this guards.
+	lock := exec.Command("git", "-C", want, "worktree", "lock", want)
+	if out, err := lock.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree lock: %v\n%s", err, out)
+	}
+	if out, err := run("worktree", "remove", "-s", "wt", "-force", "w_2"); err == nil {
+		t.Fatalf("removing a locked worktree = %q; want a refusal", out)
+	}
+	space := ""
+	if out, _ := run("api", "-s", "wt", "workspace.list"); strings.Contains(out, want) {
+		for _, id := range []string{"w_3", "w_4"} {
+			if strings.Contains(out, `"workspace_id":"`+id+`"`) {
+				space = id
+			}
+		}
+	}
+	if space == "" {
+		t.Fatal("a refused forced removal lost the space")
+	}
+	unlock := exec.Command("git", "-C", want, "worktree", "unlock", want)
+	if out, err := unlock.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree unlock: %v\n%s", err, out)
+	}
+
+	if out, err := run("worktree", "remove", "-s", "wt", "-force", space); err != nil {
 		t.Fatalf("forced remove: %v\n%s", err, out)
 	}
 	if _, err := os.Stat(want); !os.IsNotExist(err) {
 		t.Error("the checkout is still there after removing it")
 	}
-	if out, _ := run("api", "-s", "wt", "workspace.list"); strings.Contains(out, "w_2") {
+	if out, _ := run("api", "-s", "wt", "workspace.list"); strings.Contains(out, want) {
 		t.Error("the space is still open after its worktree was removed")
 	}
 }
@@ -425,7 +452,8 @@ func TestFollowingASessionsEventsFromTheShell(t *testing.T) {
 	done := make(chan string, 1)
 	go func() {
 		for lines.Scan() {
-			if strings.Contains(lines.Text(), "pane.opened") {
+			// Asked for by tend's older name, sent by herdr's.
+			if strings.Contains(lines.Text(), "pane.created") {
 				done <- lines.Text()
 				return
 			}

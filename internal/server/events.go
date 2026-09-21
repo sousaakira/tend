@@ -52,6 +52,21 @@ const (
 	// before it existed a rename by one client stayed invisible to another
 	// until something unrelated made it look again.
 	EventSessionChanged
+	// The rest of herdr's lifecycle events, for plugins and scripts: what
+	// was closed, renamed or moved, a pane moved elsewhere, a worktree made,
+	// opened or removed, an agent recognised in a pane. Each is published
+	// beside EventSessionChanged, which is what clients redraw on.
+	EventWorkspaceClosed
+	EventWorkspaceRenamed
+	EventWorkspaceMoved
+	EventTabClosed
+	EventTabRenamed
+	EventTabMoved
+	EventPaneMoved
+	EventWorktreeCreated
+	EventWorktreeOpened
+	EventWorktreeRemoved
+	EventAgentDetected
 )
 
 func (k EventKind) String() string {

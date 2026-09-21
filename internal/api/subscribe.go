@@ -48,10 +48,7 @@ func (a *API) subscribe(conn net.Conn, kinds []string, pane string) error {
 		}
 		only = id
 	}
-	want := make(map[string]bool, len(kinds))
-	for _, k := range kinds {
-		want[k] = true
-	}
+	want := wantedEvents(kinds)
 
 	sub := a.srv.Subscribe(subscribeBuffer)
 	defer sub.Close()

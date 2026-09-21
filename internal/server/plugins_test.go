@@ -101,7 +101,8 @@ command = ["./hook.sh", "opened"]
 	}
 
 	text := waitForFile(t, log, "opened")
-	if !strings.Contains(text, "pane.opened") {
+	// Told by herdr's name, although the manifest used tend's older one.
+	if !strings.Contains(text, "pane.created") {
 		t.Errorf("the hook was not told which event it was: %s", text)
 	}
 	if !strings.Contains(text, root) {

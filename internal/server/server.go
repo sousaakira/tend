@@ -594,6 +594,7 @@ func (s *Server) CloseTab(id session.TabID) error {
 		s.mu.Unlock()
 		return ErrClosed
 	}
+	ws := s.workspaceOfTabLocked(id)
 	closed, err := s.session.CloseTab(id)
 	if err != nil {
 		s.mu.Unlock()
@@ -614,7 +615,20 @@ func (s *Server) CloseTab(id session.TabID) error {
 		_ = rt.pty.Close()
 		s.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
 	}
+	s.publish(Event{Kind: EventTabClosed, Tab: id, Workspace: ws})
 	return nil
+}
+
+// workspaceOfTabLocked is the space a tab is in. The caller holds the lock.
+func (s *Server) workspaceOfTabLocked(id session.TabID) session.WorkspaceID {
+	for _, w := range s.session.Workspaces() {
+		for _, t := range w.Tabs() {
+			if t.ID == id {
+				return w.ID
+			}
+		}
+	}
+	return 0
 }
 
 // features is what this server says it provides beyond its methods.
@@ -657,6 +671,7 @@ func (s *Server) CloseWorkspace(id session.WorkspaceID) error {
 		_ = rt.pty.Close()
 		s.publish(Event{Kind: EventPaneClosed, Pane: rt.id})
 	}
+	s.publish(Event{Kind: EventWorkspaceClosed, Workspace: id})
 	return nil
 }
 
@@ -752,12 +767,14 @@ func (s *Server) RenamePane(id session.PaneID, name string) error {
 
 // RenameTab changes a tab's label.
 func (s *Server) RenameTab(id session.TabID, name string) error {
-	return s.rearrange(func(sess *session.Session) error { return sess.RenameTab(id, name) })
+	return s.announce(s.rearrange(func(sess *session.Session) error { return sess.RenameTab(id, name) }),
+		Event{Kind: EventTabRenamed, Tab: id})
 }
 
 // RenameWorkspace changes a workspace's label.
 func (s *Server) RenameWorkspace(id session.WorkspaceID, name string) error {
-	return s.rearrange(func(sess *session.Session) error { return sess.RenameWorkspace(id, name) })
+	return s.announce(s.rearrange(func(sess *session.Session) error { return sess.RenameWorkspace(id, name) }),
+		Event{Kind: EventWorkspaceRenamed, Workspace: id})
 }
 
 // AdjustSplit moves one edge of a pane within its tab's layout, taking the
@@ -800,11 +817,16 @@ func (s *Server) SwapPaneToward(id session.PaneID, side session.Side, area sessi
 // MovePane takes a pane out of its tab and puts it beside another, which may
 // be in another tab or another space. Nothing restarts.
 func (s *Server) MovePane(id, beside session.PaneID, dir session.Direction) error {
-	return s.rearrange(func(sess *session.Session) error { return sess.MovePane(id, beside, dir) })
+	return s.announce(s.rearrange(func(sess *session.Session) error { return sess.MovePane(id, beside, dir) }),
+		Event{Kind: EventPaneMoved, Pane: id})
 }
 
 // MoveTab puts a tab at index, or delta places along when delta is set.
 func (s *Server) MoveTab(id session.TabID, index, delta int) error {
+	return s.announce(s.moveTab(id, index, delta), Event{Kind: EventTabMoved, Tab: id})
+}
+
+func (s *Server) moveTab(id session.TabID, index, delta int) error {
 	return s.rearrange(func(sess *session.Session) error {
 		if delta != 0 {
 			from, ok := sess.TabIndex(id)
@@ -819,6 +841,10 @@ func (s *Server) MoveTab(id session.TabID, index, delta int) error {
 
 // MoveWorkspace puts a space at index, or delta places along.
 func (s *Server) MoveWorkspace(id session.WorkspaceID, index, delta int) error {
+	return s.announce(s.moveWorkspace(id, index, delta), Event{Kind: EventWorkspaceMoved, Workspace: id})
+}
+
+func (s *Server) moveWorkspace(id session.WorkspaceID, index, delta int) error {
 	return s.rearrange(func(sess *session.Session) error {
 		if delta != 0 {
 			from, ok := sess.WorkspaceIndex(id)
@@ -829,6 +855,20 @@ func (s *Server) MoveWorkspace(id session.WorkspaceID, index, delta int) error {
 		}
 		return sess.MoveWorkspace(id, index)
 	})
+}
+
+// announce publishes ev when err is nil, and passes err on.
+func (s *Server) announce(err error, ev Event) error {
+	if err == nil {
+		s.publish(ev)
+	}
+	return err
+}
+
+// AnnounceWorktree tells plugins and scripts a worktree was made, opened as
+// a space, or removed; the worktree work itself happens outside the server.
+func (s *Server) AnnounceWorktree(kind EventKind, ws session.WorkspaceID) {
+	s.publish(Event{Kind: kind, Workspace: ws})
 }
 
 // rearrange changes the session's shape and tells every client, including the
@@ -1177,10 +1217,14 @@ func (s *Server) detectOnce() {
 				p.Title = obs.title
 			}
 		}
+		detected := false
 		if obs.stateChanged {
-			_ = s.session.SetPaneStateWatched(w.rt.id, obs.agent, obs.state, s.watchedTabLocked())
+			detected = s.setPaneStateLocked(w.rt.id, obs.agent, obs.state)
 		}
 		s.mu.Unlock()
+		if detected {
+			s.publish(Event{Kind: EventAgentDetected, Pane: w.rt.id})
+		}
 
 		if obs.stateChanged || obs.mouseChanged {
 			s.publish(Event{
