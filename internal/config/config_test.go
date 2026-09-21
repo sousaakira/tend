@@ -527,3 +527,27 @@ func TestFilesSettingsAreChecked(t *testing.T) {
 		t.Errorf("valid: %v follow %v width %d", err, c.FilesFollow(), c.FilesWidth())
 	}
 }
+
+// TestNotifyDelayIsHerdrsSecondAndBounded: held a second unless set, zero
+// allowed, an hour at most as herdr's MAX_TOAST_DELAY_SECONDS. If it
+// regresses, news is said at once and a flicker pops cards up.
+func TestNotifyDelayIsHerdrsSecondAndBounded(t *testing.T) {
+	c := Defaults()
+	if c.NotifyDelay() != time.Second {
+		t.Errorf("default %v", c.NotifyDelay())
+	}
+	zero, huge := 0, 4000
+	c.Notify.Delay = &zero
+	if err := c.validate(); err != nil || c.NotifyDelay() != 0 {
+		t.Errorf("zero: %v %v", err, c.NotifyDelay())
+	}
+	c.Notify.Delay = &huge
+	if err := c.validate(); err == nil {
+		t.Error("an hour and more should be refused")
+	}
+	c.Notify.Delay = nil
+	c.Notify.Position = "middle"
+	if err := c.validate(); err == nil {
+		t.Error("a corner that is not one should be refused")
+	}
+}

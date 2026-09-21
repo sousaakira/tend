@@ -119,9 +119,113 @@ func worthAnnouncing(previous paneNotice, state detect.State, now time.Time) (ki
 	return kind, true
 }
 
-// raise says it, by whichever means are turned on. kind and pane are for
-// tend's own card: what colour its dot is, and where a click on it goes.
+// raise says it, a moment from now: herdr's notification policy holds an
+// agent's news for notify.delay (a second by default) and says it only if
+// the pane is still in the state it announces — an agent answered in the
+// meantime is not "needing attention" any more. What a script said goes at
+// once.
 func (t *tui) raise(kind, title, body string, pane uint64, sound notify.Sound) {
+	now := time.Now()
+	delay := time.Duration(0)
+	if kind != ui.ToastCustom {
+		delay = t.notifyDelay
+	}
+	t.mu.Lock()
+	t.pendingNotices = append(t.pendingNotices, pendingNotice{
+		kind: kind, title: title, body: body, pane: pane, sound: sound,
+		due: now.Add(delay), expires: now.Add(max(delay, completionGrace)),
+	})
+	t.mu.Unlock()
+	t.deliverDue()
+}
+
+// completionGrace is herdr's COMPLETION_EVIDENCE_GRACE: how long past its
+// moment a notice waits for the session to show its pane in the state it
+// announces, and recheckEvery how often it looks.
+const (
+	completionGrace = time.Second
+	recheckEvery    = 50 * time.Millisecond
+)
+
+// pendingNotice is news held until its moment.
+type pendingNotice struct {
+	kind, title, body string
+	pane              uint64
+	sound             notify.Sound
+	due, expires      time.Time
+}
+
+// noticeCheck is herdr's NotificationValidation.
+type noticeCheck int
+
+const (
+	noticeCurrent noticeCheck = iota
+	noticeAwaiting
+	noticeStale
+)
+
+// checkNoticeLocked is herdr's notification_validation: attention is
+// current while the pane is still blocked; finished while it is still done,
+// and awaited while it still shows working; anything else is stale. What
+// is not about an agent is always current.
+func (t *tui) checkNoticeLocked(n pendingNotice) noticeCheck {
+	if n.kind == ui.ToastCustom {
+		return noticeCurrent
+	}
+	if n.pane == 0 {
+		if n.kind == ui.ToastFinished {
+			return noticeStale
+		}
+		return noticeCurrent
+	}
+	for _, p := range t.snap.Panes {
+		if p.ID != n.pane {
+			continue
+		}
+		switch {
+		case n.kind == ui.ToastAttention && p.State == "blocked":
+			return noticeCurrent
+		case n.kind == ui.ToastFinished && p.Done:
+			return noticeCurrent
+		case n.kind == ui.ToastFinished && p.State == "working":
+			return noticeAwaiting
+		}
+		return noticeStale
+	}
+	return noticeAwaiting
+}
+
+// deliverDue says whatever held news has come due and is still true.
+func (t *tui) deliverDue() {
+	now := time.Now()
+	t.mu.Lock()
+	var due []pendingNotice
+	kept := t.pendingNotices[:0]
+	for _, n := range t.pendingNotices {
+		if now.Before(n.due) {
+			kept = append(kept, n)
+			continue
+		}
+		switch t.checkNoticeLocked(n) {
+		case noticeCurrent:
+			due = append(due, n)
+		case noticeAwaiting:
+			if now.Before(n.expires) {
+				n.due = now.Add(recheckEvery)
+				kept = append(kept, n)
+			}
+		}
+	}
+	t.pendingNotices = kept
+	t.mu.Unlock()
+	for _, n := range due {
+		t.deliver(n.kind, n.title, n.body, n.pane, n.sound)
+	}
+}
+
+// deliver says it, by whichever means are turned on. kind and pane are for
+// tend's own card: what colour its dot is, and where a click on it goes.
+func (t *tui) deliver(kind, title, body string, pane uint64, sound notify.Sound) {
 	if t.toasts != "off" {
 		// tend's own card, herdr's "herdr" delivery, for every setting but
 		// off: the terminal's or the desktop's notification is for somebody

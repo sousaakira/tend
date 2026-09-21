@@ -96,6 +96,7 @@ func runAttach(args []string) error {
 		notices:       make(map[uint64]paneNotice),
 		graphics:      graphicsFor(os.Getenv),
 		toasts:        cfg.Toasts(),
+		notifyDelay:   cfg.NotifyDelay(),
 		notifier:      notify.New(),
 		sound: &notify.Player{
 			Enabled: cfg.Sound.Enabled,
@@ -176,6 +177,10 @@ type tui struct {
 	// toast is the notification card shown, and toastQueue those waiting.
 	toast      *toastEntry
 	toastQueue []toastEntry
+	// pendingNotices are notifications held until their moment, and
+	// notifyDelay how long an agent's are held (notify.delay).
+	pendingNotices []pendingNotice
+	notifyDelay    time.Duration
 	// navigator is herdr's navigator popup while it is up (prefix+g).
 	navigator *navigatorState
 	// menu is the context menu, open on the thing it acts on. Nil when none.
@@ -393,6 +398,7 @@ func (t *tui) run() error {
 			}
 			t.expireMessage()
 			t.expireToasts()
+			t.deliverDue()
 			if err := t.paint(); err != nil {
 				return err
 			}

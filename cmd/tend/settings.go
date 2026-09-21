@@ -35,6 +35,7 @@ func (t *tui) reloadSettings() error {
 	t.sidebar = cfg.SidebarShown()
 	t.grouped = cfg.UI.Grouped
 	t.toasts = cfg.Toasts()
+	t.notifyDelay = cfg.NotifyDelay()
 	t.notifyFocused = cfg.Notify.Focused
 	t.sound = &notify.Player{
 		Enabled: cfg.Sound.Enabled,

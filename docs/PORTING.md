@@ -574,13 +574,15 @@ Ported (see "Ported, and checked"). Left, and deliberately:
   bottom-right by default) with a dot for the kind, the title and the body;
   one at a time, 8 s for attention and 5 s otherwise, eight waiting at most,
   newer news of a pane replacing older, a click going to the pane. herdr's
-  toast delay and its re-check of a finished card against a later snapshot
-  are not; see the cooldown below. (Per-agent sound — `[sound.agents]`, droid muted by default — and
+  delay and re-check are ported too (notification_policy): an agent's news
+  is held notify.delay (1 s) and said, by every means, only if its pane is
+  still blocked or done then; a finished pane still working is looked at
+  every 50 ms for a second; a script's word goes at once. (Per-agent sound — `[sound.agents]`, droid muted by default — and
   `open-notification`, herdr's unbound `open_notification_target`, are
   ported.)
-- herdr re-checks a "finished" notification against a later snapshot before
-  showing it (`notification_policy.rs`); tend uses a cooldown instead, which
-  is written down beside the rule.
+- tend keeps a cooldown per pane besides herdr's re-check, written down
+  beside the rule: an agent flickering between states within the delay is
+  still one notice.
 
 ### 10. Settings UI, onboarding, live reload — screen and reload done
 

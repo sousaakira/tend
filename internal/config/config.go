@@ -91,6 +91,10 @@ type Notify struct {
 	// Focused notifies about the pane being looked at too. Off by default:
 	// being told about what is on screen is noise.
 	Focused bool `toml:"focused"`
+	// Delay is how many seconds an agent's news is held before it is said,
+	// and said only if still true then: herdr's toast delay_seconds. Nil
+	// is herdr's one second.
+	Delay *int `toml:"delay"`
 	// Position is the corner tend's own notification card is shown in:
 	// herdr's top-left, top-right, bottom-left or bottom-right (the
 	// default).
@@ -337,6 +341,9 @@ func (c Config) validate() error {
 	}
 	if c.Files.Width != 0 && (c.Files.Width < 16 || c.Files.Width > 120) {
 		return fmt.Errorf("files.width is %d; use 16 to 120 columns", c.Files.Width)
+	}
+	if d := c.Notify.Delay; d != nil && (*d < 0 || *d > 3600) {
+		return fmt.Errorf("notify.delay is %d; use 0 to 3600 seconds", *d)
 	}
 	switch c.Notify.Position {
 	case "", "top-left", "top-right", "bottom-left", "bottom-right":
@@ -688,3 +695,11 @@ enabled = false
 # done = "~/sounds/done.wav"
 # request = "~/sounds/request.wav"
 `
+
+// NotifyDelay is how long an agent's news is held before it is said.
+func (c Config) NotifyDelay() time.Duration {
+	if c.Notify.Delay == nil {
+		return time.Second
+	}
+	return time.Duration(*c.Notify.Delay) * time.Second
+}
