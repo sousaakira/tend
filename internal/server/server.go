@@ -304,6 +304,9 @@ type Server struct {
 	focusedPane      session.PaneID
 	focusedTab       session.TabID
 	focusedWorkspace session.WorkspaceID
+	// windowUnfocused is the client's terminal window being behind
+	// something, so nothing on screen is being seen.
+	windowUnfocused bool
 	// handingOff is set from the moment the session is described for a
 	// replacement until that either takes over or fails to.
 	handingOff bool
@@ -1172,7 +1175,7 @@ func (s *Server) detectOnce() {
 			}
 		}
 		if obs.stateChanged {
-			_ = s.session.SetPaneStateWatched(w.rt.id, obs.agent, obs.state, s.focusedTab)
+			_ = s.session.SetPaneStateWatched(w.rt.id, obs.agent, obs.state, s.watchedTabLocked())
 		}
 		s.mu.Unlock()
 

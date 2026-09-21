@@ -142,3 +142,36 @@ func TestAnAgentThatFinishesInAnotherTabIsDone(t *testing.T) {
 		t.Error("looking at its tab should clear it")
 	}
 }
+
+// TestAnAgentThatFinishesWhileTheWindowIsAwayIsDone: with the terminal
+// window behind something, the tab on screen is not being looked at, so an
+// agent finishing there is done until the window comes back — herdr's rule.
+// If it regresses, stepping away from the desk loses exactly the news that
+// was waiting.
+func TestAnAgentThatFinishesWhileTheWindowIsAwayIsDone(t *testing.T) {
+	s := newServer(t)
+	_, pane := openTab(t, s, "sleep 30")
+	s.FocusPane(pane, 0)
+	s.WindowFocus(false)
+
+	for i, state := range []detect.State{detect.StateWorking, detect.StateIdle} {
+		if _, err := s.ReportAgent(pane, agent.Report{Source: "h", Agent: "claude", State: state, Seq: u64(uint64(i + 1))}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done := func() bool {
+		for _, p := range s.snapshot().Panes {
+			if p.ID == uint64(pane) {
+				return p.Done
+			}
+		}
+		return false
+	}
+	if !done() {
+		t.Fatal("finishing on screen with the window away should be done")
+	}
+	s.WindowFocus(true)
+	if done() {
+		t.Error("the window coming back should see it")
+	}
+}

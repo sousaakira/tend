@@ -22,7 +22,21 @@ type HostReport struct {
 	// it is; otherwise Light was worked out from the background colour.
 	Explicit bool
 	Light    bool
+	// Focus is a focus report (mode 1004): FocusIn or FocusOut, and then the
+	// other fields mean nothing.
+	Focus WindowFocus
 }
+
+// WindowFocus is what a focus report says about the terminal's window.
+type WindowFocus uint8
+
+const (
+	// FocusNone means the report is not about focus.
+	FocusNone WindowFocus = iota
+	// FocusIn and FocusOut are `CSI I` and `CSI O`.
+	FocusIn
+	FocusOut
+)
 
 // hostReportHold bounds how much of a report split across reads is kept
 // waiting for the rest. A real reply is a few dozen bytes.
@@ -64,6 +78,10 @@ func HostReports(pending, data []byte) (rest []byte, reports []HostReport, hold 
 func parseHostReport(b []byte) (report *HostReport, n int, ok, partial bool) {
 	const scheme = "\x1b[?997;"
 	switch {
+	case bytes.HasPrefix(b, []byte("\x1b[I")):
+		return &HostReport{Focus: FocusIn}, 3, true, false
+	case bytes.HasPrefix(b, []byte("\x1b[O")):
+		return &HostReport{Focus: FocusOut}, 3, true, false
 	case bytes.HasPrefix(b, []byte(scheme)):
 		rest := b[len(scheme):]
 		if len(rest) < 2 {
@@ -162,6 +180,10 @@ const (
 	HostSchemeReportsOff = "\x1b[?2031l"
 	// HostSchemeQuery asks for the scheme now, and HostBackgroundQuery for the
 	// background colour, which is all a terminal without 2031 can answer.
-	HostSchemeQuery     = "\x1b[?996n"
+	HostSchemeQuery = "\x1b[?996n"
+	// HostFocusReports asks the terminal to say when its window gains and
+	// loses focus (mode 1004); HostFocusReportsOff stops it.
+	HostFocusReports    = "\x1b[?1004h"
+	HostFocusReportsOff = "\x1b[?1004l"
 	HostBackgroundQuery = "\x1b]11;?\x1b\\"
 )

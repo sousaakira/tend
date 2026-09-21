@@ -251,3 +251,20 @@ func TestTheThemeFollowsTheTerminal(t *testing.T) {
 		return strings.Contains(a.raw(), "\x1b[?2031l")
 	})
 }
+
+// TestTheWindowsFocusIsReadNotTyped: tend asks the terminal for focus
+// reports and keeps them out of the pane. If it regresses, every alt-tab
+// types "^[[O" into the shell.
+func TestTheWindowsFocusIsReadNotTyped(t *testing.T) {
+	a := startSession(t, 90, 14)
+	a.waitForScreen(t, "focus reports asked for", func(string) bool {
+		return strings.Contains(a.raw(), "\x1b[?1004h")
+	})
+	a.send(t, "\x1b[O\x1b[I")
+	a.sendUntil(t, "printf 'AFTER-FOCUS\\n'\n", "the shell", func(s string) bool {
+		return strings.Contains(s, "AFTER-FOCUS")
+	})
+	if strings.Contains(a.text(), "[O") || strings.Contains(a.text(), "[I") {
+		t.Errorf("a focus report reached the pane:\n%s", a.text())
+	}
+}

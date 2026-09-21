@@ -188,13 +188,15 @@ const (
 	FeatureTabBarStatus = "tab-bar-status"
 	// FeatureDone: panes say whether an agent finished unseen.
 	FeatureDone = "done"
+	// FeatureWindowFocus: pane.focus also takes the window's focus.
+	FeatureWindowFocus = "window-focus"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
 // KnownMethods exists.
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
-	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone,
+	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
 }
 
 // --- session ---------------------------------------------------------------
@@ -465,6 +467,9 @@ type PaneRenameParams struct {
 type PaneFocusParams struct {
 	Pane uint64 `json:"pane"`
 	Lost uint64 `json:"lost,omitempty"`
+	// Window, when set, is instead the terminal window gaining or losing
+	// focus, which the server cannot see for itself.
+	Window *bool `json:"window,omitempty"`
 }
 
 // GraphicsImage is one image a pane holds, as bytes to pass on.

@@ -1909,3 +1909,12 @@ func TestANamedThemeDrawsItsOwnSurfaces(t *testing.T) {
 		t.Errorf("tab bar background = %v, want %v", got, p.PanelBG)
 	}
 }
+
+// TestFocusReportsAreTakenOutOfTheInput: the window's focus reports are the
+// terminal's, not typing; one reaching a shell prints "^[[O".
+func TestFocusReportsAreTakenOutOfTheInput(t *testing.T) {
+	rest, reports, _ := HostReports(nil, []byte("a\x1b[Ob\x1b[Ic"))
+	if string(rest) != "abc" || len(reports) != 2 || reports[0].Focus != FocusOut || reports[1].Focus != FocusIn {
+		t.Errorf("rest %q, reports %+v", rest, reports)
+	}
+}

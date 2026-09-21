@@ -101,3 +101,27 @@ func (s *Server) WantsFocusEvents(id session.PaneID) bool {
 	defer rt.mu.Unlock()
 	return rt.screen.Modes().FocusEvents
 }
+
+// WindowFocus records whether the client's terminal window has focus. While
+// it does not, nothing is being looked at — an agent that finishes in the
+// tab on screen finished unseen — and when it comes back, the tab on screen
+// has been seen, as herdr acknowledges the active surface on focus.
+func (s *Server) WindowFocus(focused bool) {
+	s.mu.Lock()
+	s.windowUnfocused = !focused
+	seen := focused && s.focusedTab != 0 && s.session.MarkTabSeen(s.focusedTab)
+	pane := s.focusedPane
+	s.mu.Unlock()
+	if seen {
+		s.publish(Event{Kind: EventPaneState, Pane: pane})
+	}
+}
+
+// watchedTabLocked is the tab somebody is looking at, or none while the
+// window is behind something. The caller holds the lock.
+func (s *Server) watchedTabLocked() session.TabID {
+	if s.windowUnfocused {
+		return 0
+	}
+	return s.focusedTab
+}

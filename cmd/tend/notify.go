@@ -45,7 +45,10 @@ func (t *tui) announce(ev proto.Event) {
 
 	t.mu.Lock()
 	previous := t.notices[ev.Pane]
-	focused := ev.Pane == t.focus
+	// The pane in view is not announced — unless the window is behind
+	// something else, when nobody is looking at it either (herdr's
+	// active_tab_suppresses_notifications).
+	focused := ev.Pane == t.focus && t.windowFocused
 	kind, worth := worthAnnouncing(previous, state, time.Now())
 	t.notices[ev.Pane] = paneNotice{state: state, at: time.Now()}
 

@@ -97,6 +97,7 @@ func runAttach(args []string) error {
 			Bell:    bell,
 		},
 		notifyFocused: cfg.Notify.Focused,
+		windowFocused: true,
 		folded:        make(map[string]bool),
 	}
 	t.keys.PrefixKey = prefix
@@ -210,8 +211,11 @@ type tui struct {
 	// touched only by the goroutine handling input.
 	hostLight    bool
 	hostExplicit bool
-	hostAsked    bool
-	hostPending  []byte
+	// windowFocused is whether the terminal's window has focus, as it last
+	// reported (mode 1004); true until it says otherwise.
+	windowFocused bool
+	hostAsked     bool
+	hostPending   []byte
 	// transient is a pane opened to run one of the user's commands, and the
 	// view to go back to when it closes.
 	transient *transientPane
@@ -295,6 +299,7 @@ func (t *tui) run() error {
 	defer t.restoreWindowTitle()
 	defer t.stopHostScheme()
 	t.askHostScheme()
+	defer t.watchWindowFocus()()
 	// Images this client put on the terminal are taken off before it leaves:
 	// they are drawn over the screen, not part of it, and would otherwise sit
 	// on top of whatever the shell does next.

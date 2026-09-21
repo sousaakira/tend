@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
 )
 
@@ -29,6 +30,23 @@ func (t *tui) askHostScheme() {
 	t.mu.Unlock()
 }
 
+// watchWindowFocus asks the terminal to say when its window gains and loses
+// focus, which decides whether an agent finishing on screen was seen and
+// whether the pane in view still gets told about it.
+func (t *tui) watchWindowFocus() func() {
+	_, _ = io.WriteString(os.Stdout, ui.HostFocusReports)
+	return func() { _, _ = io.WriteString(os.Stdout, ui.HostFocusReportsOff) }
+}
+
+// tellWindowFocus passes the window's focus to the server, which cannot see
+// the terminal and needs it for what counts as seen.
+func (t *tui) tellWindowFocus(focused bool) {
+	if !t.serverHas(proto.FeatureWindowFocus) {
+		return
+	}
+	_ = t.client.WindowFocus(focused)
+}
+
 // stopHostScheme turns the reports off on the way out, so the shell after tend
 // does not receive them.
 func (t *tui) stopHostScheme() {
@@ -49,9 +67,34 @@ func (t *tui) takeHostReports(data []byte) []byte {
 		return rest
 	}
 
+	// Focus first, outside the lock: asking the terminal writes to it, and
+	// this runs on the goroutine that paints, so the question cannot land in
+	// the middle of a frame.
+	for _, r := range reports {
+		if r.Focus == ui.FocusNone {
+			continue
+		}
+		focused := r.Focus == ui.FocusIn
+		t.mu.Lock()
+		changed := focused != t.windowFocused
+		t.windowFocused = focused
+		t.mu.Unlock()
+		if changed {
+			go t.tellWindowFocus(focused) // a round trip, off this goroutine
+		}
+		if focused {
+			// herdr asks again when the window comes back: the desktop may
+			// have gone dark while it was behind something.
+			t.askHostScheme()
+		}
+	}
+
 	t.mu.Lock()
 	changed := false
 	for _, r := range reports {
+		if r.Focus != ui.FocusNone {
+			continue
+		}
 		// A scheme report is the terminal saying which it is; a background
 		// colour is only evidence, and does not overrule it (herdr's rule).
 		if !r.Explicit && t.hostExplicit {

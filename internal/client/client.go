@@ -460,6 +460,11 @@ func (c *Client) FocusPane(pane, lost uint64) error {
 	return c.Call(proto.MethodPaneFocus, proto.PaneFocusParams{Pane: pane, Lost: lost}, nil)
 }
 
+// WindowFocus tells the server whether the terminal's window has focus.
+func (c *Client) WindowFocus(focused bool) error {
+	return c.Call(proto.MethodPaneFocus, proto.PaneFocusParams{Window: &focused}, nil)
+}
+
 // PaneGraphics fetches a pane's images and where they go.
 func (c *Client) PaneGraphics(pane uint64) (proto.PaneGraphicsResult, error) {
 	var out proto.PaneGraphicsResult

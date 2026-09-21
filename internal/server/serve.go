@@ -536,6 +536,10 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
+		if p.Window != nil {
+			c.srv.WindowFocus(*p.Window)
+			return nil, nil
+		}
 		c.srv.FocusPane(session.PaneID(p.Pane), session.PaneID(p.Lost))
 		return nil, nil
 

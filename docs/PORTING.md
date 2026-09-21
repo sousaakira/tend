@@ -239,7 +239,11 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   `status_indicators = "symbols"` (× ◐ ✓ ○ ·) — and mark the state, not
   which entry is in view, which the band already shows.
   `agent_panel_sort = "priority"` orders the agents blocked, done, working,
-  idle, most recent change first.
+  idle, most recent change first. The client reads the window's focus (mode
+  1004) and tells the server, so an agent that finishes while the window is
+  behind something is done even in the tab on screen, and is announced even
+  though its pane is the focused one; the terminal's theme is asked again
+  when the window comes back.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -528,9 +532,6 @@ Keys are rebindable (see "Ported, and checked"). Left:
 - **Sidebar tokens**: `rows_by_agent` keys are not checked against the known
   agents (herdr refuses an unknown one; here it never matches). There are no
   workspace metadata reports, so a `$name` in a space row is always empty.
-- herdr keeps an agent that finished unseen while the outer terminal window
-  is out of focus; tend does not track outer focus, so an agent that finishes
-  in the tab on screen counts as seen even with the window behind others.
 - **Tab bar**: datetime uses a strftime written for tend covering the
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.
@@ -541,10 +542,7 @@ Keys are rebindable (see "Ported, and checked"). Left:
   `active_row_bg`), but not the finer surfaces — inactive tabs on
   `surface0`, `selection_bg` for the navigation cursor, `sidebar_bg`. Also
   `[theme.custom]`'s per-token overrides beyond tend's five
-  colours, and its `custom.dark`/`custom.light` variants. herdr asks the
-  terminal again when its window regains focus; tend asks at start and on
-  reload, and relies on mode 2031 for changes, so a terminal without 2031
-  that changes background mid-session is not noticed.
+  colours, and its `custom.dark`/`custom.light` variants.
 - A key is one byte or one escape sequence after the prefix, so `ctrl+q` and
   `alt+x` cannot be bound: the terminal sends control bytes tend forwards to
   the pane. herdr reads key events with modifiers through crossterm.
