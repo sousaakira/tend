@@ -104,3 +104,18 @@ func TestAnotherMachinesAgentIsAnnouncedAndItsCardKnowsWhere(t *testing.T) {
 		t.Errorf("news of this machine's pane 1 replaced the other's card: shown %+v, queued %d", tu.toast, len(tu.toastQueue))
 	}
 }
+
+// TestNextAgentCrossesMachines is herdr's online_agent_targets: next agent
+// from this machine's goes to the other machine's, and a machine that cannot
+// be reached is stepped over. If it regresses, the key that finds the agent
+// waiting never leaves the laptop.
+func TestNextAgentCrossesMachines(t *testing.T) {
+	tu, far := twoMachines()
+	if machine, pane := tu.agentStep(2, 1); machine != far.id || pane != 1 {
+		t.Errorf("next from here = %q %d, want the other machine's pane 1", machine, pane)
+	}
+	far.status = ui.MachineReconnecting
+	if machine, pane := tu.agentStep(2, 1); machine != "" || pane != 2 {
+		t.Errorf("with the other machine unreachable, next = %q %d, want this one's again", machine, pane)
+	}
+}

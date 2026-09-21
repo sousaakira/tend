@@ -1443,10 +1443,13 @@ func (t *tui) command(action ui.Action) error {
 		if cmd == ui.CommandPrevAgent {
 			step = -1
 		}
-		next := t.agentStep(focus, step)
+		machine, next := t.agentStep(focus, step)
 		if next == 0 {
 			t.setMessage("no agents in this session", false)
 			return nil
+		}
+		if machine != "" {
+			return t.switchMachine(machine, 0, next)
 		}
 		return t.jumpToPane(next)
 

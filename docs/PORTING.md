@@ -424,12 +424,14 @@ top of it is not:
   across machines with unreachable ones last — state sequences are each
   server's own, so "most recent" between machines is approximate. Agents on
   other machines are announced as this one's are, their cards naming the
-  machine, and a click on one (or open-notification) goes to it. Left: an
+  machine, and a click on one (or open-notification) goes to it. Next and
+  previous space and agent go across machines as herdr's
+  `handle_endpoint_navigation` does, stepping over unreachable ones. Left: an
   agent view set by a script orders only the shown machine's agents (herdr
   filters every machine's with it); herdr's notices about a machine itself
   (`endpoint_notices.rs`: unsupported, timed out) — tend shows the state on
-  the machine's row; the navigator's machine rows; next/previous space and
-  agent across machines; and reloading the catalog while the client runs (herdr's `catalog_reload.rs`; tend reads it when a client
+  the machine's row; the navigator's machine rows; and reloading the catalog
+  while the client runs (herdr's `catalog_reload.rs`; tend reads it when a client
   starts).
 - A server from before this feature cannot hand off — it has no such method —
   and is replaced only by a restart. `tend handoff` says so rather than doing it.

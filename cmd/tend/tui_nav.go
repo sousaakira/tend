@@ -109,6 +109,10 @@ func (t *tui) resolveViewLocked() {
 // switchWorkspace moves to the next or previous workspace.
 func (t *tui) switchWorkspace(forward bool) error {
 	t.mu.Lock()
+	if t.multiMachineLocked() {
+		t.mu.Unlock()
+		return t.switchWorkspaceAcross(forward)
+	}
 	if len(t.snap.Workspaces) < 2 {
 		t.mu.Unlock()
 		return nil
@@ -132,6 +136,54 @@ func (t *tui) switchWorkspace(forward bool) error {
 	t.mu.Unlock()
 
 	return t.refresh()
+}
+
+// switchWorkspaceAcross is next and previous space with saved machines:
+// herdr's handle_endpoint_navigation, every reachable machine's spaces in the
+// sidebar's machine order, going to another machine when the next space is
+// on it.
+func (t *tui) switchWorkspaceAcross(forward bool) error {
+	type target struct {
+		machine   string
+		workspace uint64
+	}
+	t.mu.Lock()
+	var spaces []target
+	current := -1
+	for _, e := range t.machines.endpoints {
+		snap := &e.snap
+		if e.id == t.machines.active {
+			snap = &t.snap
+		} else if e.status != ui.MachineOnline || !e.have {
+			continue
+		}
+		for _, w := range snap.Workspaces {
+			if e.id == t.machines.active && w.ID == t.workspace {
+				current = len(spaces)
+			}
+			spaces = append(spaces, target{e.id, w.ID})
+		}
+	}
+	active := t.machines.active
+	t.mu.Unlock()
+	if len(spaces) == 0 {
+		return nil
+	}
+	var next target
+	switch {
+	case current >= 0 && forward:
+		next = spaces[(current+1)%len(spaces)]
+	case current >= 0:
+		next = spaces[(current-1+len(spaces))%len(spaces)]
+	case forward:
+		next = spaces[0]
+	default:
+		next = spaces[len(spaces)-1]
+	}
+	if next.machine != active {
+		return t.switchMachine(next.machine, next.workspace, 0)
+	}
+	return t.showWorkspace(next.workspace)
 }
 
 // newWorkspace creates a workspace with one pane and moves to it.
@@ -203,37 +255,46 @@ func (t *tui) selectTab(n int) error {
 }
 
 // agentStep is the agent before or after the focused pane, in the order the
-// sidebar lists them. It wraps, and from a pane that is not an agent it starts
-// at either end — which is what herdr does, and what makes the key useful from
-// a shell pane.
-func (t *tui) agentStep(focus uint64, step int) uint64 {
+// sidebar lists them, and the saved machine it is on ("" for the one shown).
+// It wraps, and from a pane that is not an agent it starts at either end —
+// which is what herdr does, and what makes the key useful from a shell pane.
+//
+// With saved machines the list is every machine's, as herdr's
+// online_agent_targets is: an agent on a machine that cannot be reached is
+// skipped, and one on another machine is gone to.
+func (t *tui) agentStep(focus uint64, step int) (string, uint64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var agents []uint64
+	type target struct {
+		machine string
+		pane    uint64
+	}
+	var agents []target
 	for _, row := range t.agentRowsLocked() {
-		// Another machine's agents are left out: its pane numbers are its
-		// own, and stepping onto one would be going there.
-		if row.Kind == ui.SidebarAgent && row.Machine == "" {
-			agents = append(agents, row.Pane)
+		if row.Kind == ui.SidebarAgent && !row.Stale {
+			agents = append(agents, target{row.Machine, row.Pane})
 		}
 	}
 	if len(agents) == 0 {
-		return 0
+		return "", 0
 	}
 	current := -1
-	for i, id := range agents {
-		if id == focus {
+	for i, a := range agents {
+		if a.machine == "" && a.pane == focus {
 			current = i
 		}
 	}
-	if current < 0 {
-		if step < 0 {
-			return agents[len(agents)-1]
-		}
-		return agents[0]
+	var next target
+	switch {
+	case current >= 0:
+		next = agents[(current+step+len(agents))%len(agents)]
+	case step < 0:
+		next = agents[len(agents)-1]
+	default:
+		next = agents[0]
 	}
-	return agents[(current+step+len(agents))%len(agents)]
+	return next.machine, next.pane
 }
 
 // jumpToPane shows whichever workspace and tab hold a pane, and focuses it.

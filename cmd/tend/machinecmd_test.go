@@ -134,4 +134,15 @@ func TestSavedMachinesAreListedAndGoneToFromTheSidebar(t *testing.T) {
 		status := a.lines()[len(a.lines())-1]
 		return !strings.Contains(status, "farhost") && strings.Contains(a.sidebarText(), "new · Local")
 	})
+
+	// Next space crosses to the other machine, as herdr's does, and
+	// previous comes back.
+	a.send(t, "\x02)")
+	a.waitForScreen(t, "next space, on the far machine", func(string) bool {
+		return strings.Contains(a.lines()[len(a.lines())-1], "user@farhost:far")
+	})
+	a.send(t, "\x02(")
+	a.waitForScreen(t, "previous space, back here", func(string) bool {
+		return !strings.Contains(a.lines()[len(a.lines())-1], "farhost")
+	})
 }
