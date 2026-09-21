@@ -96,8 +96,9 @@ stop them.</pre>
 
     <section id="install">
       <h2>Install</h2>
-      <pre class="cmd">make install <span># into GOBIN, or ~/.local/bin</span>
-tend</pre>
+      <pre class="cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
+      <p>Puts a binary in <code>~/.local/bin</code> (or <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>). Prefers a release build for this machine; otherwise clones and builds with Go.</p>
+      <p class="note">From a checkout: <code>make install</code>.</p>
       <p>With no arguments, tend opens a session and starts a server if there is not one. <code>tend new -- claude</code> opens a pane. <code>tend ls</code> lists what is running. <code>-s NAME</code> runs another session beside the first.</p>
       <p>Written in Go. One binary. No cgo.</p>
     </section>
