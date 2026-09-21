@@ -180,7 +180,7 @@ func TestAbortedHandoffLosesNothing(t *testing.T) {
 // start another must say so, not stop its readers and sit there.
 func TestHandoffWithoutAReplacementIsRefused(t *testing.T) {
 	s := newServer(t)
-	if _, err := s.Replace(); !errors.Is(err, ErrHandoffUnavailable) {
+	if _, err := s.Replace(""); !errors.Is(err, ErrHandoffUnavailable) {
 		t.Errorf("err = %v, want ErrHandoffUnavailable", err)
 	}
 }

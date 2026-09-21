@@ -613,7 +613,13 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		// worked: by the time the client reads "ok" the replacement is already
 		// accepting on the socket. Letting go of the panes waits for the reply
 		// to be written, like a shutdown does.
-		h, err := c.srv.Replace()
+		var p proto.HandoffParams
+		if len(req.Params) > 0 {
+			if err := decodeParams(req.Params, &p); err != nil {
+				return nil, err
+			}
+		}
+		h, err := c.srv.Replace(p.Binary)
 		if err != nil {
 			return nil, err
 		}

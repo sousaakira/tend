@@ -1081,7 +1081,13 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 	case MethodServerHandoff:
 		// Carried out now, so the reply says whether it worked, and committed
 		// after the reply is written, because committing cuts this connection.
-		h, err := a.srv.Replace()
+		var p struct {
+			Binary string `json:"binary"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		h, err := a.srv.Replace(p.Binary)
 		if err != nil {
 			if errors.Is(err, server.ErrHandoffUnavailable) {
 				return nil, fail("handoff_unavailable", "%v", err)

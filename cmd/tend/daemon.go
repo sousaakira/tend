@@ -554,7 +554,10 @@ func runHandoff(args []string) error {
 	}
 	defer c.Close()
 
-	if err := c.Handoff(); err != nil {
+	// To this binary: the one that asked is the one meant, wherever it is
+	// installed, as herdr hands off to the updated executable.
+	self, _ := os.Executable()
+	if err := c.HandoffTo(self); err != nil {
 		if errors.Is(err, proto.ErrUnknownMethod) {
 			return fmt.Errorf("the server running %q predates handoff; only a restart (tend kill -s %s -server) replaces it, and that ends its programs", *name, *name)
 		}

@@ -117,3 +117,65 @@ func TestNoticePromisesOnlyWhatTheServerCanDo(t *testing.T) {
 		t.Errorf("a server that cannot hand off must say what a restart costs:\n%s", without)
 	}
 }
+
+// TestHandoffRunsTheBinaryThatAskedForIt: a tend installed somewhere other
+// than where the server was started from — a remote attach puts one in
+// ~/.local/bin beside an older one in /usr/local/bin — hands off to itself.
+// If it regresses, the handoff succeeds, every program survives, and the
+// server that comes back is the old build again, with none of the fixes the
+// install was for.
+func TestHandoffRunsTheBinaryThatAskedForIt(t *testing.T) {
+	if _, err := os.Stat("/proc/self/exe"); err != nil {
+		t.Skip("needs /proc to see which binary the server runs")
+	}
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+
+	old := buildBinary(t)
+	start := exec.Command(old, "new", "-s", "moved", "--", "/bin/sh")
+	start.Env = env
+	if out, err := start.CombinedOutput(); err != nil {
+		t.Fatalf("tend new: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { stopSession(t, "moved") })
+
+	// The same build at another path: what differs is only where it lives.
+	elsewhere := filepath.Join(t.TempDir(), "tend")
+	data, err := os.ReadFile(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(elsewhere, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	handoff := exec.Command(elsewhere, "handoff", "-s", "moved")
+	handoff.Env = env
+	if out, err := handoff.CombinedOutput(); err != nil {
+		t.Fatalf("tend handoff: %v\n%s", err, out)
+	}
+
+	if got := serverExecutable(t, "moved"); got != elsewhere {
+		t.Errorf("the server after the handoff runs %s, want %s", got, elsewhere)
+	}
+}
+
+// serverExecutable is the binary the session's server process runs, found by
+// its command line in /proc.
+func serverExecutable(t *testing.T, session string) string {
+	t.Helper()
+	want := "\x00serve\x00-s\x00" + session + "\x00"
+	entries, _ := os.ReadDir("/proc")
+	for _, e := range entries {
+		cmdline, err := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
+		if err != nil || !strings.Contains(string(cmdline), want) {
+			continue
+		}
+		exe, err := os.Readlink(filepath.Join("/proc", e.Name(), "exe"))
+		if err == nil {
+			return exe
+		}
+	}
+	t.Fatalf("no server process for session %q", session)
+	return ""
+}

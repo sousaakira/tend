@@ -93,14 +93,14 @@ func runUpdate(args []string) error {
 		fmt.Fprintf(os.Stderr, "%s run \"tend handoff\" (or \"tend update -handoff\") to move running sessions onto it\n", tag())
 		return nil
 	}
-	return handoffAll()
+	return handoffAll(self)
 }
 
 // handoffAll moves every running session onto the binary now installed, as
 // herdr's `update --handoff` does. A server too old to hand off is named and
 // left running: replacing it means a restart, which ends its programs, and
 // that is the user's decision, not an updater's.
-func handoffAll() error {
+func handoffAll(binary string) error {
 	names, err := transport.Sessions()
 	if err != nil {
 		return err
@@ -112,7 +112,9 @@ func handoffAll() error {
 		if err != nil {
 			continue // a socket left by a crash, not a running server
 		}
-		err = c.Handoff()
+		// The path it was installed at, not os.Executable now: on Linux
+		// that follows this process's file to where the install moved it.
+		err = c.HandoffTo(binary)
 		_ = c.Close()
 		switch {
 		case err == nil:

@@ -504,8 +504,11 @@ func (c *Client) MoveWorkspace(ws uint64, delta int) error {
 
 // Handoff asks the server to replace itself with the binary now on disk,
 // keeping what runs in its panes. The connection drops once it has.
-func (c *Client) Handoff() error {
-	return c.Call(proto.MethodServerHandoff, nil, nil)
+func (c *Client) Handoff() error { return c.HandoffTo("") }
+
+// HandoffTo asks the server to replace itself with a particular binary.
+func (c *Client) HandoffTo(binary string) error {
+	return c.Call(proto.MethodServerHandoff, proto.HandoffParams{Binary: binary}, nil)
 }
 
 // Shutdown asks the server to stop.

@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -82,7 +83,19 @@ func replaceWith(ln, apiLn net.Listener, argv []string) func(*server.Handoff) er
 		defer readyR.Close()
 		defer readyW.Close()
 
-		cmd := exec.Command(argv[0], argv[1:]...)
+		program := argv[0]
+		if h.Binary != "" {
+			// The tend that asked for this names itself; it must be one
+			// that runs, which the path being an executable file is the
+			// least check of — a replacement that cannot start is caught by
+			// the handoff failing, and the panes stay here.
+			info, err := os.Stat(h.Binary)
+			if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 || !filepath.IsAbs(h.Binary) {
+				return fmt.Errorf("cannot hand off to %q: not an executable file", h.Binary)
+			}
+			program = h.Binary
+		}
+		cmd := exec.Command(program, argv[1:]...)
 		cmd.Stdin = nil
 		// The old server's log is the new server's log: same session, same file.
 		cmd.Stdout = os.Stderr
@@ -93,7 +106,7 @@ func replaceWith(ln, apiLn net.Listener, argv []string) func(*server.Handoff) er
 		}
 		detach(cmd)
 		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("starting %s: %w", argv[0], err)
+			return fmt.Errorf("starting %s: %w", program, err)
 		}
 		// Reaped whenever it ends, which when this works is long after this
 		// process has gone.

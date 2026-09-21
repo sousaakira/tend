@@ -104,6 +104,11 @@ type Handoff struct {
 	Files []*os.File
 
 	parked []*paneRuntime
+
+	// Binary is the tend to replace this server with, when the one asking
+	// named it — herdr's live handoff names the updated executable. Empty
+	// means the binary at this server's own path.
+	Binary string
 }
 
 // CloseFiles closes the duplicated terminals. The panes are unaffected: the
@@ -245,7 +250,7 @@ func (s *Server) CommitHandoff(h *Handoff) error {
 // with, and reports whether the replacement took over. It does not commit:
 // the caller does, once it has told whoever asked. Until then this server is
 // still the one answering, and a caller that never commits leaves it that way.
-func (s *Server) Replace() (*Handoff, error) {
+func (s *Server) Replace(binary string) (*Handoff, error) {
 	if s.cfg.Replace == nil {
 		return nil, ErrHandoffUnavailable
 	}
@@ -253,6 +258,7 @@ func (s *Server) Replace() (*Handoff, error) {
 	if err != nil {
 		return nil, err
 	}
+	h.Binary = binary
 	if err := s.cfg.Replace(h); err != nil {
 		s.AbortHandoff(h)
 		return nil, fmt.Errorf("server: the replacement did not take over: %w", err)

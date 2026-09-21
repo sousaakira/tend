@@ -524,6 +524,14 @@ type ReloadResult struct {
 	Err     string   `json:"error,omitempty"`
 }
 
+// HandoffParams names the binary to replace the server with. Empty means the
+// server's own path; a tend installed somewhere else — a remote attach puts
+// it in ~/.local/bin — names itself, or the server would start the old
+// binary again.
+type HandoffParams struct {
+	Binary string `json:"binary,omitempty"`
+}
+
 // CommandRunParams is a user's command and the pane it was run from, whose
 // directory it runs in.
 type CommandRunParams struct {
