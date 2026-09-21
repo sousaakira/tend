@@ -41,7 +41,13 @@ func (s *Server) FocusPane(gained, lost session.PaneID) {
 	wsChanged := workspace != 0 && workspace != s.focusedWorkspace
 	paneChanged := gained != s.focusedPane
 	s.focusedPane, s.focusedTab, s.focusedWorkspace = gained, tab, workspace
+	// Looking at a tab is seeing what finished in it (herdr's switch_tab).
+	seen := tab != 0 && s.session.MarkTabSeen(tab)
 	s.mu.Unlock()
+
+	if seen {
+		s.publish(Event{Kind: EventPaneState, Pane: gained})
+	}
 
 	if wsChanged {
 		s.publish(Event{Kind: EventWorkspaceFocused, Workspace: workspace})

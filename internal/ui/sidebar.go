@@ -84,6 +84,9 @@ type SidebarRow struct {
 	// the entry (row_gap).
 	Lines [][]SidebarToken
 	Gap   int
+	// Symbols draws the state as herdr's distinct glyphs rather than dots
+	// (status_indicators = "symbols").
+	Symbols bool
 
 	// Active marks what is currently shown; Selected marks the navigation
 	// cursor. They are separate because moving the cursor must not move the
@@ -574,13 +577,39 @@ func indent(depth int) string {
 	return strings.Repeat("  ", depth)
 }
 
-// stateCircle is the mark beside an entry: filled for the one in view, hollow
-// otherwise, coloured by what the agent is doing.
+// stateCircle is the mark beside an entry, padded as the plain row draws it.
 func stateCircle(r SidebarRow) string {
-	if r.Active {
-		return " ● "
+	return " " + StatusIcon(r.State, r.Running, r.Symbols) + " "
+}
+
+// StatusIcon is herdr's status_icon: with dots, a filled mark for anything
+// happening, hollow for idle, a dot for nothing known; with symbols, a glyph
+// for each state, so the state reads without colour. Which entry is in view
+// is the band across it, not the mark.
+func StatusIcon(state string, running, symbols bool) string {
+	if !running {
+		state = "" // an exited pane says nothing about an agent
 	}
-	return " ○ "
+	switch state {
+	case "blocked":
+		if symbols {
+			return "×"
+		}
+		return "●"
+	case "working":
+		if symbols {
+			return "◐"
+		}
+		return "●"
+	case "done":
+		if symbols {
+			return "✓"
+		}
+		return "●"
+	case "idle":
+		return "○"
+	}
+	return "·"
 }
 
 // SidebarPlace names which of the two lists a point is in.

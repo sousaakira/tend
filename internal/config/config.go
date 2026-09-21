@@ -117,6 +117,13 @@ type UI struct {
 	// needs you is the reason to run tend, and a list behind a keystroke is
 	// one most people never press.
 	SidebarStartCollapsed *bool `toml:"sidebar_start_collapsed"`
+	// StatusIndicators is "dots" (herdr's default) or "symbols": a glyph for
+	// each state, for anyone who does not read state by colour.
+	StatusIndicators string `toml:"status_indicators"`
+	// AgentPanelSort is "spaces" (the order of the session; "workspaces" is
+	// herdr's alias) or "priority": what needs you first, then what changed
+	// most recently.
+	AgentPanelSort string `toml:"agent_panel_sort"`
 	// Grouped lists agents under their tab rather than flat.
 	Grouped bool  `toml:"grouped"`
 	Theme   Theme `toml:"theme"`
@@ -276,6 +283,16 @@ func (c Config) validate() error {
 	}
 	if err := checkCommandKeys(c.Keys.Command); err != nil {
 		return err
+	}
+	switch c.UI.StatusIndicators {
+	case "", "dots", "symbols":
+	default:
+		return fmt.Errorf("ui.status_indicators is %q; use \"dots\" or \"symbols\"", c.UI.StatusIndicators)
+	}
+	switch c.UI.AgentPanelSort {
+	case "", "spaces", "workspaces", "priority":
+	default:
+		return fmt.Errorf("ui.agent_panel_sort is %q; use \"spaces\" or \"priority\"", c.UI.AgentPanelSort)
 	}
 	switch c.UI.TabBarPosition {
 	case "", "top", "bottom":
@@ -471,6 +488,15 @@ sidebar_start_collapsed = false
 
 # List agents under their tab rather than flat.
 grouped = false
+
+# Agent order: "spaces" (as the session is laid out) or "priority" (what
+# needs you first — blocked, then finished unseen, then working — and the
+# most recent change first within that).
+# agent_panel_sort = "spaces"
+
+# Agent state marks: "dots" (coloured marks) or "symbols" (× blocked,
+# ◐ working, ✓ finished unseen, ○ idle), which read without colour.
+# status_indicators = "dots"
 
 # What the sidebar's rows show. Agent tokens: state_icon, state_text,
 # machine, workspace, tab, pane, agent, terminal_title,

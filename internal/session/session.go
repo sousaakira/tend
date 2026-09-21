@@ -54,6 +54,14 @@ type Pane struct {
 	Agent string
 	// State is the last detected agent state.
 	State detect.State
+	// Unseen marks an agent that finished — went from working or blocked to
+	// idle — while nobody was looking at its tab: herdr's "done", the one
+	// thing a list of idle agents cannot otherwise tell apart. It clears when
+	// the tab is looked at or the agent starts again.
+	Unseen bool
+	// StateSeq orders the panes by when their state last changed, for a list
+	// that puts the most recent first.
+	StateSeq uint64
 }
 
 // PaneSpec describes a pane to create.
@@ -106,6 +114,9 @@ type Session struct {
 	nextPane      uint64
 	nextTab       uint64
 	nextWorkspace uint64
+
+	// stateSeq numbers state changes, for Pane.StateSeq.
+	stateSeq uint64
 
 	// index resolves a pane to its tab without walking. It is maintained by
 	// every mutation and verified by CheckInvariants, so it cannot drift
@@ -506,13 +517,53 @@ func (s *Session) AdjustSplit(pane PaneID, side Side, cells int, area Rect) erro
 
 // SetPaneState records a detection result against a pane.
 func (s *Session) SetPaneState(id PaneID, agent string, state detect.State) error {
+	return s.SetPaneStateWatched(id, agent, state, 0)
+}
+
+// SetPaneStateWatched records a pane's agent state, knowing which tab is being
+// looked at, by herdr's rule (`apply_pane_state_change`): anything but idle
+// is seen, and finishing — working or blocked to idle — is unseen unless it
+// happened in the tab in view.
+func (s *Session) SetPaneStateWatched(id PaneID, agent string, state detect.State, watched TabID) error {
 	p, ok := s.Pane(id)
 	if !ok {
 		return fmt.Errorf("%w: %d", ErrNoSuchPane, id)
 	}
+	previous := p.State
 	p.Agent = agent
 	p.State = state
+	switch {
+	case state != detect.StateIdle:
+		p.Unseen = false
+	case previous == detect.StateWorking || previous == detect.StateBlocked:
+		tab := s.index[id]
+		p.Unseen = tab == nil || tab.ID != watched
+	}
+	if previous != state {
+		s.stateSeq++
+		p.StateSeq = s.stateSeq
+	}
 	return nil
+}
+
+// MarkTabSeen marks every agent in a tab seen, as looking at the tab does,
+// and reports whether any was not.
+func (s *Session) MarkTabSeen(id TabID) bool {
+	changed := false
+	for _, w := range s.workspaces {
+		for _, t := range w.tabs {
+			if t.ID != id {
+				continue
+			}
+			for _, p := range t.panes {
+				if p.Unseen {
+					p.Unseen = false
+					changed = true
+				}
+			}
+		}
+	}
+	return changed
 }
 
 // --- invariants ------------------------------------------------------------

@@ -1806,7 +1806,7 @@ func TestSidebarTokenRowsResolveAndFit(t *testing.T) {
 	Draw(dst, f, DefaultTheme())
 	text := gridText(dst)
 	joined := strings.Join(text, "\n")
-	if !strings.Contains(joined, "○ api · build") || !strings.Contains(joined, "claude · 23%") {
+	if !strings.Contains(joined, "● api · build") || !strings.Contains(joined, "claude · 23%") {
 		t.Errorf("the entry is not laid out as configured:\n%s", joined)
 	}
 
@@ -1847,5 +1847,31 @@ rows = [["agent", { token = "$ctx", rules = [{ equals = "0%", hide = true }, { g
 	bold := ResolveAgentRows(rows, AgentTokenValues{Agent: "claude", Custom: map[string]string{"ctx": "91"}})
 	if len(bold[0]) != 2 || bold[0][1].Style.Bold == nil || !*bold[0][1].Style.Bold {
 		t.Errorf("91 should be bold: %+v", bold)
+	}
+}
+
+// TestStatusIconsAreHerdrs: dots mark anything happening filled, idle
+// hollow, nothing known with a dot; symbols give each state its own glyph,
+// so the list reads without colour.
+func TestStatusIconsAreHerdrs(t *testing.T) {
+	for _, c := range []struct {
+		state         string
+		dots, symbols string
+	}{
+		{"blocked", "●", "×"}, {"working", "●", "◐"}, {"done", "●", "✓"},
+		{"idle", "○", "○"}, {"", "·", "·"},
+	} {
+		if got := StatusIcon(c.state, true, false); got != c.dots {
+			t.Errorf("dots %q = %q, want %q", c.state, got, c.dots)
+		}
+		if got := StatusIcon(c.state, true, true); got != c.symbols {
+			t.Errorf("symbols %q = %q, want %q", c.state, got, c.symbols)
+		}
+	}
+	if StatusIcon("working", false, false) != "·" {
+		t.Error("an exited pane says nothing about an agent")
+	}
+	if DefaultTheme().StateStyle("done", true) != DefaultTheme().Done {
+		t.Error("done should have its own colour")
 	}
 }

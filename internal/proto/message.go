@@ -186,13 +186,15 @@ const (
 	FeatureWindowTitle = "window-title"
 	// FeatureTabBarStatus: the snapshot carries the right end of the tab bar.
 	FeatureTabBarStatus = "tab-bar-status"
+	// FeatureDone: panes say whether an agent finished unseen.
+	FeatureDone = "done"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
 // KnownMethods exists.
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
-	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus,
+	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone,
 }
 
 // --- session ---------------------------------------------------------------
@@ -204,6 +206,11 @@ type PaneInfo struct {
 	Agent string `json:"agent,omitempty"`
 	State string `json:"state"`
 	Rule  string `json:"rule,omitempty"`
+	// Done marks an idle agent that finished while nobody was looking at its
+	// tab (herdr's "done"), and StateSeq orders panes by when their state
+	// last changed.
+	Done     bool   `json:"done,omitempty"`
+	StateSeq uint64 `json:"state_seq,omitempty"`
 
 	Running bool `json:"running"`
 	Pid     int  `json:"pid,omitempty"`

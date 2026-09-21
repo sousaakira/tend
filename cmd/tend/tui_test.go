@@ -1295,7 +1295,9 @@ func TestAttachClickSidebarHeading(t *testing.T) {
 
 	row := -1
 	for i, line := range a.lines() {
-		if strings.Contains(line, "main") && strings.Contains(line, "○") {
+		// A space with no agent in it is marked "·", herdr's mark for
+		// nothing known; the one in view is the band, not the mark.
+		if strings.Contains(line, "· main") {
 			row = i
 			break
 		}

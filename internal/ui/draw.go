@@ -51,6 +51,8 @@ type Theme struct {
 	Working vt.Style
 	Blocked vt.Style
 	Idle    vt.Style
+	// Done is an agent that finished while nobody was looking: herdr's teal.
+	Done    vt.Style
 	Unknown vt.Style
 	Exited  vt.Style
 }
@@ -86,6 +88,7 @@ func DefaultTheme() Theme {
 		Working: vt.Style{FG: vt.IndexedColor(3)},
 		Blocked: vt.Style{FG: vt.IndexedColor(1), Attrs: vt.AttrBold},
 		Idle:    vt.Style{FG: vt.IndexedColor(2)},
+		Done:    vt.Style{FG: vt.IndexedColor(6)},
 		Unknown: dim,
 		Exited:  dim,
 	}
@@ -167,6 +170,7 @@ func (t Theme) withPalette(p Palette) Theme {
 	fg(&t.Working, p.Yellow)
 	fg(&t.Blocked, p.Red)
 	fg(&t.Idle, p.Green)
+	fg(&t.Done, p.Teal)
 	fg(&t.StatusAlert, p.Red)
 	return t
 }
@@ -183,6 +187,8 @@ func (t Theme) StateStyle(state string, running bool) vt.Style {
 		return t.Blocked
 	case "idle":
 		return t.Idle
+	case "done":
+		return t.Done
 	default:
 		return t.Unknown
 	}

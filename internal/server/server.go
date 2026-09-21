@@ -1172,7 +1172,7 @@ func (s *Server) detectOnce() {
 			}
 		}
 		if obs.stateChanged {
-			_ = s.session.SetPaneState(w.rt.id, obs.agent, obs.state)
+			_ = s.session.SetPaneStateWatched(w.rt.id, obs.agent, obs.state, s.focusedTab)
 		}
 		s.mu.Unlock()
 

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/session"
@@ -719,13 +720,15 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 				ti.Panes = append(ti.Panes, uint64(id))
 				if p, ok := tab.Pane(id); ok {
 					snap.Panes = append(snap.Panes, proto.PaneInfo{
-						ID:      uint64(p.ID),
-						Title:   p.Title,
-						Named:   p.Named,
-						Agent:   p.Agent,
-						State:   p.State.String(),
-						Command: p.Command,
-						Dir:     p.Dir,
+						ID:       uint64(p.ID),
+						Title:    p.Title,
+						Named:    p.Named,
+						Agent:    p.Agent,
+						State:    p.State.String(),
+						Done:     p.Unseen && p.State == detect.StateIdle,
+						StateSeq: p.StateSeq,
+						Command:  p.Command,
+						Dir:      p.Dir,
 					})
 				}
 			}

@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
+	"sort"
 )
 
 // Navigating a session means three things that are easy to confuse: which
@@ -417,6 +418,7 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 			Ahead: w.Ahead, Behind: w.Behind,
 		}),
 		Gap:       t.config.UI.Sidebar.Spaces.RowGap,
+		Symbols:   t.config.UI.StatusIndicators == "symbols",
 		Group:     w.Group,
 		Depth:     depth,
 		Workspace: w.ID,
@@ -468,8 +470,11 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 	for _, p := range t.snap.Panes {
 		info[p.ID] = p
 	}
+	priority := t.config.UI.AgentPanelSort == "priority"
+	symbols := t.config.UI.StatusIndicators == "symbols"
 
 	var rows []ui.SidebarRow
+	var seqs []uint64
 	for _, w := range t.snap.Workspaces {
 		for _, tab := range w.Tabs {
 			var entries []ui.SidebarRow
@@ -486,18 +491,20 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 					Label:     agentLabel(w, tab),
 					Lines:     t.agentLinesLocked(w, tab, p),
 					Gap:       t.config.UI.Sidebar.Agents.RowGap,
+					Symbols:   symbols,
 					Pane:      id,
 					Tab:       tab.ID,
 					Workspace: w.ID,
-					State:     p.State,
+					State:     displayState(p),
 					Running:   p.Running,
 					Active:    id == t.focus && tab.ID == t.tab && w.ID == t.workspace,
 				})
+				seqs = append(seqs, p.StateSeq)
 			}
 			if len(entries) == 0 {
 				continue
 			}
-			if t.grouped {
+			if t.grouped && !priority {
 				rows = append(rows, ui.SidebarRow{
 					Kind:      ui.SidebarGroup,
 					Label:     orDash(w.Name) + " · " + orDash(tab.Name),
@@ -508,7 +515,56 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 			rows = append(rows, entries...)
 		}
 	}
+	if priority {
+		// herdr's attention queue: what needs you first, and within that the
+		// most recent change first. Tab headings mean nothing in this order,
+		// so there are none.
+		order := make([]int, len(rows))
+		for i := range order {
+			order[i] = i
+		}
+		sort.SliceStable(order, func(a, b int) bool {
+			ra, rb := rows[order[a]], rows[order[b]]
+			pa, pb := attentionPriority(ra.State, ra.Running), attentionPriority(rb.State, rb.Running)
+			if pa != pb {
+				return pa > pb
+			}
+			return seqs[order[a]] > seqs[order[b]]
+		})
+		sorted := make([]ui.SidebarRow, len(rows))
+		for i, at := range order {
+			sorted[i] = rows[at]
+		}
+		rows = sorted
+	}
 	return rows
+}
+
+// displayState is the state as the list shows it: herdr's "done" for an
+// agent that finished while nobody was looking.
+func displayState(p proto.PaneInfo) string {
+	if p.Done && p.State == "idle" {
+		return "done"
+	}
+	return p.State
+}
+
+// attentionPriority is herdr's tab_attention_priority.
+func attentionPriority(state string, running bool) int {
+	if !running {
+		return 0
+	}
+	switch state {
+	case "blocked":
+		return 4
+	case "done":
+		return 3
+	case "working":
+		return 2
+	case "idle":
+		return 1
+	}
+	return 0
 }
 
 // agentLinesLocked lays an agent's entry out as the settings say, herdr's
@@ -516,7 +572,7 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 // lock.
 func (t *tui) agentLinesLocked(w proto.WorkspaceInfo, tab proto.TabInfo, p proto.PaneInfo) [][]ui.SidebarToken {
 	v := ui.AgentTokenValues{
-		StateText: p.State,
+		StateText: displayState(p),
 		// The machine is named only when it is another one: every row saying
 		// this laptop's name is a column of noise.
 		Machine:   t.host,
@@ -525,7 +581,7 @@ func (t *tui) agentLinesLocked(w proto.WorkspaceInfo, tab proto.TabInfo, p proto
 		Agent:     p.Agent,
 		Custom:    make(map[string]string, len(p.Tokens)),
 	}
-	if label := p.StateLabels[p.State]; label != "" {
+	if label := p.StateLabels[displayState(p)]; label != "" {
 		v.StateText = label // what a hook calls this state for this pane
 	}
 	if p.Display != "" {
@@ -565,20 +621,15 @@ func (t *tui) spaceStateLocked(w proto.WorkspaceInfo) string {
 		}
 	}
 
-	state := ""
+	// The most urgent, by herdr's attention order: an agent waiting beats one
+	// that finished unseen, which beats one still working.
+	state, best := "", 0
 	for _, p := range t.snap.Panes {
 		if !panes[p.ID] || p.Agent == "" || !p.Running {
 			continue
 		}
-		switch p.State {
-		case "blocked":
-			return "blocked"
-		case "working":
-			state = "working"
-		case "idle":
-			if state == "" {
-				state = "idle"
-			}
+		if s := displayState(p); attentionPriority(s, true) > best {
+			state, best = s, attentionPriority(s, true)
 		}
 	}
 	return state

@@ -100,3 +100,45 @@ func TestAHookCanSayWhatToShowBesideTheAgent(t *testing.T) {
 		t.Errorf("metadata changed the pane's state to %v", st.State)
 	}
 }
+
+// TestAnAgentThatFinishesInAnotherTabIsDone: the server marks an agent that
+// finished while the client looked elsewhere, sends it in the snapshot, and
+// forgets it once the client looks at that tab. If it regresses, the list
+// cannot tell a fresh result from an agent idle since morning.
+func TestAnAgentThatFinishesInAnotherTabIsDone(t *testing.T) {
+	s := newServer(t)
+	ws, _ := s.NewWorkspace("main")
+	_, agentPane, err := s.NewTab(ws, "agent", shell("sleep 30"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, other, err := s.NewTab(ws, "other", shell("sleep 30"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.FocusPane(other, 0)
+
+	report := func(state detect.State, seq uint64) {
+		t.Helper()
+		if _, err := s.ReportAgent(agentPane, agent.Report{Source: "h", Agent: "claude", State: state, Seq: u64(seq)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done := func() bool {
+		for _, p := range s.snapshot().Panes {
+			if p.ID == uint64(agentPane) {
+				return p.Done
+			}
+		}
+		return false
+	}
+	report(detect.StateWorking, 1)
+	report(detect.StateIdle, 2)
+	if !done() {
+		t.Fatal("finishing in a tab nobody is looking at should be done")
+	}
+	s.FocusPane(agentPane, other)
+	if done() {
+		t.Error("looking at its tab should clear it")
+	}
+}

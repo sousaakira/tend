@@ -228,6 +228,16 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   in herdr, rather than always after the agent's name. `[ui] sidebar = true`
   (tend's older key) still reads; whether the column starts shown is herdr's
   `sidebar_start_collapsed`, which the settings screen now writes.
+- **Done, status marks and the attention order** (herdr's `seen`,
+  `status_icon`, `agent_panel_sort`): an agent that goes from working or
+  blocked to idle while its tab is not in view is "done" until the tab is
+  looked at (the server tracks it, from the focus the client reports), shown
+  in its own colour (the palette's teal) and first after blocked agents.
+  Marks are herdr's — dots (● happening, ○ idle, · nothing known) or
+  `status_indicators = "symbols"` (× ◐ ✓ ○ ·) — and mark the state, not
+  which entry is in view, which the band already shows.
+  `agent_panel_sort = "priority"` orders the agents blocked, done, working,
+  idle, most recent change first.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -516,8 +526,9 @@ Keys are rebindable (see "Ported, and checked"). Left:
 - **Sidebar tokens**: `rows_by_agent` keys are not checked against the known
   agents (herdr refuses an unknown one; here it never matches). There are no
   workspace metadata reports, so a `$name` in a space row is always empty.
-  `status_indicators = "symbols"` and `agent_panel_sort = "priority"` are
-  not ported.
+- herdr keeps an agent that finished unseen while the outer terminal window
+  is out of focus; tend does not track outer focus, so an agent that finishes
+  in the tab on screen counts as seen even with the window behind others.
 - **Tab bar**: datetime uses a strftime written for tend covering the
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.
