@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -377,6 +378,9 @@ func runLayout(args []string) error {
 
 // runAPI is the escape hatch: any method, params as JSON.
 func runAPI(args []string) error {
+	if len(args) > 0 && args[0] == "schema" {
+		return runAPISchema(args[1:])
+	}
 	fs := flag.NewFlagSet("api", flag.ExitOnError)
 	name := sessionFlag(fs)
 	wait := fs.Bool("wait", false, "the call blocks on purpose; do not time it out")
@@ -386,6 +390,7 @@ func runAPI(args []string) error {
 				"calls the session's automation socket and prints the result as JSON.\n"+
 				"params may be given as an argument, or on stdin when it is \"-\".\n\n"+
 				"  tend api session.snapshot\n"+
+				"  tend api schema [-json | -output PATH]   what every method takes\n"+
 				"  tend api agent.prompt '{\"target\":\"claude\",\"text\":\"run the tests\"}'\n\n")
 		fs.PrintDefaults()
 	}
@@ -824,6 +829,44 @@ func (t *table) flush() error {
 	print(t.head)
 	for _, r := range t.rows {
 		print(r)
+	}
+	return nil
+}
+
+// runAPISchema is herdr's `herdr api schema`: a summary of the published
+// schema, the schema itself as JSON, or the schema written to a file. It
+// needs no session: the schema is this build's.
+func runAPISchema(args []string) error {
+	fs := flag.NewFlagSet("api schema", flag.ExitOnError)
+	asJSON := fs.Bool("json", false, "print the whole schema as JSON")
+	output := fs.String("output", "", "write the schema to this file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	schema := api.Schema()
+	data, err := json.MarshalIndent(schema, "", "  ")
+	if err != nil {
+		return err
+	}
+	switch {
+	case *output != "":
+		if err := os.WriteFile(*output, append(data, '\n'), 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("wrote the API schema to %s\n", *output)
+	case *asJSON:
+		fmt.Println(string(data))
+	default:
+		schemas := schema["schemas"].(map[string]any)
+		var names []string
+		for name := range schemas {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		fmt.Printf("tend API schema\nprotocol: %v\nschema_version: %v\nmethods: %d\nschemas: %s\n\n"+
+			"Use `tend api schema -json` to print the full schema.\n"+
+			"Use `tend api schema -output PATH` to write it to a file.\n",
+			schema["protocol"], schema["schema_version"], len(api.Methods()), strings.Join(names, ", "))
 	}
 	return nil
 }

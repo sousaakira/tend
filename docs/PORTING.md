@@ -459,7 +459,15 @@ What a script needs is ported (see "Ported, and checked"). What is left:
   herdr's filter and sort, its limits, the view kept by the server and
   applied by each client, with its label in the list's heading.) (`command.invoke` is left out
   on purpose; see item 11.)
-- A published schema (`herdr api schema`, `schemars`), which plugins read.
+- The published schema is ported: `tend api schema` (summary, -json,
+  -output PATH), a JSON Schema of every method's params read by reflection
+  off the named types the handlers decode into (internal/api/params.go), so
+  the two cannot disagree, with the event names and the response shapes; a
+  test fails when a Method constant is not in it. Left: the results are
+  described as objects with a "type", not field by field as herdr's are,
+  since tend's handlers build them as maps; and a field is marked required
+  only where a handler depends on it (schema:"required"), since a missing
+  field is its zero value to every handler.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,
   `cli/workspace.rs`, `cli/api.rs`; user docs `socket-api.mdx`,
   `cli-reference.mdx`, `agent-automation.mdx`.

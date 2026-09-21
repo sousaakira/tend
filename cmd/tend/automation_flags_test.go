@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -28,5 +30,24 @@ func TestFlagsAfterTheTextAreStillFlags(t *testing.T) {
 	got = strings.Join(hoistFlags([]string{"-wait", "claude", "--", "explain", "-timeout"}, valued), " ")
 	if want := "-wait claude explain -timeout"; got != want {
 		t.Errorf("hoistFlags after -- = %q, want %q", got, want)
+	}
+}
+
+// TestAPISchemaPrintsTheSchema: `tend api schema -json` is herdr's
+// `herdr api schema --json`, and needs no session. If it regresses, a
+// plugin author has only the source to learn the socket from.
+func TestAPISchemaPrintsTheSchema(t *testing.T) {
+	bin := buildBinary(t)
+	out, err := exec.Command(bin, "api", "schema", "-json").Output()
+	if err != nil {
+		t.Fatalf("api schema -json: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(out, &doc); err != nil || doc["title"] != "tend API" {
+		t.Fatalf("not the schema: %v\n%.200s", err, out)
+	}
+	summary, err := exec.Command(bin, "api", "schema").Output()
+	if err != nil || !strings.Contains(string(summary), "methods: ") || !strings.Contains(string(summary), "schema_version: 1") {
+		t.Errorf("summary: %v\n%s", err, summary)
 	}
 }

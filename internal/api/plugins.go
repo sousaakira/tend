@@ -54,9 +54,7 @@ func (a *API) callPlugins(req Request) (any, bool, error) {
 		return map[string]any{"type": "plugin_list", "plugins": out}, true, nil
 
 	case MethodPluginLink:
-		var p struct {
-			Path string `json:"path"`
-		}
+		var p PluginLinkParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
@@ -70,9 +68,7 @@ func (a *API) callPlugins(req Request) (any, bool, error) {
 		return map[string]any{"type": "plugin_info", "plugin": installed}, true, nil
 
 	case MethodPluginUnlink, MethodPluginEnable, MethodPluginDisable, MethodPluginReload:
-		var p struct {
-			PluginID string `json:"plugin_id"`
-		}
+		var p PluginIDParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
@@ -107,10 +103,7 @@ func (a *API) callPlugins(req Request) (any, bool, error) {
 		return map[string]any{"type": "plugin_action_list", "actions": out}, true, nil
 
 	case MethodPluginLogList:
-		var p struct {
-			PluginID string `json:"plugin_id"`
-			Limit    int    `json:"limit"`
-		}
+		var p PluginLogListParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
@@ -121,10 +114,7 @@ func (a *API) callPlugins(req Request) (any, bool, error) {
 		return map[string]any{"type": "plugin_log_list", "logs": logs}, true, nil
 
 	case MethodPluginActionInvoke:
-		var p struct {
-			ActionID string `json:"action_id"`
-			PaneID   string `json:"pane_id"`
-		}
+		var p PluginActionInvokeParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
@@ -151,10 +141,7 @@ func (a *API) callPlugins(req Request) (any, bool, error) {
 		}, true, nil
 
 	case MethodPluginPaneOpen:
-		var p struct {
-			Pane   string `json:"pane"`
-			Target string `json:"pane_id"`
-		}
+		var p PluginPaneOpenParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}

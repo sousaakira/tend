@@ -186,9 +186,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "workspace_list", "workspaces": a.workspaces()}, nil
 
 	case MethodWorkspaceGet:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-		}
+		var p WorkspaceGetParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -200,10 +198,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return nil, fail("workspace_not_found", "workspace %s not found", p.WorkspaceID)
 
 	case MethodWorkspaceCreate:
-		var p struct {
-			Name string `json:"name"`
-			Dir  string `json:"dir"`
-		}
+		var p WorkspaceCreateParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -214,10 +209,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return a.workspaceResult(id)
 
 	case MethodWorkspaceRename:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-			Name        string `json:"name"`
-		}
+		var p WorkspaceRenameParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -231,9 +223,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return a.workspaceResult(session.WorkspaceID(id))
 
 	case MethodWorkspaceClose:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-		}
+		var p WorkspaceCloseParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -247,18 +237,14 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodTabList:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-		}
+		var p TabListParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
 		return map[string]any{"type": "tab_list", "tabs": a.tabs(p.WorkspaceID)}, nil
 
 	case MethodTabGet:
-		var p struct {
-			TabID string `json:"tab_id"`
-		}
+		var p TabGetParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -270,16 +256,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return nil, fail("tab_not_found", "tab %s not found", p.TabID)
 
 	case MethodTabCreate:
-		var p struct {
-			WorkspaceID string   `json:"workspace_id"`
-			Name        string   `json:"name"`
-			Command     []string `json:"command"`
-			Dir         string   `json:"dir"`
-			Agent       string   `json:"agent"`
-			// CloseOnExit is tend's: the tab goes with its program, for one
-			// opened to run a single thing (the file explorer's editor).
-			CloseOnExit bool `json:"close_on_exit"`
-		}
+		var p TabCreateParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -302,10 +279,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}, nil
 
 	case MethodTabRename:
-		var p struct {
-			TabID string `json:"tab_id"`
-			Name  string `json:"name"`
-		}
+		var p TabRenameParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -319,9 +293,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodTabClose:
-		var p struct {
-			TabID string `json:"tab_id"`
-		}
+		var p TabCloseParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -335,11 +307,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodPaneRead:
-		var p struct {
-			PaneID string `json:"pane_id"`
-			Source string `json:"source"`
-			Lines  int    `json:"lines"`
-		}
+		var p PaneReadParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -350,11 +318,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return a.read(p.PaneID, id, p.Source, p.Lines)
 
 	case MethodPaneSendText:
-		var p struct {
-			PaneID string `json:"pane_id"`
-			Text   string `json:"text"`
-			Submit bool   `json:"submit"`
-		}
+		var p PaneSendTextParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -373,10 +337,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodPaneSendKeys:
-		var p struct {
-			PaneID string   `json:"pane_id"`
-			Keys   []string `json:"keys"`
-		}
+		var p PaneSendKeysParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -390,10 +351,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodWorkspaceMoveBlock:
-		var p struct {
-			WorkspaceIDs      []string `json:"workspace_ids"`
-			BeforeWorkspaceID string   `json:"before_workspace_id"`
-		}
+		var p WorkspaceMoveBlockParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -425,13 +383,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodWorkspaceReportMetadata:
-		var p struct {
-			WorkspaceID string             `json:"workspace_id"`
-			Source      string             `json:"source"`
-			Tokens      map[string]*string `json:"tokens"`
-			Seq         *uint64            `json:"seq"`
-			TTLMs       uint64             `json:"ttl_ms"`
-		}
+		var p WorkspaceReportMetadataParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -457,11 +409,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodPaneSendInput:
-		var p struct {
-			PaneID string   `json:"pane_id"`
-			Text   string   `json:"text"`
-			Keys   []string `json:"keys"`
-		}
+		var p PaneSendInputParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -484,10 +432,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodPaneRename:
-		var p struct {
-			PaneID string  `json:"pane_id"`
-			Label  *string `json:"label"`
-		}
+		var p PaneRenameParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -509,10 +454,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "pane_info", "pane": a.info(st)}, nil
 
 	case MethodPaneFocus, MethodTabFocus:
-		var p struct {
-			PaneID string `json:"pane_id"`
-			TabID  string `json:"tab_id"`
-		}
+		var p FocusParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -543,9 +485,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}, nil
 
 	case MethodPaneLayout:
-		var p struct {
-			PaneID string `json:"pane_id"`
-		}
+		var p PaneLayoutParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -584,16 +524,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}}, nil
 
 	case MethodPaneSplit:
-		var p struct {
-			PaneID    string   `json:"pane_id"`
-			Direction string   `json:"direction"`
-			Command   []string `json:"command"`
-			Dir       string   `json:"dir"`
-			Agent     string   `json:"agent"`
-			// CloseOnExit is tend's, as on tab.create: the files panel's
-			// preview goes when it is closed.
-			CloseOnExit bool `json:"close_on_exit"`
-		}
+		var p PaneSplitParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -622,9 +553,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "pane_info", "pane": a.info(st)}, nil
 
 	case MethodPaneClose:
-		var p struct {
-			PaneID string `json:"pane_id"`
-		}
+		var p PaneCloseParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -638,11 +567,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodPaneResize:
-		var p struct {
-			PaneID string `json:"pane_id"`
-			Cols   int    `json:"cols"`
-			Rows   int    `json:"rows"`
-		}
+		var p PaneResizeParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -659,11 +584,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodPaneWaitForOutput:
-		var p struct {
-			PaneID    string `json:"pane_id"`
-			Contains  string `json:"contains"`
-			TimeoutMs uint64 `json:"timeout_ms"`
-		}
+		var p PaneWaitForOutputParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -707,9 +628,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return viewResult(a.srv.SetAgentView(&v, "")), nil
 
 	case MethodAgentViewClear:
-		var p struct {
-			Source string `json:"source"`
-		}
+		var p AgentViewClearParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -721,10 +640,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return viewResult(a.srv.SetAgentView(nil, p.Source)), nil
 
 	case MethodAgentRename:
-		var p struct {
-			Target string  `json:"target"`
-			Name   *string `json:"name"`
-		}
+		var p AgentRenameParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -746,13 +662,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "agent_info", "agent": a.info(st)}, nil
 
 	case MethodAgentStart:
-		var p struct {
-			PaneID  string   `json:"pane_id"`
-			Agent   string   `json:"agent"`
-			Command []string `json:"command"`
-			// Name is what to call the agent, as herdr's agent.start takes.
-			Name string `json:"name"`
-		}
+		var p AgentStartParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -786,10 +696,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "agent_started", "pane_id": p.PaneID, "argv": argv}, nil
 
 	case MethodEventsSubscribe:
-		var p struct {
-			Kinds  []string `json:"kinds"`
-			PaneID string   `json:"pane_id"`
-		}
+		var p EventsSubscribeParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -802,9 +709,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "subscribed"}, nil
 
 	case MethodLayoutExport:
-		var p struct {
-			TabID string `json:"tab_id"`
-		}
+		var p LayoutExportParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -822,13 +727,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}, nil
 
 	case MethodLayoutApply:
-		var p struct {
-			WorkspaceID string                 `json:"workspace_id"`
-			Name        string                 `json:"name"`
-			Tree        session.LayoutSnapshot `json:"tree"`
-			Panes       []session.PaneSnapshot `json:"panes"`
-			Env         map[string]string      `json:"-"`
-		}
+		var p LayoutApplyParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -864,10 +763,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}, nil
 
 	case MethodNotificationShow:
-		var p struct {
-			Title string `json:"title"`
-			Body  string `json:"body"`
-		}
+		var p NotificationShowParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -880,9 +776,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 	case MethodWindowTitleSet, MethodWindowTitleClear:
 		title := ""
 		if req.Method == MethodWindowTitleSet {
-			var p struct {
-				Title string `json:"title"`
-			}
+			var p WindowTitleParams
 			if err := decode(req.Params, &p); err != nil {
 				return nil, err
 			}
@@ -906,21 +800,14 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}, nil
 
 	case MethodEventsWait:
-		var p struct {
-			Kinds     []string `json:"kinds"`
-			PaneID    string   `json:"pane_id"`
-			TimeoutMs uint64   `json:"timeout_ms"`
-		}
+		var p EventsWaitParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
 		return a.eventsWait(p.Kinds, p.PaneID, p.TimeoutMs)
 
 	case MethodPaneNeighbor:
-		var p struct {
-			PaneID    string `json:"pane_id"`
-			Direction string `json:"direction"`
-		}
+		var p PaneNeighborParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -943,9 +830,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return out, nil
 
 	case MethodPaneEdges:
-		var p struct {
-			PaneID string `json:"pane_id"`
-		}
+		var p PaneEdgesParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -964,9 +849,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return out, nil
 
 	case MethodPaneProcesses:
-		var p struct {
-			PaneID string `json:"pane_id"`
-		}
+		var p PaneProcessesParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -981,11 +864,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "pane_process_info", "pane_id": p.PaneID, "process": info}, nil
 
 	case MethodPaneMove:
-		var p struct {
-			PaneID       string `json:"pane_id"`
-			TargetPaneID string `json:"target_pane_id"`
-			Direction    string `json:"direction"`
-		}
+		var p PaneMoveParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -1011,11 +890,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return ok2(), nil
 
 	case MethodPaneSwap:
-		var p struct {
-			PaneID       string `json:"pane_id"`
-			TargetPaneID string `json:"target_pane_id"`
-			Direction    string `json:"direction"`
-		}
+		var p PaneSwapParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -1047,12 +922,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		return map[string]any{"type": "pane_swapped", "pane_id": PaneID(id), "other_pane_id": PaneID(other)}, nil
 
 	case MethodTabMove, MethodWorkspaceMove:
-		var p struct {
-			TabID       string `json:"tab_id"`
-			WorkspaceID string `json:"workspace_id"`
-			Index       *int   `json:"index"`
-			Delta       int    `json:"delta"`
-		}
+		var p MoveParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -1089,9 +959,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 	case MethodServerHandoff:
 		// Carried out now, so the reply says whether it worked, and committed
 		// after the reply is written, because committing cuts this connection.
-		var p struct {
-			Binary string `json:"binary"`
-		}
+		var p ServerHandoffParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -1111,20 +979,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 // agentCall serves the agent methods, which are the pane methods with a target
 // that may name an agent instead of a pane.
 func (a *API) agentCall(req Request) (any, error) {
-	var p struct {
-		Target    string   `json:"target"`
-		PaneID    string   `json:"pane_id"`
-		Text      string   `json:"text"`
-		Keys      []string `json:"keys"`
-		Lines     int      `json:"lines"`
-		Source    string   `json:"source"`
-		Until     []string `json:"until"`
-		TimeoutMs uint64   `json:"timeout_ms"`
-		Wait      bool     `json:"wait"`
-		// Screen asks for the text detection read, which is what an
-		// explanation is checked against.
-		Screen bool `json:"screen"`
-	}
+	var p AgentParams
 	if err := decode(req.Params, &p); err != nil {
 		return nil, err
 	}

@@ -39,13 +39,7 @@ type WorktreeInfo struct {
 func (a *API) callWorktrees(req Request) (any, bool, error) {
 	switch req.Method {
 	case MethodWorktreeList:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-			Cwd         string `json:"cwd"`
-			// Trust names the repository safe for this call, herdr's
-			// trust_repository, for one owned by another user.
-			Trust bool `json:"trust_repository"`
-		}
+		var p WorktreeListParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
@@ -64,17 +58,7 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		return map[string]any{"type": "worktree_list", "source": repo, "worktrees": out}, true, nil
 
 	case MethodWorktreeCreate:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-			Cwd         string `json:"cwd"`
-			// Trust names the repository safe for this call, herdr's
-			// trust_repository, for one owned by another user.
-			Trust  bool   `json:"trust_repository"`
-			Branch string `json:"branch"`
-			Base   string `json:"base"`
-			Path   string `json:"path"`
-			Label  string `json:"label"`
-		}
+		var p WorktreeCreateParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
@@ -101,16 +85,7 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		return a.openWorktree(repo, worktree.Worktree{Path: path, Branch: branch, Linked: true}, p.Label, "worktree_created")
 
 	case MethodWorktreeOpen:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-			Cwd         string `json:"cwd"`
-			// Trust names the repository safe for this call, herdr's
-			// trust_repository, for one owned by another user.
-			Trust  bool   `json:"trust_repository"`
-			Path   string `json:"path"`
-			Branch string `json:"branch"`
-			Label  string `json:"label"`
-		}
+		var p WorktreeOpenParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
@@ -139,11 +114,7 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		return nil, true, fail("worktree_not_found", "no worktree of %s matches", repo.Name)
 
 	case MethodWorktreeRemove:
-		var p struct {
-			WorkspaceID string `json:"workspace_id"`
-			Force       bool   `json:"force"`
-			Trust       bool   `json:"trust_repository"`
-		}
+		var p WorktreeRemoveParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}

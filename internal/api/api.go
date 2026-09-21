@@ -410,9 +410,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		return map[string]any{"type": "pane_list", "panes": panes}, nil
 
 	case MethodPaneGet:
-		var p struct {
-			PaneID string `json:"pane_id"`
-		}
+		var p PaneGetParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -427,16 +425,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		return map[string]any{"type": "pane_info", "pane": a.info(st)}, nil
 
 	case MethodPaneReportAgent:
-		var p struct {
-			PaneID           string  `json:"pane_id"`
-			Source           string  `json:"source"`
-			Agent            string  `json:"agent"`
-			State            string  `json:"state"`
-			Message          string  `json:"message"`
-			Seq              *uint64 `json:"seq"`
-			AgentSessionID   string  `json:"agent_session_id"`
-			AgentSessionPath string  `json:"agent_session_path"`
-		}
+		var p PaneReportAgentParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -459,14 +448,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		return ok(), nil
 
 	case MethodPaneReportAgentSession:
-		var p struct {
-			PaneID           string  `json:"pane_id"`
-			Source           string  `json:"source"`
-			Agent            string  `json:"agent"`
-			Seq              *uint64 `json:"seq"`
-			AgentSessionID   string  `json:"agent_session_id"`
-			AgentSessionPath string  `json:"agent_session_path"`
-		}
+		var p PaneReportAgentSessionParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -481,12 +463,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		return ok(), nil
 
 	case MethodPaneReleaseAgent:
-		var p struct {
-			PaneID string  `json:"pane_id"`
-			Source string  `json:"source"`
-			Agent  string  `json:"agent"`
-			Seq    *uint64 `json:"seq"`
-		}
+		var p PaneReleaseAgentParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -500,20 +477,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		return ok(), nil
 
 	case MethodPaneReportMetadata:
-		var p struct {
-			PaneID            string             `json:"pane_id"`
-			Source            string             `json:"source"`
-			Agent             string             `json:"agent"`
-			Title             string             `json:"title"`
-			DisplayAgent      string             `json:"display_agent"`
-			StateLabels       map[string]string  `json:"state_labels"`
-			Tokens            map[string]*string `json:"tokens"`
-			TTLMs             uint64             `json:"ttl_ms"`
-			ClearTitle        bool               `json:"clear_title"`
-			ClearDisplayAgent bool               `json:"clear_display_agent"`
-			ClearStateLabels  bool               `json:"clear_state_labels"`
-			Seq               *uint64            `json:"seq"`
-		}
+		var p PaneReportMetadataParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -535,11 +499,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		return ok(), nil
 
 	case MethodPaneClearAgentAuthority:
-		var p struct {
-			PaneID string  `json:"pane_id"`
-			Source string  `json:"source"`
-			Seq    *uint64 `json:"seq"`
-		}
+		var p PaneClearAgentAuthorityParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -557,9 +517,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		return map[string]any{"type": "integration_list", "integrations": infos}, nil
 
 	case MethodIntegrationInstall:
-		var p struct {
-			Target string `json:"target"`
-		}
+		var p IntegrationInstallParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
@@ -578,9 +536,7 @@ func (a *API) call(req Request, p *pending) (any, error) {
 		}, nil
 
 	case MethodIntegrationUninstall:
-		var p struct {
-			Target string `json:"target"`
-		}
+		var p IntegrationUninstallParams
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
