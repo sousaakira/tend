@@ -108,8 +108,18 @@ var settingRows = []settingRow{
 	},
 	{
 		label: "notifications", section: "notify", key: "toasts",
-		choices: []settingChoice{{"status line", `"tend"`}, {"terminal", `"terminal"`}, {"off", `"off"`}},
+		choices: []settingChoice{{"on screen", `"tend"`}, {"terminal", `"terminal"`}, {"off", `"off"`}},
 		value:   func(c config.Config) string { return config.Quote(c.Toasts()) },
+	},
+	{
+		label: "notification corner", section: "notify", key: "position",
+		choices: []settingChoice{{"bottom right", `"bottom-right"`}, {"top right", `"top-right"`}, {"bottom left", `"bottom-left"`}, {"top left", `"top-left"`}},
+		value: func(c config.Config) string {
+			if c.Notify.Position == "" {
+				return `"bottom-right"`
+			}
+			return config.Quote(c.Notify.Position)
+		},
 	},
 	{
 		label: "notify focused pane", section: "notify", key: "focused",

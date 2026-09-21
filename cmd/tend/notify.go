@@ -8,6 +8,7 @@ import (
 	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/notify"
 	"github.com/sousaakira/tend/internal/proto"
+	"github.com/sousaakira/tend/internal/ui"
 	"github.com/sousaakira/tend/internal/worktree"
 )
 
@@ -83,9 +84,9 @@ func (t *tui) announce(ev proto.Event) {
 	t.mu.Unlock()
 	switch kind {
 	case announceBlocked:
-		t.raise(agent+" needs attention", where, t.soundFor(agent, notify.SoundRequest))
+		t.raise(ui.ToastAttention, agent+" needs attention", where, ev.Pane, t.soundFor(agent, notify.SoundRequest))
 	case announceFinished:
-		t.raise(agent+" finished", where, t.soundFor(agent, notify.SoundDone))
+		t.raise(ui.ToastFinished, agent+" finished", where, ev.Pane, t.soundFor(agent, notify.SoundDone))
 	}
 }
 
@@ -118,14 +119,14 @@ func worthAnnouncing(previous paneNotice, state detect.State, now time.Time) (ki
 	return kind, true
 }
 
-// raise says it, by whichever means are turned on.
-func (t *tui) raise(title, body string, sound notify.Sound) {
-	message := title
-	if body != "" {
-		message += ": " + body
-	}
+// raise says it, by whichever means are turned on. kind and pane are for
+// tend's own card: what colour its dot is, and where a click on it goes.
+func (t *tui) raise(kind, title, body string, pane uint64, sound notify.Sound) {
 	if t.toasts != "off" {
-		t.setMessage(message, false)
+		// tend's own card, herdr's "herdr" delivery, for every setting but
+		// off: the terminal's or the desktop's notification is for somebody
+		// looking elsewhere, and this is for somebody looking here.
+		t.pushToast(kind, title, body, pane)
 	}
 	if t.toasts == "system" {
 		// On its own goroutine: raising one runs another program, and the

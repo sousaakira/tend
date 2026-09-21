@@ -317,6 +317,11 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if handled, err := t.clickMenu(ev.X, ev.Y); handled {
 			return err
 		}
+		if ev.Button != mouseRight {
+			if handled, err := t.clickToast(ev.X, ev.Y); handled {
+				return err
+			}
+		}
 		if ev.Button == mouseRight {
 			if m, ok := t.menuFor(ev.X, ev.Y); ok {
 				t.openMenu(m)

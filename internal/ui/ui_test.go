@@ -2183,3 +2183,26 @@ func TestNavigatorDrawsBranchesAndHitsWhatItDraws(t *testing.T) {
 		t.Errorf("outside the popup: %+v", hit)
 	}
 }
+
+// TestTheToastCardGoesInItsCorner: herdr's four corners, above the status
+// bar, and the rect a click is tested against is the one drawn. If it
+// regresses, the card covers the status bar or a click misses it.
+func TestTheToastCardGoesInItsCorner(t *testing.T) {
+	card := Toast{Kind: ToastAttention, Title: "claude needs attention", Body: "api · tab 1"}
+	for pos, want := range map[string][2]bool{
+		"": {true, true}, ToastBottomRight: {true, true}, ToastTopLeft: {false, false},
+		ToastTopRight: {true, false}, ToastBottomLeft: {false, true},
+	} {
+		card.Position = pos
+		r := ToastRect(card, 80, 24)
+		right, bottom := r.X+r.Cols == 80, r.Y+r.Rows == 24-StatusRows
+		if right != want[0] || bottom != want[1] || r.Rows != 4 {
+			t.Errorf("%q: %+v", pos, r)
+		}
+		g := vt.NewGrid(80, 24, 0)
+		drawToast(g, card, DefaultTheme())
+		if line := gridText(g)[r.Y+1]; !strings.Contains(line, "● claude needs attention") {
+			t.Errorf("%q: the title is not on the card's first line: %q", pos, line)
+		}
+	}
+}

@@ -171,6 +171,9 @@ type tui struct {
 	// motionOn is whether the terminal is reporting every pointer move, as
 	// last asked by the paint goroutine, which alone touches it.
 	motionOn bool
+	// toast is the notification card shown, and toastQueue those waiting.
+	toast      *toastEntry
+	toastQueue []toastEntry
 	// navigator is herdr's navigator popup while it is up (prefix+g).
 	navigator *navigatorState
 	// menu is the context menu, open on the thing it acts on. Nil when none.
@@ -387,6 +390,7 @@ func (t *tui) run() error {
 				t.setMessage(err.Error(), true)
 			}
 			t.expireMessage()
+			t.expireToasts()
 			if err := t.paint(); err != nil {
 				return err
 			}
@@ -685,7 +689,7 @@ func (t *tui) Event(ev proto.Event) {
 	case proto.EventNotify:
 		// Somebody asked for the user to be told: a script, a hook, a plugin.
 		// It goes out the same ways an agent's own state does.
-		t.raise(ev.Title, ev.Body, notify.SoundRequest)
+		t.raise(ui.ToastCustom, ev.Title, ev.Body, ev.Pane, notify.SoundRequest)
 	case proto.EventSessionChanged:
 		// Another client rearranged or renamed something. Re-read, off this
 		// goroutine for the same reason as above.
@@ -950,6 +954,7 @@ func (t *tui) buildFrame() ui.Frame {
 		Overlay:   t.overlay,
 		Menu:      t.menu,
 		Navigator: t.navigatorFrameLocked(),
+		Toast:     t.toastFrameLocked(),
 		Selection: t.sel,
 		Waiting:   t.waitingLocked(),
 		Zoomed:    t.zoom,

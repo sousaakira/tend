@@ -84,13 +84,17 @@ func (c Config) ManifestURL() string {
 // Notify configures being told that an agent needs you.
 type Notify struct {
 	// Toasts is "terminal" (ask the terminal to raise a notification),
-	// "system" (a desktop notification), "tend" (the status bar only) or
-	// "off". herdr's default is off; tend's is the status bar, which costs
+	// "system" (a desktop notification), "tend" (a card in a corner of
+	// tend's screen, herdr's "herdr" delivery) or "off". herdr's default is off; tend's is the status bar, which costs
 	// nothing and is already where the waiting count is.
 	Toasts string `toml:"toasts"`
 	// Focused notifies about the pane being looked at too. Off by default:
 	// being told about what is on screen is noise.
 	Focused bool `toml:"focused"`
+	// Position is the corner tend's own notification card is shown in:
+	// herdr's top-left, top-right, bottom-left or bottom-right (the
+	// default).
+	Position string `toml:"position"`
 }
 
 // Sound configures the noise made when an agent finishes or needs answering.
@@ -333,6 +337,11 @@ func (c Config) validate() error {
 	}
 	if c.Files.Width != 0 && (c.Files.Width < 16 || c.Files.Width > 120) {
 		return fmt.Errorf("files.width is %d; use 16 to 120 columns", c.Files.Width)
+	}
+	switch c.Notify.Position {
+	case "", "top-left", "top-right", "bottom-left", "bottom-right":
+	default:
+		return fmt.Errorf("notify.position is %q; use top-left, top-right, bottom-left or bottom-right", c.Notify.Position)
 	}
 	switch c.Notify.Toasts {
 	case "", "tend", "terminal", "system", "off":

@@ -371,6 +371,8 @@ type Frame struct {
 	Menu *Menu
 	// Navigator is herdr's navigator popup (prefix+g), when it is up.
 	Navigator *Navigator
+	// Toast is the notification card shown, if any.
+	Toast *Toast
 
 	// Selection is a range of text being marked in a pane, or nil.
 	Selection *Selection
@@ -532,6 +534,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	// last of all: it is opened on top of whatever is already showing.
 	if len(f.Overlay) > 0 {
 		drawOverlay(dst, f.Overlay, theme)
+	}
+	if f.Toast != nil {
+		drawToast(dst, *f.Toast, theme)
 	}
 	if f.Navigator != nil {
 		drawNavigator(dst, *f.Navigator, theme)

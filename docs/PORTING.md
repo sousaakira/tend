@@ -555,7 +555,10 @@ Ported (see "Ported, and checked"). Left:
   across several servers at once (`aggregate_navigation.rs`), since tend's
   client attaches to one; and the pane's foreground directory, which tend
   does not track apart from its directory.
-- `FocusAgent(index)`: jump to the nth agent. herdr binds no key to it either.
+- `FocusAgent(index)`: jump to the nth agent. herdr binds it only through
+  `[keys.indexed] agents = "<modifier>"` (modifier+1…9, no prefix), which
+  tend cannot read: a terminal sends ctrl+digit as the digit, and after the
+  prefix 1-9 pick tabs.
 
 ### 9. Notifications and sound — done, minus the parts that need assets
 
@@ -564,8 +567,13 @@ Ported (see "Ported, and checked"). Left, and deliberately:
 - **Bundled sounds.** herdr ships two mp3s and decodes them itself (`sound.rs`
   is 482 lines mostly for that). tend carries no assets, so a sound is a file
   the user names and the bell otherwise. Changing this means bundling audio.
-- Notification queueing and dismissal: tend shows the latest on the status
-  line. (Per-agent sound — `[sound.agents]`, droid muted by default — and
+- Notification cards are ported (herdr's render_notification_card and
+  notification_policy): a card in a corner (notify.position, herdr's four,
+  bottom-right by default) with a dot for the kind, the title and the body;
+  one at a time, 8 s for attention and 5 s otherwise, eight waiting at most,
+  newer news of a pane replacing older, a click going to the pane. herdr's
+  toast delay and its re-check of a finished card against a later snapshot
+  are not; see the cooldown below. (Per-agent sound — `[sound.agents]`, droid muted by default — and
   `open-notification`, herdr's unbound `open_notification_target`, are
   ported.)
 - herdr re-checks a "finished" notification against a later snapshot before
@@ -598,7 +606,7 @@ Keys are rebindable (see "Ported, and checked"). Left:
   common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
   refused by both.
 - A title set with `tend terminal title set` survives a handoff but not a
-  restart: it is not in the state file.
+  restart, as herdr's api_window_title does.
 - **Themes**: `[ui.theme.custom]` with herdr's tokens and colour forms, and
   its `light`/`dark` variants under auto_switch, are ported; with no name,
   the overrides go over catppuccin, herdr's default palette. `mauve`,

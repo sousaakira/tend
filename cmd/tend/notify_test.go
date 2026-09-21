@@ -129,7 +129,18 @@ func TestAnythingCanTellTheUserSomething(t *testing.T) {
 		t.Fatalf("tend notify: %v\n%s", err, out)
 	}
 
+	// herdr's card: in the bottom right corner, the dot, the title and the
+	// body under it.
 	a.waitForScreen(t, "the notice", func(s string) bool {
-		return strings.Contains(s, "the build finished")
+		return strings.Contains(s, "● the build finished") && strings.Contains(s, "12 tests, no failures")
 	})
+	row := a.lineContaining(t, "● the build finished")
+	line := []rune(a.lines()[row-1])
+	col := strings.Index(string(line), "●")
+	if col < 40 {
+		t.Errorf("the card should be on the right:\n%s", a.text())
+	}
+	// A click on it puts it away.
+	a.clickAt(t, len([]rune(string(line)[:col]))+3, row)
+	a.waitForScreen(t, "the card to go", func(s string) bool { return !strings.Contains(s, "the build finished") })
 }
