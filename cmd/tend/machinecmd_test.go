@@ -105,7 +105,8 @@ func TestSavedMachinesAreListedAndGoneToFromTheSidebar(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("TEND_STATE_DIR", state)
 	var catalog machines.Catalog
-	if _, err := catalog.Add("farbox", "user@farhost", "far"); err != nil {
+	saved, err := catalog.Add("farbox", "user@farhost", "far")
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := catalog.Save(); err != nil {
@@ -144,5 +145,38 @@ func TestSavedMachinesAreListedAndGoneToFromTheSidebar(t *testing.T) {
 	a.send(t, "\x02(")
 	a.waitForScreen(t, "previous space, back here", func(string) bool {
 		return !strings.Contains(a.lines()[len(a.lines())-1], "farhost")
+	})
+
+	// The catalog is read again while the client runs, as herdr's is: a
+	// machine turned off is dimmed and says so, one removed leaves the list
+	// — which is the plain space list again — and one added comes back.
+	edit := func(change func(c *machines.Catalog)) {
+		t.Helper()
+		c, err := machines.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		change(&c)
+		if err := c.Save(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	edit(func(c *machines.Catalog) { c.Machines[0].Enabled = false })
+	a.waitForScreen(t, "the machine shown as turned off", func(string) bool {
+		return strings.Contains(a.sidebarText(), "· disabled") && !strings.Contains(a.sidebarText(), "farspace")
+	})
+	edit(func(c *machines.Catalog) {
+		if err := c.Remove(saved.ID); err != nil {
+			t.Fatal(err)
+		}
+	})
+	a.waitForScreen(t, "the plain space list again", func(string) bool {
+		s := a.sidebarText()
+		return strings.Contains(s, "spaces") && !strings.Contains(s, "farbox") && !strings.Contains(s, "machines")
+	})
+	edit(func(c *machines.Catalog) { c.Machines = append(c.Machines, saved) })
+	a.waitForScreen(t, "the machine back, with its space", func(string) bool {
+		s := a.sidebarText()
+		return strings.Contains(s, "machines") && strings.Contains(s, "farbox") && strings.Contains(s, "farspace")
 	})
 }

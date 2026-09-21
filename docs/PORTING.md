@@ -430,9 +430,13 @@ top of it is not:
   agent view set by a script orders only the shown machine's agents (herdr
   filters every machine's with it); herdr's notices about a machine itself
   (`endpoint_notices.rs`: unsupported, timed out) — tend shows the state on
-  the machine's row; the navigator's machine rows; and reloading the catalog
-  while the client runs (herdr's `catalog_reload.rs`; tend reads it when a client
-  starts).
+  the machine's row; and the navigator's machine rows. The catalog is read
+  again every second while a client runs (herdr's `catalog_reload.rs`):
+  machines added, removed, renamed, turned on or off are applied without a
+  restart. Different on purpose: the machine being shown is not taken away
+  when it is removed — herdr moves the client to Local — but leaves the list
+  once the client goes elsewhere; and a catalog that fails to read is left
+  as it was rather than read as empty.
 - A server from before this feature cannot hand off — it has no such method —
   and is replaced only by a restart. `tend handoff` says so rather than doing it.
 - Known limit: a pane resized between the manifest being written and the

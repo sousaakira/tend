@@ -160,13 +160,15 @@ type tui struct {
 	snap proto.SessionSnapshot
 	// machines are the saved machines in the sidebar, nil when there are
 	// none (tui_machines.go).
-	machines  *machinesState
-	rects     []proto.PaneRect
-	screens   map[uint64]*vt.Screen
-	sizes     map[uint64]ui.Rect
-	focus     uint64
-	tab       uint64
-	workspace uint64
+	machines *machinesState
+	// catalogStop ends the catalog's reading, which closes catalogDone.
+	catalogStop, catalogDone chan struct{}
+	rects                    []proto.PaneRect
+	screens                  map[uint64]*vt.Screen
+	sizes                    map[uint64]ui.Rect
+	focus                    uint64
+	tab                      uint64
+	workspace                uint64
 
 	sidebar    bool
 	grouped    bool
