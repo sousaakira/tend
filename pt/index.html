@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tend — runtime de terminal para agentes de código</title>
+  <meta name="description" content="O tend mantém os terminais dos agentes rodando depois que você sai, e marca cada painel como working, blocked ou idle.">
+  <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
+  <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
+  <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
+  <link rel="alternate" hreflang="ja" href="https://sousaakira.github.io/tend/ja/">
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="mark" href="#top">tend</a>
+    <nav>
+      <a href="#session">sessão</a>
+      <a href="#keys">teclas</a>
+      <a href="#install">instalar</a>
+      <a href="https://github.com/sousaakira/tend">código</a>
+      <span class="langs"><a href="./" aria-current="page">pt</a> · <a href="../">en</a> · <a href="../es/">es</a> · <a href="../ja/">ja</a></span>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="lead">
+      <h1>tend</h1>
+      <p class="deck">Um runtime de terminal para agentes de código. O servidor continua quando você sai. Cada painel fica marcado como working, blocked ou idle.</p>
+    </section>
+
+    <section id="session" class="stage" aria-label="Uma sessão do tend">
+      <div class="frame">
+        <aside class="side">
+          <p class="side-h">spaces</p>
+          <p class="row on"><span class="dot"></span> main</p>
+          <p class="row dim">master</p>
+          <p class="rule" aria-hidden="true"></p>
+          <p class="side-h">agents <span>flat</span></p>
+          <p class="row on"><span class="dot work"></span> claude</p>
+          <p class="row"><span class="dot block"></span> codex</p>
+        </aside>
+        <div class="panes">
+          <article class="pane focus">
+            <header><span class="id">1</span> claude <span class="st work" title="working">●</span></header>
+            <pre>⠋ Pondering the refactor…
+
+The panes belong to the server.
+Closing this window does not
+stop them.</pre>
+          </article>
+          <article class="pane">
+            <header><span class="id">2</span> codex <span class="st block" title="blocked">▲</span></header>
+            <pre>Do you want to proceed?
+
+ ❯ 1. Yes
+   2. No</pre>
+          </article>
+        </div>
+      </div>
+      <p class="status"><span>work · main · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+    </section>
+
+    <section class="facts">
+      <h2>O que fica quando você desconecta</h2>
+      <dl>
+        <div>
+          <dt>Os programas</dt>
+          <dd>Uma sessão é um servidor em segundo plano. <kbd>ctrl</kbd><kbd>b</kbd> e depois <kbd>d</kbd> deixa os agentes rodando. Abrir o tend de novo volta aos mesmos painéis.</dd>
+        </div>
+        <div>
+          <dt>O estado</dt>
+          <dd>Um painel está working, blocked ou idle. A marca é o que a tela mostra — um spinner, um pedido de permissão, um shell à espera — não um chute pelo nome do processo.</dd>
+        </div>
+        <div>
+          <dt>O layout</dt>
+          <dd>Um space guarda abas. Uma aba guarda painéis. Divida ao lado ou abaixo, amplie um painel, role o histórico, salte para o agente que parou.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section id="keys">
+      <h2>O prefixo é ctrl+b</h2>
+      <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas as teclas dentro da sessão.</p>
+      <table>
+        <tbody>
+          <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>dividir ao lado, abaixo</td></tr>
+          <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>mover o foco</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>redimensionar</td></tr>
+          <tr><th><kbd>z</kbd></th><td>ampliar um painel na janela</td></tr>
+          <tr><th><kbd>[</kbd></th><td>voltar no histórico</td></tr>
+          <tr><th><kbd>x</kbd></th><td>fechar um painel</td></tr>
+          <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>abas: nova, seguinte, anterior, por número</td></tr>
+          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>spaces: novo, anterior, seguinte</td></tr>
+          <tr><th><kbd>a</kbd></th><td>mostrar todos os agentes, agrupados</td></tr>
+          <tr><th><kbd>g</kbd></th><td>escolher um e ir até ele</td></tr>
+          <tr><th><kbd>d</kbd></th><td>desconectar, deixando tudo rodando</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="install">
+      <h2>Instalar</h2>
+      <div class="cmd-wrap">
+        <pre class="cmd" id="install-cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
+        <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="copiar" data-done="copiado">copiar</button>
+      </div>
+      <p>Coloca o binário em <code>~/.local/bin</code> (ou <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>). Prefere um release para esta máquina; senão clona e compila com Go.</p>
+      <p class="note">A partir de um checkout: <code>make install</code>.</p>
+      <p>Sem argumentos, o tend abre uma sessão e sobe um servidor se ainda não houver. <code>tend new -- claude</code> abre um painel. <code>tend ls</code> lista o que está rodando. <code>-s NAME</code> roda outra sessão ao lado da primeira.</p>
+      <p>Escrito em Go. Um binário. Sem cgo.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Apache-2.0. Implementação independente em Go; veja NOTICE no repositório.</p>
+  </footer>
+  <script src="../site.js" defer></script>
+</body>
+</html>
