@@ -74,6 +74,12 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 	// A search runs away from this loop, so typing is never held up by
 	// git grep; a new one cancels the last, whose answer is stale anyway.
 	results := make(chan SearchResult, 1)
+	// A push or a pull the same way, so a slow remote holds nothing up.
+	type jobResult struct {
+		msg string
+		err error
+	}
+	jobs := make(chan jobResult, 1)
 	cancel := func() {}
 	defer func() { cancel() }()
 	poll := time.NewTicker(50 * time.Millisecond)
@@ -83,8 +89,17 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 	for !m.Quit() {
 		select {
 		case <-poll.C:
+			if job, ok := m.JobDue(); ok {
+				go func() {
+					msg, err := job()
+					jobs <- jobResult{msg, err}
+				}()
+			}
 			req, ok := m.SearchDue(time.Now())
 			if !ok {
+				if m.jobRunning {
+					break // the spinner is drawn; nothing else changed
+				}
 				continue
 			}
 			cancel()
@@ -98,6 +113,8 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 			}()
 		case r := <-results:
 			m.ApplySearch(r)
+		case r := <-jobs:
+			m.ApplyJob(r.msg, r.err)
 		case data, ok := <-input:
 			if !ok {
 				return nil

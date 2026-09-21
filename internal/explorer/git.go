@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -311,4 +312,146 @@ func (g Git) Files() ([]string, error) {
 		}
 	}
 	return files, nil
+}
+
+// Branch is a branch to switch to: a local one, or a remote one with no
+// local branch of the same name yet.
+type Branch struct {
+	Name    string
+	Remote  bool
+	Current bool
+}
+
+// Branches lists the local branches, then the remote ones that no local
+// branch has the name of, each by name.
+func (g Git) Branches() ([]Branch, error) {
+	out, err := g.run("for-each-ref", "--format=%(HEAD) %(refname)", "refs/heads", "refs/remotes")
+	if err != nil {
+		return nil, err
+	}
+	var local, remote []Branch
+	have := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if len(line) < 3 {
+			continue
+		}
+		current, ref := line[0] == '*', line[2:]
+		switch {
+		case strings.HasPrefix(ref, "refs/heads/"):
+			name := strings.TrimPrefix(ref, "refs/heads/")
+			have[name] = true
+			local = append(local, Branch{Name: name, Current: current})
+		case strings.HasPrefix(ref, "refs/remotes/"):
+			name := strings.TrimPrefix(ref, "refs/remotes/")
+			if strings.HasSuffix(name, "/HEAD") {
+				continue
+			}
+			remote = append(remote, Branch{Name: name, Remote: true})
+		}
+	}
+	var out2 []Branch
+	out2 = append(out2, local...)
+	for _, r := range remote {
+		// origin/main when main is already here is the same branch.
+		if short := r.Name[strings.Index(r.Name, "/")+1:]; !have[short] {
+			out2 = append(out2, r)
+		}
+	}
+	return out2, nil
+}
+
+// Switch changes to a branch. A remote one becomes a local branch of the
+// same name that tracks it, as an editor's branch picker does.
+func (g Git) Switch(b Branch) error {
+	if b.Remote {
+		local := b.Name[strings.Index(b.Name, "/")+1:]
+		_, err := g.run("switch", "-c", local, "--track", b.Name)
+		return err
+	}
+	_, err := g.run("switch", b.Name)
+	return err
+}
+
+// networkEnv keeps git from asking for anything on the panel's terminal: a
+// password prompt there would be drawn over the panel and answered by
+// nobody. A key that needs a passphrase fails instead, and says so.
+func networkEnv() []string {
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if os.Getenv("GIT_SSH_COMMAND") == "" {
+		env = append(env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+	}
+	return env
+}
+
+// runNet runs a git command that talks to a remote.
+func (g Git) runNet(args ...string) error {
+	if g.Top == "" {
+		return ErrNoRepo
+	}
+	cmd := exec.Command("git", append([]string{"-C", g.Top}, args...)...)
+	cmd.Env = networkEnv()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			lines := strings.Split(msg, "\n")
+			// The last line of a failed push or pull is the reason; the
+			// first is often only "To origin".
+			for i := len(lines) - 1; i >= 0; i-- {
+				if l := strings.TrimSpace(lines[i]); l != "" && !strings.HasPrefix(l, "hint:") {
+					return errors.New(strings.TrimPrefix(l, "fatal: "))
+				}
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// Sync brings the branch level with its upstream, as an editor's sync
+// button does: pull what is behind (fast-forward only — a merge is a
+// decision, not a button), push what is ahead. A branch with no upstream is
+// published to origin. It says what it did.
+func (g Git) Sync(st *Status) (string, error) {
+	if st == nil || st.Branch == "" || st.detachedOrNone {
+		return "", errors.New("not on a branch")
+	}
+	if st.Upstream == "" {
+		out, _ := g.run("remote")
+		hasOrigin := false
+		for _, r := range strings.Fields(string(out)) {
+			hasOrigin = hasOrigin || r == "origin"
+		}
+		if !hasOrigin {
+			return "", errors.New("no upstream, and no origin to publish to")
+		}
+		if err := g.runNet("push", "-u", "origin", st.Branch); err != nil {
+			return "", err
+		}
+		return "published " + st.Branch + " to origin", nil
+	}
+	if err := g.runNet("fetch", "--quiet"); err != nil {
+		return "", err
+	}
+	fresh, err := g.Status()
+	if err != nil {
+		return "", err
+	}
+	var did []string
+	if fresh.Behind > 0 {
+		if err := g.runNet("pull", "--ff-only", "--quiet"); err != nil {
+			return "", err
+		}
+		did = append(did, "pulled "+strconv.Itoa(fresh.Behind))
+	}
+	if fresh.Ahead > 0 {
+		if err := g.runNet("push", "--quiet"); err != nil {
+			return strings.Join(did, ", "), err
+		}
+		did = append(did, "pushed "+strconv.Itoa(fresh.Ahead))
+	}
+	if len(did) == 0 {
+		return "up to date with " + st.Upstream, nil
+	}
+	return strings.Join(did, ", "), nil
 }

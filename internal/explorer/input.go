@@ -201,6 +201,9 @@ func (m *Model) Mouse(ev Mouse) {
 			}
 		}
 		return
+	case modeBranch:
+		m.branchMouse(ev)
+		return
 	case modeHelp, modeCommit:
 		if ev.Press {
 			m.mode = modeList
@@ -226,6 +229,10 @@ func (m *Model) Mouse(ev Mouse) {
 		default:
 			m.switchView(v)
 		}
+		return
+	}
+	if ev.Y == 1 {
+		m.gitBarClick(ev.X)
 		return
 	}
 	if m.view == ViewSearch {

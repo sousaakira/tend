@@ -40,6 +40,7 @@ const (
 	modeSearch
 	modeCommit
 	modeHelp
+	modeBranch
 )
 
 // Opener opens a file for editing somewhere other than here: in tend, an
@@ -69,6 +70,10 @@ type Model struct {
 	// what the panel made of it last time.
 	neighbours Neighbours
 	follow     follower
+
+	branches   branchPicker
+	job        Job
+	jobRunning bool
 
 	// rows as last laid out, so a click lands on what was drawn.
 	fileRows   []*Node
@@ -298,6 +303,8 @@ func (m *Model) Key(k Key) {
 		m.commitKey(k)
 	case modeHelp:
 		m.mode = modeList
+	case modeBranch:
+		m.branchKey(k)
 	default:
 		if m.view == ViewSearch && m.searchViewKey(k) {
 			return
@@ -339,6 +346,10 @@ func (m *Model) listKey(k Key, pending string) {
 	case "r":
 		m.Refresh()
 		m.say("refreshed", false)
+	case "B":
+		m.openBranches()
+	case "P":
+		m.startSync()
 	case "?":
 		m.mode = modeHelp
 	case "q", "ctrl+c":

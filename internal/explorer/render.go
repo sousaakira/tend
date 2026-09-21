@@ -63,6 +63,8 @@ func (m *Model) Draw(g *vt.Grid) (cx, cy int, visible bool) {
 		return 0, 0, false
 	case modeSearch:
 		return m.drawSearch(g)
+	case modeBranch:
+		return m.drawBranches(g)
 	}
 
 	m.drawHeader(g)
@@ -118,19 +120,9 @@ func (m *Model) drawHeader(g *vt.Grid) {
 		}
 	}
 
-	// The second line says where this is: the project, and the branch with
-	// how far it is from its upstream.
-	name := filepath.Base(m.tree.Root)
-	x = put(g, 1, 1, name, styleBold, m.cols)
-	if m.status != nil && m.status.Branch != "" {
-		x = put(g, x+1, 1, "⎇ "+m.status.Branch, styleCyan, m.cols)
-		if m.status.Ahead > 0 {
-			x = put(g, x+1, 1, "↑"+strconv.Itoa(m.status.Ahead), styleGreen, m.cols)
-		}
-		if m.status.Behind > 0 {
-			put(g, x+1, 1, "↓"+strconv.Itoa(m.status.Behind), styleYellow, m.cols)
-		}
-	}
+	// The second line says where this is: the project, the branch and how
+	// far it is from its upstream, and the sync button.
+	m.drawGitBar(g)
 }
 
 func (m *Model) drawFiles(g *vt.Grid) {
@@ -290,6 +282,8 @@ var helpLines = []string{
 	"  space   view here",
 	"anywhere",
 	"  1 2 3   files, search, changes",
+	"  B       switch branch (or click it)",
+	"  P       sync: pull, push (or ⟳)",
 	"  /       find a file by name",
 	"  r       refresh",
 	"  q       close the panel",
