@@ -392,8 +392,18 @@ top of it is not:
   server too old to hand off is named and left running; herdr offers to stop
   it, tend leaves that to the user. `make install` then `tend handoff` is
   still the way for a build made from source.
-- **Handoff on remote attach** (`remote/attach.rs`, `remote/restart_policy.rs`):
-  replacing an outdated server on the far side of `-ssh` before attaching.
+- **Remote attach preparation** (`remote/attach.rs`) is ported for Unix
+  hosts over plain ssh: the far side is probed (platform, each tend there and
+  its build, gzip); a tend of this build is used wherever it is; otherwise,
+  on a machine of the same kind, this binary is offered (`[Y/n]`, herdr's
+  default), copied gzipped with progress to `~/.local/bin/tend`, run once
+  before it replaces anything, and the running server of that session is
+  handed to it. Verified against a real host (Ubuntu, glibc 2.35), which is
+  how it was found that builds must be static. Not ported: herdr's download of
+  a release for a machine of another kind (there are no releases yet), and
+  herdr's prompt to stop a server too old to hand off. The automation
+  commands' `-ssh` still run the far side's `tend` on its PATH, not the one
+  an attach installed.
 - A server from before this feature cannot hand off — it has no such method —
   and is replaced only by a restart. `tend handoff` says so rather than doing it.
 - Known limit: a pane resized between the manifest being written and the

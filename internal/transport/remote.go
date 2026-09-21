@@ -35,15 +35,38 @@ const stderrLimit = 8 * 1024
 // input is closed.
 const remoteCloseGrace = 2 * time.Second
 
+// RemoteTend is the tend to run on the far side: "tend" on its PATH unless
+// the attach found, or put, one somewhere else (see cmd/tend's
+// prepareRemote). It goes to the far side's shell as it is, so a path may
+// use $HOME.
+var RemoteTend = "tend"
+
 // RemoteArgv is the command that carries a session from host.
 func RemoteArgv(host, session string) []string {
 	program := os.Getenv(RemoteCommandEnv)
 	if program == "" {
 		// -T: no terminal on the far side. The protocol is binary, and a pty
 		// in the middle would translate line endings into it.
-		return []string{"ssh", "-T", host, "tend", "bridge", "-s", session}
+		return []string{"ssh", "-T", host, RemoteTend, "bridge", "-s", session}
 	}
-	return append(strings.Fields(program), host, "tend", "bridge", "-s", session)
+	return append(strings.Fields(program), host, RemoteTend, "bridge", "-s", session)
+}
+
+// RemoteShell runs a shell script on host and returns what it printed, with
+// stdin given to it — the probe and the install of a remote tend. Only over
+// plain ssh: the script is the far side's shell's to run.
+func RemoteShell(host, script string, stdin io.Reader) ([]byte, error) {
+	cmd := exec.Command("ssh", "-T", "-o", "BatchMode=yes", host, script)
+	cmd.Stdin = stdin
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return nil, fmt.Errorf("%s: %s", host, msg)
+		}
+		return nil, fmt.Errorf("%s: %w", host, err)
+	}
+	return stdout.Bytes(), nil
 }
 
 // RemoteAPIArgv is the command that carries a session's automation socket

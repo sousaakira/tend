@@ -67,6 +67,13 @@ func runAttach(args []string) error {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return fmt.Errorf("attach needs a terminal; use \"tend follow\" when output is redirected")
 	}
+	if remoteHost != "" {
+		// Before the screen is taken: the far side may need a question
+		// answered, and the answer typed at a normal prompt.
+		if err := prepareRemote(remoteHost, *name); err != nil {
+			return err
+		}
+	}
 	prefix, _ := cfg.PrefixKey()
 	if prefix == 0 {
 		prefix = ui.Disabled

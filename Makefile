@@ -107,6 +107,13 @@ bench: toolchain
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
 LDFLAGS := -X main.version=$(VERSION)
 
+# Static: tend is pure Go (no cgo, by the owner's decision), and a binary
+# linked against this machine's glibc is not one that runs everywhere. A
+# remote attach copies it to the other machine, and there a newer glibc's
+# binary crashed on an older one (2.43 here, 2.35 there). Only for the
+# binaries: the race detector the tests run under needs cgo.
+STATIC := CGO_ENABLED=0
+
 # INSTALL_DIR is GOBIN when set, and the usual per-user bin otherwise.
 INSTALL_DIR ?= $(shell $(GO) env GOBIN 2>/dev/null)
 ifeq ($(INSTALL_DIR),)
@@ -114,12 +121,12 @@ INSTALL_DIR := $(HOME)/.local/bin
 endif
 
 build: toolchain
-	$(GO) build -ldflags "$(LDFLAGS)" -o bin/tend ./cmd/tend
+	$(STATIC) $(GO) build -ldflags "$(LDFLAGS)" -o bin/tend ./cmd/tend
 
 ## install: build and put tend on PATH, in GOBIN or ~/.local/bin.
 install: toolchain
 	@mkdir -p "$(INSTALL_DIR)"
-	$(GO) build -ldflags "$(LDFLAGS)" -o "$(INSTALL_DIR)/tend" ./cmd/tend
+	$(STATIC) $(GO) build -ldflags "$(LDFLAGS)" -o "$(INSTALL_DIR)/tend" ./cmd/tend
 	@echo "installed $(INSTALL_DIR)/tend ($(VERSION))"
 	@command -v tend >/dev/null 2>&1 || echo "note: $(INSTALL_DIR) is not on PATH"
 
@@ -129,7 +136,7 @@ dist: toolchain
 	@for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do \
 		os=$${target%/*}; arch=$${target#*/}; \
 		echo "  $$os/$$arch"; \
-		GOOS=$$os GOARCH=$$arch $(GO) build -ldflags "$(LDFLAGS)" \
+		$(STATIC) GOOS=$$os GOARCH=$$arch $(GO) build -ldflags "$(LDFLAGS)" \
 			-o "dist/tend-$$os-$$arch" ./cmd/tend || exit 1; \
 	done
 	@ls -1 dist
