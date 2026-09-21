@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 func runBridge(args []string) error {
 	fs := flag.NewFlagSet("bridge", flag.ExitOnError)
 	name := sessionFlag(fs)
+	apiSocket := fs.Bool("api", false, "join the session's automation socket instead, for a script's -ssh")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(),
 			"usage: tend bridge [-s session]\n\n"+
@@ -28,6 +30,25 @@ func runBridge(args []string) error {
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if *apiSocket {
+		// No server is started for this: a script asking about a session
+		// that is not running should be told so, not given an empty one.
+		path, err := transport.APISocketPath(*name)
+		if err != nil {
+			return err
+		}
+		conn, err := net.Dial("unix", path)
+		if err != nil {
+			return fmt.Errorf("session %q is not running on this machine: %w", sessionName(*name), err)
+		}
+		defer conn.Close()
+		done := make(chan struct{}, 2)
+		go func() { _, _ = io.Copy(conn, os.Stdin); done <- struct{}{} }()
+		go func() { _, _ = io.Copy(os.Stdout, conn); done <- struct{}{} }()
+		<-done
+		return nil
 	}
 
 	path, err := transport.SocketPath(*name)

@@ -645,8 +645,11 @@ agent's:
 
 - Claude Code asks for any-motion mouse reports; tend enables motion reporting
   on the outer terminal only while a menu is open, so hover never reaches it.
-- `tend attach -ssh` has not been tried against a real sshd, and the mismatch
-  notice's restart has not been exercised over it.
+- `tend attach -ssh` interactively, and the mismatch notice's restart over
+  it, have not been tried against a real sshd yet. Checked against one
+  (root@10.8.0.110): `tend ls -ssh`, `tend new -ssh`, and the automation
+  commands over `-ssh`, which is where a bug was found and fixed (they read
+  the flag and answered from the local session).
 - Copy mode does not refuse a motion over content that changed underneath, as
   herdr does (`stale_content`).
 

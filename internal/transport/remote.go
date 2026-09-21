@@ -46,6 +46,14 @@ func RemoteArgv(host, session string) []string {
 	return append(strings.Fields(program), host, "tend", "bridge", "-s", session)
 }
 
+// RemoteAPIArgv is the command that carries a session's automation socket
+// from host: the same bridge, told to join the API socket instead, so a
+// script's -ssh reaches the machine it names.
+func RemoteAPIArgv(host, session string) []string {
+	argv := RemoteArgv(host, session)
+	return append(argv, "-api")
+}
+
 // Remote starts a command and returns its stdio as a connection.
 func Remote(argv []string) (*RemoteConn, error) {
 	if len(argv) == 0 {

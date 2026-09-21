@@ -780,3 +780,57 @@ func TestInstallingAPluginFromGithub(t *testing.T) {
 		t.Error("the checkout tend made is still there")
 	}
 }
+
+// TestAScriptsSSHReachesTheOtherMachine: `tend pane read -ssh host` answers
+// from the session on that host. It was found on a real host that the flag
+// was read and ignored: the command answered from the local session of the
+// same name — another machine's panes, without a word. Two runtime
+// directories stand in for two machines, each with a session "same" whose
+// pane says which it is.
+func TestAScriptsSSHReachesTheOtherMachine(t *testing.T) {
+	bin := buildBinary(t)
+	near, far := t.TempDir(), t.TempDir()
+	stand := filepath.Join(t.TempDir(), "fake-ssh")
+	script := "#!/bin/sh\nshift; shift\nTEND_RUNTIME_DIR=" + far + " exec " + bin + " \"$@\"\n"
+	if err := os.WriteFile(stand, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	run := func(dir string, args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "TEND_RUNTIME_DIR="+dir, "TEND_SSH="+stand, "SHELL=/bin/sh")
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	for dir, word := range map[string]string{near: "I-AM-NEAR", far: "I-AM-FAR"} {
+		if out, err := run(dir, "new", "-s", "same", "--", "sh", "-c", "echo "+word+"; sleep 60"); err != nil {
+			t.Fatalf("new: %v\n%s", err, out)
+		}
+	}
+	t.Cleanup(func() {
+		for _, dir := range []string{near, far} {
+			stop := exec.Command(bin, "kill", "-s", "same", "-server")
+			stop.Env = append(os.Environ(), "TEND_RUNTIME_DIR="+dir)
+			_ = stop.Run()
+			waitForSocketGone(filepath.Join(dir, "same.sock"))
+		}
+	})
+
+	var out string
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		out, _ = run(near, "pane", "read", "-ssh", "user@farhost", "-s", "same", "1")
+		if strings.Contains(out, "I-AM-") {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !strings.Contains(out, "I-AM-FAR") || strings.Contains(out, "I-AM-NEAR") {
+		t.Fatalf("pane read -ssh answered %q; want the far session's pane", out)
+	}
+
+	// A session not running there says so, with the far side's own words.
+	out, err := run(near, "pane", "list", "-ssh", "user@farhost", "-s", "absent")
+	if err == nil || !strings.Contains(out, "not running on this machine") {
+		t.Errorf("an absent far session = %v: %s", err, out)
+	}
+}

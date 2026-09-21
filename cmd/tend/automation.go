@@ -64,7 +64,17 @@ func hoistFlags(args []string, valued map[string]bool) []string {
 const apiTimeout = 30 * time.Second
 
 // dialAPI connects to a session's automation socket.
-func dialAPI(session string) (net.Conn, error) {
+func dialAPI(session string) (io.ReadWriteCloser, error) {
+	if remoteHost != "" {
+		// Over ssh, to the machine -ssh names. Before this the flag was read
+		// and ignored, and a script asking about a remote session was
+		// answered by the local one — the wrong machine, without a word.
+		conn, err := transport.Remote(transport.RemoteAPIArgv(remoteHost, session))
+		if err != nil {
+			return nil, err
+		}
+		return conn, nil
+	}
 	path, err := transport.APISocketPath(session)
 	if err != nil {
 		return nil, err
@@ -98,7 +108,14 @@ func apiCall(session, method string, params map[string]any, wait bool) (map[stri
 	defer conn.Close()
 
 	if !wait {
-		_ = conn.SetDeadline(time.Now().Add(apiTimeout))
+		if d, ok := conn.(interface{ SetDeadline(time.Time) error }); ok {
+			_ = d.SetDeadline(time.Now().Add(apiTimeout))
+		} else {
+			// A connection over ssh has no deadline of its own; closing it
+			// ends the read that would otherwise wait for ever.
+			timer := time.AfterFunc(apiTimeout, func() { _ = conn.Close() })
+			defer timer.Stop()
+		}
 	}
 	req := map[string]any{"id": "cli", "method": method}
 	if len(params) > 0 {
@@ -114,6 +131,16 @@ func apiCall(session, method string, params map[string]any, wait bool) (map[stri
 
 	reply, err := bufio.NewReaderSize(conn, 1<<16).ReadString('\n')
 	if err != nil {
+		if rc, ok := conn.(*transport.RemoteConn); ok {
+			// Closed first: the complaint is copied off ssh's stderr while
+			// the command runs, and is only whole once it has ended.
+			_ = rc.Close()
+		}
+		if rc, ok := conn.(*transport.RemoteConn); ok && rc.Complaint() != "" {
+			// ssh's own reason — tend not there, a host refused — says more
+			// than "connection closed".
+			return nil, fmt.Errorf("%s: %s", remoteHost, rc.Complaint())
+		}
 		return nil, fmt.Errorf("the server did not answer: %w", err)
 	}
 	var out struct {
