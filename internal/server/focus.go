@@ -140,3 +140,55 @@ func (s *Server) setPaneStateLocked(id session.PaneID, agentLabel string, state 
 	_ = s.session.SetPaneStateWatched(id, agentLabel, state, s.watchedTabLocked())
 	return agentLabel != "" && agentLabel != previous
 }
+
+// RequestFocus asks every attached client to show a pane, and reports how
+// many there were to ask (herdr's pane.focus answers "no client" when none).
+func (s *Server) RequestFocus(id session.PaneID) (int, error) {
+	tab, ws := s.placeOf(id)
+	if tab == 0 {
+		return 0, session.ErrNoSuchPane
+	}
+	s.mu.Lock()
+	clients := len(s.conns)
+	s.mu.Unlock()
+	s.publish(Event{Kind: EventFocusRequest, Pane: id, Tab: tab, Workspace: ws})
+	return clients, nil
+}
+
+// TabActivePane is the pane a tab last had focused, for tab.focus.
+func (s *Server) TabActivePane(id session.TabID) (session.PaneID, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, w := range s.session.Workspaces() {
+		for _, t := range w.Tabs() {
+			if t.ID == id {
+				return t.ActivePane(), nil
+			}
+		}
+	}
+	return 0, session.ErrNoSuchTab
+}
+
+// PaneLayout is a pane's tab as herdr's pane.layout describes it, laid out
+// at the nominal size: which panes, where, and how the tab is split.
+func (s *Server) PaneLayout(id session.PaneID) (tab session.TabID, ws session.WorkspaceID, focused session.PaneID,
+	panes []session.PaneRect, splits []session.SplitRect, area session.Rect, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.session.TabOf(id)
+	if !ok {
+		return 0, 0, 0, nil, nil, area, session.ErrNoSuchPane
+	}
+	for _, w := range s.session.Workspaces() {
+		for _, candidate := range w.Tabs() {
+			if candidate.ID == t.ID {
+				ws = w.ID
+			}
+		}
+	}
+	focused = t.ActivePane()
+	if s.focusedTab == t.ID && s.focusedPane != 0 {
+		focused = s.focusedPane
+	}
+	return t.ID, ws, focused, t.Layout(nominalArea), t.Splits(nominalArea), nominalArea, nil
+}

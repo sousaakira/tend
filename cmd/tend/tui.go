@@ -648,6 +648,14 @@ func (t *tui) Event(ev proto.Event) {
 		}()
 	case proto.EventPaneClipboard:
 		t.paneCopied(ev.Data)
+	case proto.EventFocusRequest:
+		// A script or a plugin asked for this pane to be shown. Re-read
+		// first: the pane may have been made a moment ago.
+		go func() {
+			if err := t.refresh(); err == nil {
+				_ = t.jumpToPane(ev.Pane)
+			}
+		}()
 	case proto.EventNotify:
 		// Somebody asked for the user to be told: a script, a hook, a plugin.
 		// It goes out the same ways an agent's own state does.

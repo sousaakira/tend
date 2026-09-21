@@ -367,7 +367,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Forced selection | none inside a mouse-holding program | alt+drag selects a block anywhere | fallback for programs that hold the mouse and do nothing with a drag |
 | Clipboard | OSC 52 only | local tool (`wl-copy`/`xclip`/`xsel`/`pbcopy`) when not over ssh, plus OSC 52 always | the owner's terminal refuses OSC 52 |
 | Handoff transport | pty descriptors sent as `SCM_RIGHTS` over a socket; the new server binds the socket afresh | descriptors inherited by the child (`exec.Cmd.ExtraFiles`) at fixed numbers, the **listening socket included** | inheritance needs no protocol, and handing the listener over means the socket file is never removed and recreated — there is no instant with nobody listening |
-| Focus, scroll and zoom over the API | `pane.focus`, `agent.focus`, `pane.scroll`, `pane.zoom`, `pane.current` are server methods | not offered (a client reports focus with `pane.focus`, which only tells programs and plugins) | in tend these are client state (AGENTS.md: what one person is looking at stays in the client), so the server has no focus to set and would be answering for a client that may not be attached |
+| Focus, scroll and zoom over the API | `pane.focus`, `agent.focus`, `pane.scroll`, `pane.zoom`, `pane.current` are server methods | `pane.focus` and `tab.focus` ask every attached client to show the pane, and each client moves itself (the answer says how many were asked); scroll, zoom and `pane.current` are not offered | in tend these are client state (AGENTS.md: what one person is looking at stays in the client), so the server can ask but not set, and cannot answer for a client that may not be attached |
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
 | Claude / JSONC settings | `jsonc_parser` preserves comments and compact layout | `encoding/json`; comments lost and **keys re-sorted alphabetically** on rewrite (content otherwise identical — checked against the owner's real 44 KB `settings.json`: install adds one `SessionStart` entry, a second install adds nothing, uninstall restores it exactly) | avoid a new dependency; invalid JSON is an error, not silently stripped |
 | Default theme | catppuccin | the terminal's own colours when no `name` is set | an unset theme keeps what tend has always looked like; the owner picks a palette in the settings screen or the file |
@@ -438,8 +438,9 @@ an agent may name one, by id, except pi and omp which resume from a path.
 
 What a script needs is ported (see "Ported, and checked"). What is left:
 
-- **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
-  `pane.current`): deliberately absent, see "Different from herdr on purpose".
+- **Scroll and the current pane** (`agent.focus`, `pane.scroll`,
+  `pane.current`): absent, see "Different from herdr on purpose".
+  `pane.focus` and `tab.focus` are ported as requests to the clients.
 - `view.*` (saved agent views, herdr's `agent_view.rs`) and the graphics
   API. (`command.invoke` is left out
   on purpose; see item 11.)
@@ -452,12 +453,15 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 The host is ported (see "Ported, and checked"). Left:
 
-- **The owner's `herdr-sidebar`** (`~/.config/herdr/plugins/github/`) calls
-  herdr's CLI by name and expects its pane methods. The events it hooks on
-  (`pane.focused`, `tab.created`, `workspace.created`, `workspace.focused`,
-  `tab.focused`) now exist; running it still needs its manifest renamed to
-  `tend-plugin.toml`, its `herdr` calls pointed at `tend`, and whatever of
-  herdr's API it uses that tend does not have.
+- **The owner's `herdr-sidebar`** (`~/.config/herdr/plugins/github/`): every
+  API method it calls now exists in tend (`pane.layout`, `pane.send_input`,
+  `pane.rename`, `pane.focus` and `tab.focus` were the missing ones) and its
+  events fire by herdr's names. What is left is naming, which is the
+  owner's call: its manifest is `herdr-plugin.toml`, and it reads
+  `HERDR_SOCKET_PATH`, `HERDR_PANE_ID`, `HERDR_PLUGIN_EVENT_JSON` and
+  `HERDR_PLUGIN_STATE_DIR` where tend sets `TEND_*`. tend does not export
+  herdr-named variables (AGENTS.md: no herdr name in the product). Not run
+  against tend yet.
 - Installing from a URL or GitHub (`plugin install`), the marketplace, popups
   as a placement, `link_handlers`, `plugin.log.list`, `min_herdr_version`
   enforcement (tend's builds have no ordering to compare against).

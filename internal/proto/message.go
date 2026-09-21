@@ -190,6 +190,8 @@ const (
 	FeatureDone = "done"
 	// FeatureWindowFocus: pane.focus also takes the window's focus.
 	FeatureWindowFocus = "window-focus"
+	// FeatureFocusRequest: the server asks clients to show a pane.
+	FeatureFocusRequest = "focus-request"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
@@ -197,6 +199,7 @@ const (
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
+	FeatureFocusRequest,
 }
 
 // --- session ---------------------------------------------------------------
@@ -649,6 +652,9 @@ const (
 	EventWorkspaceFocused = "workspace-focused"
 	EventTabCreated       = "tab-created"
 	EventWorkspaceCreated = "workspace-created"
+	// EventFocusRequest asks a client to show a pane, for pane.focus and
+	// tab.focus over the automation socket.
+	EventFocusRequest = "focus-request"
 )
 
 // Event is something that happened, sent unsolicited.

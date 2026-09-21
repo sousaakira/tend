@@ -494,3 +494,40 @@ func even(sizes []float64) {
 		sizes[i] = share
 	}
 }
+
+// SplitRect is one split in a tab's layout: which way it divides, the share
+// of its first part, and the area it divides. herdr's pane.layout reports
+// these beside the panes, so a plugin can tell how a tab is built and not
+// only where its panes ended up.
+type SplitRect struct {
+	Dir   Direction
+	Ratio float64
+	Rect  Rect
+}
+
+// Splits lists the tab's splits, outermost first, laid out in area.
+func (t *Tab) Splits(area Rect) []SplitRect {
+	var out []SplitRect
+	var walk func(n *node, area Rect)
+	walk = func(n *node, area Rect) {
+		if n == nil || n.isLeaf() {
+			return
+		}
+		out = append(out, SplitRect{Dir: n.dir, Ratio: n.sizes[0], Rect: area})
+		rects := (&node{dir: n.dir, kids: leaves(len(n.kids)), sizes: n.sizes}).layout(area, nil)
+		for i, kid := range n.kids {
+			walk(kid, rects[i].Rect)
+		}
+	}
+	walk(t.root, area)
+	return out
+}
+
+// leaves is n placeholder leaves, for laying out one level of a split.
+func leaves(n int) []*node {
+	out := make([]*node, n)
+	for i := range out {
+		out[i] = leaf(PaneID(i + 1))
+	}
+	return out
+}

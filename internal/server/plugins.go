@@ -193,7 +193,7 @@ func (s *Server) notifyPlugins(ev Event) {
 // are not told about: herdr's hook events, and tend's clipboard.
 func PluginEventName(k EventKind) string {
 	switch k {
-	case EventPaneOutput, EventNotify, EventSessionChanged:
+	case EventPaneOutput, EventNotify, EventSessionChanged, EventFocusRequest:
 		return "" // too frequent, or not a lifecycle event
 	}
 	return EventName(k)

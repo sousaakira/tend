@@ -67,6 +67,11 @@ const (
 	EventWorktreeOpened
 	EventWorktreeRemoved
 	EventAgentDetected
+	// EventFocusRequest asks the clients to show a pane: pane.focus and
+	// tab.focus over the API. Focus is each client's, so the server asks
+	// and each client moves itself; a session nobody is attached to has
+	// nothing to move.
+	EventFocusRequest
 )
 
 func (k EventKind) String() string {

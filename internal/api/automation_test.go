@@ -485,3 +485,53 @@ func TestHerdrsLifecycleEventsAreSent(t *testing.T) {
 		}
 	}
 }
+
+// TestTheMethodsAHerdrPluginCalls: pane.layout, pane.send_input,
+// pane.rename, pane.focus and tab.focus are what herdr's plugins use to dock
+// a panel beside the work (the owner's herdr-sidebar calls all five). If one
+// regresses, such a plugin fails on its first call.
+func TestTheMethodsAHerdrPluginCalls(t *testing.T) {
+	h := start(t)
+	pane := PaneID(h.pane)
+	made := result(t, call(t, h, MethodPaneSplit, map[string]any{
+		"pane_id": pane, "direction": "right", "command": []string{"/bin/sh"},
+	}))
+	shell, _ := made["pane"].(map[string]any)
+	other := text(shell["pane_id"])
+
+	layout := result(t, call(t, h, MethodPaneLayout, map[string]any{"pane_id": pane}))
+	l, _ := layout["layout"].(map[string]any)
+	panes, _ := l["panes"].([]any)
+	splits, _ := l["splits"].([]any)
+	if len(panes) != 2 || len(splits) != 1 {
+		t.Fatalf("layout = %v, want two panes and one split", l)
+	}
+	if sp, _ := splits[0].(map[string]any); sp["direction"] != "right" {
+		t.Errorf("split = %v, want right", sp)
+	}
+
+	result(t, call(t, h, MethodPaneSendInput, map[string]any{
+		"pane_id": other, "text": "echo $((6*7))-ran", "keys": []string{"Enter"},
+	}))
+	res := result(t, call(t, h, MethodPaneWaitForOutput, map[string]any{
+		// Only the command's output says 42: the echoed line says $((6*7)).
+		"pane_id": other, "contains": "42-ran", "timeout_ms": 5000,
+	}))
+	if res["timed_out"] == true {
+		t.Errorf("text and keys did not both arrive: %v", res)
+	}
+
+	renamed := result(t, call(t, h, MethodPaneRename, map[string]any{"pane_id": other, "label": "sidebar"}))
+	if info, _ := renamed["pane"].(map[string]any); info["title"] != "sidebar" {
+		t.Errorf("rename returned %v", renamed)
+	}
+
+	focus := result(t, call(t, h, MethodPaneFocus, map[string]any{"pane_id": other}))
+	if focus["type"] != "focus_requested" || focus["pane_id"] != other {
+		t.Errorf("pane.focus = %v", focus)
+	}
+	tabs := result(t, call(t, h, MethodTabFocus, map[string]any{"tab_id": "t_1"}))
+	if tabs["type"] != "focus_requested" {
+		t.Errorf("tab.focus = %v", tabs)
+	}
+}

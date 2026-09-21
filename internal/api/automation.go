@@ -75,8 +75,16 @@ const (
 	MethodEventsWait = "events.wait"
 	// MethodEventsSubscribe is in subscribe.go, where the stream is.
 
-	MethodPaneMove      = "pane.move"
-	MethodPaneNeighbor  = "pane.neighbor"
+	MethodPaneMove     = "pane.move"
+	MethodPaneNeighbor = "pane.neighbor"
+	// herdr's, for plugins written against it: the layout of a pane's tab,
+	// text and keys in one call, a pane's name, and asking the clients to
+	// show a pane or a tab.
+	MethodPaneLayout    = "pane.layout"
+	MethodPaneSendInput = "pane.send_input"
+	MethodPaneRename    = "pane.rename"
+	MethodPaneFocus     = "pane.focus"
+	MethodTabFocus      = "tab.focus"
 	MethodPaneEdges     = "pane.edges"
 	MethodPaneProcesses = "pane.process_info"
 	MethodPaneSwap      = "pane.swap"
@@ -371,6 +379,133 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			return nil, paneErr(p.PaneID, err)
 		}
 		return ok2(), nil
+
+	case MethodPaneSendInput:
+		var p struct {
+			PaneID string   `json:"pane_id"`
+			Text   string   `json:"text"`
+			Keys   []string `json:"keys"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		// Text, then keys: "type this, then press enter" is what the pair is
+		// for, as herdr sends them.
+		if p.Text != "" {
+			if err := a.srv.SendText(id, p.Text); err != nil {
+				return nil, paneErr(p.PaneID, err)
+			}
+		}
+		if len(p.Keys) > 0 {
+			if err := a.srv.SendKeys(id, p.Keys); err != nil {
+				return nil, paneErr(p.PaneID, err)
+			}
+		}
+		return ok2(), nil
+
+	case MethodPaneRename:
+		var p struct {
+			PaneID string  `json:"pane_id"`
+			Label  *string `json:"label"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		label := ""
+		if p.Label != nil {
+			label = *p.Label
+		}
+		if err := a.srv.RenamePane(id, label); err != nil {
+			return nil, paneErr(p.PaneID, err)
+		}
+		st, err := a.srv.PaneStatus(id)
+		if err != nil {
+			return nil, paneErr(p.PaneID, err)
+		}
+		return map[string]any{"type": "pane_info", "pane": a.info(st)}, nil
+
+	case MethodPaneFocus, MethodTabFocus:
+		var p struct {
+			PaneID string `json:"pane_id"`
+			TabID  string `json:"tab_id"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		var id session.PaneID
+		if req.Method == MethodTabFocus {
+			tab, ok := parseID("t_", p.TabID)
+			if !ok {
+				return nil, fail("tab_not_found", "tab %s not found", p.TabID)
+			}
+			pane, err := a.srv.TabActivePane(session.TabID(tab))
+			if err != nil {
+				return nil, fail("tab_not_found", "tab %s not found", p.TabID)
+			}
+			id = pane
+		} else {
+			pane, err := a.pane(p.PaneID)
+			if err != nil {
+				return nil, err
+			}
+			id = pane
+		}
+		clients, err := a.srv.RequestFocus(id)
+		if err != nil {
+			return nil, paneErr(PaneID(id), err)
+		}
+		return map[string]any{
+			"type": "focus_requested", "pane_id": PaneID(id), "clients": clients,
+		}, nil
+
+	case MethodPaneLayout:
+		var p struct {
+			PaneID string `json:"pane_id"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		tab, ws, focused, panes, splits, area, err := a.srv.PaneLayout(id)
+		if err != nil {
+			return nil, paneErr(p.PaneID, err)
+		}
+		rect := func(r session.Rect) map[string]int {
+			return map[string]int{"x": r.X, "y": r.Y, "width": r.W, "height": r.H}
+		}
+		outPanes := make([]map[string]any, 0, len(panes))
+		for _, pr := range panes {
+			outPanes = append(outPanes, map[string]any{
+				"pane_id": PaneID(pr.Pane), "focused": pr.Pane == focused, "rect": rect(pr.Rect),
+			})
+		}
+		outSplits := make([]map[string]any, 0, len(splits))
+		for i, sp := range splits {
+			dir := "right"
+			if sp.Dir == session.Rows {
+				dir = "down"
+			}
+			outSplits = append(outSplits, map[string]any{
+				"id": fmt.Sprintf("s_%d", i), "direction": dir, "ratio": sp.Ratio, "rect": rect(sp.Rect),
+			})
+		}
+		return map[string]any{"type": "pane_layout", "layout": map[string]any{
+			"workspace_id": WorkspaceID(ws), "tab_id": TabID(tab),
+			// Zoom is each client's view, not a fact the server has.
+			"zoomed": false, "area": rect(area), "focused_pane_id": PaneID(focused),
+			"panes": outPanes, "splits": outSplits,
+		}}, nil
 
 	case MethodPaneSplit:
 		var p struct {
@@ -1287,7 +1422,7 @@ func (a *API) eventsWait(kinds []string, paneID string, ms uint64) (any, error) 
 				continue
 			}
 			name := eventName(ev.Kind)
-			if len(want) > 0 && !want[name] {
+			if name == "" || len(want) > 0 && !want[name] {
 				continue
 			}
 			out := map[string]any{
@@ -1310,11 +1445,10 @@ func (a *API) eventsWait(kinds []string, paneID string, ms uint64) (any, error) 
 }
 
 // eventName is how an event is named on this socket: herdr's names.
+// An event with no name is the server's business with its clients — asking
+// them to show a pane — and is not sent on this socket.
 func eventName(k server.EventKind) string {
-	if name := server.EventName(k); name != "" {
-		return name
-	}
-	return fmt.Sprintf("event.%d", int(k))
+	return server.EventName(k)
 }
 
 // wantedEvents is the set a caller asked for, with tend's older names

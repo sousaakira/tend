@@ -266,6 +266,8 @@ func (c *clientConn) forward(ev Event) error {
 		out.Kind = proto.EventTabCreated
 	case EventWorkspaceCreated:
 		out.Kind = proto.EventWorkspaceCreated
+	case EventFocusRequest:
+		out.Kind = proto.EventFocusRequest
 	default:
 		// An event kind this build does not map is dropped rather than sent
 		// half-formed, so a client never sees a message it cannot interpret.

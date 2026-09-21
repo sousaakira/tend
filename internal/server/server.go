@@ -958,7 +958,19 @@ func (s *Server) PaneStatus(id session.PaneID) (PaneStatus, error) {
 	if err != nil {
 		return PaneStatus{}, err
 	}
-	return rt.status(), nil
+	return s.withName(rt.status()), nil
+}
+
+// withName puts a pane's given name in place of its program's title, as the
+// snapshot does: a pane somebody called "sidebar" is "sidebar" to a script
+// too, whatever the program in it calls itself.
+func (s *Server) withName(st PaneStatus) PaneStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p, ok := s.session.Pane(st.ID); ok && p.Named {
+		st.Title = p.Title
+	}
+	return st
 }
 
 // Statuses reports every pane, in no particular order.
@@ -972,7 +984,7 @@ func (s *Server) Statuses() []PaneStatus {
 
 	out := make([]PaneStatus, 0, len(runtimes))
 	for _, rt := range runtimes {
-		out = append(out, rt.status())
+		out = append(out, s.withName(rt.status()))
 	}
 	return out
 }

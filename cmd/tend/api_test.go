@@ -623,3 +623,44 @@ func TestMakingAWorktreeFromTheSpaceMenu(t *testing.T) {
 		t.Errorf("no checkout was made: %v", err)
 	}
 }
+
+// TestAScriptCanAskTheClientToShowAPane: pane.focus over the socket reaches
+// the attached client, which moves to the pane — how a plugin brings the
+// panel it just opened into view. If it regresses, the call answers and
+// nothing on screen moves.
+func TestAScriptCanAskTheClientToShowAPane(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("tend %v: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	p, err := pty.Start(bin, []string{"attach", "-s", "shown"}, pty.Options{
+		Size: pty.Size{Cols: 100, Rows: 14}, Env: env,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(100, 14, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "shown") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf 'FIRST-TAB\\n'\n", "the first tab", func(s string) bool {
+		return strings.Contains(s, "FIRST-TAB")
+	})
+	// A second tab, which the client moves to.
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "the second tab", func(s string) bool { return !strings.Contains(s, "FIRST-TAB") })
+
+	run("api", "-s", "shown", "pane.focus", `{"pane_id":"p_1"}`)
+	a.waitForScreen(t, "the first tab again", func(s string) bool { return strings.Contains(s, "FIRST-TAB") })
+}

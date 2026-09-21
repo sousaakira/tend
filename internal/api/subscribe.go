@@ -59,7 +59,7 @@ func (a *API) subscribe(conn net.Conn, kinds []string, pane string) error {
 			continue
 		}
 		name := eventName(ev.Kind)
-		if len(want) > 0 && !want[name] {
+		if name == "" || len(want) > 0 && !want[name] {
 			continue
 		}
 		out := map[string]any{"type": "event", "event": name}
