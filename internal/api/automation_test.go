@@ -619,8 +619,10 @@ func TestPaneListSaysWhereEachPaneIsAndWhereItsProgramIs(t *testing.T) {
 	}))
 	shell, _ := res["pane"].(map[string]any)
 	id, _ := shell["pane_id"].(string)
-	call(t, h, MethodPaneSendText, map[string]any{"pane_id": id, "text": "cd " + dir + " && echo moved\n"})
-	result(t, call(t, h, MethodPaneWaitForOutput, map[string]any{"pane_id": id, "contains": "moved", "timeout_ms": 5000}))
+	// Waited for by what only the output says: the command as typed echoes
+	// "moved-%s" before the cd has run, and matching that raced it.
+	call(t, h, MethodPaneSendText, map[string]any{"pane_id": id, "text": "cd " + dir + " && printf 'moved-%s\\n' 2\n"})
+	result(t, call(t, h, MethodPaneWaitForOutput, map[string]any{"pane_id": id, "contains": "moved-2", "timeout_ms": 5000}))
 	h.srv.FocusPane(parsePane(t, id), 0)
 
 	list := result(t, call(t, h, MethodPaneList, nil))
