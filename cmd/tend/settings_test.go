@@ -316,11 +316,10 @@ func TestAnUpdateCanMoveRunningSessionsOntoItself(t *testing.T) {
 	}
 
 	run("new", "-s", "live", "--", "/bin/sh", "-c", "sleep 60")
-	t.Cleanup(func() {
-		cmd := exec.Command(bin, "kill", "-s", "live", "-server")
-		cmd.Env = env
-		_ = cmd.Run()
-	})
+	// Waits for the server to be gone, not only told to go: one still
+	// writing its state file while the test's directory is removed fails the
+	// cleanup.
+	t.Cleanup(func() { stopSession(t, "live") })
 	pidOf := func() string {
 		out := run("api", "-s", "live", "pane.list")
 		i := strings.Index(out, `"pid":`)

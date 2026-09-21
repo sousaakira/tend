@@ -227,3 +227,50 @@ command = ["./hook.sh", "ws-focused"]
 		t.Errorf("focusing the same pane again ran the hooks:\n%s", after)
 	}
 }
+
+// TestAPluginsRunsAreLogged is herdr's plugin.log.list: every run a plugin
+// makes — here, a hook that fails — is kept with its status, exit code and
+// output. If it regresses, a hook that stops working fails in silence.
+func TestAPluginsRunsAreLogged(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "fail.sh"), []byte("#!/bin/sh\necho went-wrong\nexit 3\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, plugin.ManifestName), []byte(`
+id = "loud"
+name = "loud"
+version = "0.1.0"
+
+[[events]]
+on = "pane.created"
+command = ["./fail.sh"]
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := hostFor(t, root)
+	cfg := handoffConfig()
+	cfg.Plugins = host
+	s, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	openTab(t, s, "sleep 30")
+
+	var entry PluginLogEntry
+	waitFor(t, "the hook's run in the log", func() bool {
+		logs := host.Log("loud", 10)
+		if len(logs) == 0 || logs[len(logs)-1].Status == "running" {
+			return false
+		}
+		entry = logs[len(logs)-1]
+		return true
+	})
+	if entry.Status != "failed" || entry.ExitCode == nil || *entry.ExitCode != 3 ||
+		!strings.Contains(entry.Output, "went-wrong") || entry.Event != "pane.created" {
+		t.Errorf("log entry = %+v", entry)
+	}
+	if len(host.Log("someone-else", 10)) != 0 {
+		t.Error("a filter by plugin should leave other plugins' runs out")
+	}
+}

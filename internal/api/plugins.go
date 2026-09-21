@@ -24,6 +24,7 @@ const (
 	MethodPluginReload       = "plugin.reload"
 	MethodPluginActionList   = "plugin.action.list"
 	MethodPluginActionInvoke = "plugin.action.invoke"
+	MethodPluginLogList      = "plugin.log.list"
 	MethodPluginPaneOpen     = "plugin.pane.open"
 )
 
@@ -105,6 +106,20 @@ func (a *API) callPlugins(req Request) (any, bool, error) {
 		}
 		return map[string]any{"type": "plugin_action_list", "actions": out}, true, nil
 
+	case MethodPluginLogList:
+		var p struct {
+			PluginID string `json:"plugin_id"`
+			Limit    int    `json:"limit"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, true, err
+		}
+		logs := host.Log(p.PluginID, p.Limit)
+		if logs == nil {
+			logs = []server.PluginLogEntry{}
+		}
+		return map[string]any{"type": "plugin_log_list", "logs": logs}, true, nil
+
 	case MethodPluginActionInvoke:
 		var p struct {
 			ActionID string `json:"action_id"`
@@ -128,7 +143,7 @@ func (a *API) callPlugins(req Request) (any, bool, error) {
 		}
 		// Waited for, unlike an event hook: whoever invoked an action is
 		// watching, and wants to know whether it worked.
-		result := plugin.Run(context.Background(), inv)
+		result := host.RunPlugin(context.Background(), inv)
 		return map[string]any{
 			"type": "plugin_action_invoked", "plugin_id": installed.ID, "action_id": action.ID,
 			"exit_code": result.ExitCode, "output": result.Output,

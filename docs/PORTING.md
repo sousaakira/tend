@@ -466,8 +466,9 @@ The host is ported (see "Ported, and checked"). Left:
   against tend yet.
 - `tend plugin install owner/repo[/subdir] [-ref] [-yes]` and `uninstall`
   are ported (herdr's GitHub shorthand only; clone, preview, confirm, build,
-  keep under tend's state directory). Left: the marketplace, popups as a
-  placement, `link_handlers`, `plugin.log.list`, `min_herdr_version`
+  keep under tend's state directory), and so is `plugin.log.list` (`tend
+  plugin log`, the last 200 runs). Left: the marketplace, popups as a
+  placement, `link_handlers`, `min_herdr_version`
   enforcement (tend's builds have no ordering to compare against).
 - herdr: `plugin_command.rs`, `plugin_paths.rs`, `cli/plugin.rs`,
   `persist/plugin_registry.rs`, `app/api/plugins/`, `api/schema/plugins.rs`;

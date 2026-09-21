@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/api"
@@ -91,6 +92,7 @@ func runPlugin(args []string) error {
 				"  enable <id> | disable <id>\n"+
 				"  reload <id>              re-read its manifest after editing it\n"+
 				"  actions                  what the installed plugins offer\n"+
+				"  log [id]                 the last runs of plugin commands in the session\n"+
 				"  run <action-id>          invoke an action in the running session\n"+
 				"  open <pane-id>           open a pane a plugin offers\n\n"+
 				"a plugin is a directory with a "+plugin.ManifestName+" in it. linking records\n"+
@@ -134,6 +136,41 @@ func runPlugin(args []string) error {
 
 	case "install":
 		return installFromGithub(rest)
+
+	case "log":
+		fs := flag.NewFlagSet("plugin log", flag.ExitOnError)
+		name := sessionFlag(fs)
+		limit := fs.Int("limit", 50, "how many runs to show")
+		if err := fs.Parse(hoistFlags(rest, map[string]bool{"s": true, "ssh": true, "limit": true})); err != nil {
+			return err
+		}
+		params := map[string]any{"limit": *limit}
+		if fs.NArg() > 0 {
+			params["plugin_id"] = fs.Arg(0)
+		}
+		result, err := apiCall(*name, api.MethodPluginLogList, params, false)
+		if err != nil {
+			return err
+		}
+		logs, _ := result["logs"].([]any)
+		t := newTable("PLUGIN", "WHAT", "STATUS", "EXIT", "OUTPUT")
+		for _, raw := range logs {
+			e, _ := raw.(map[string]any)
+			what := text(e["action_id"])
+			if what == "" {
+				what = text(e["event"])
+			}
+			exit := ""
+			if code, ok := e["exit_code"].(float64); ok {
+				exit = strconv.Itoa(int(code))
+			}
+			out := strings.ReplaceAll(text(e["stdout"])+" "+text(e["error"]), "\n", " ")
+			if len(out) > 60 {
+				out = out[:60] + "…"
+			}
+			t.row(text(e["plugin_id"]), what, text(e["status"]), exit, strings.TrimSpace(out))
+		}
+		return t.flush()
 
 	case "uninstall":
 		return uninstallPlugin(rest)

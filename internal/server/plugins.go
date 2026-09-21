@@ -41,6 +41,9 @@ type Plugins struct {
 
 	mu      sync.Mutex
 	running map[string]int
+
+	// log is the last runs of every plugin command, for plugin.log.list.
+	log pluginLog
 }
 
 // dirsFor is where one plugin keeps its settings and its state.
@@ -100,7 +103,7 @@ func (s *Server) RunStartupPlugins() {
 			s.wg.Add(1)
 			go func(inv plugin.Invocation, id string) {
 				defer s.wg.Done()
-				result := plugin.Run(s.context(), inv)
+				result := host.RunPlugin(s.context(), inv)
 				if result.Err != "" {
 					s.logf("plugin %s: startup: %s", id, result.Err)
 				}
@@ -181,7 +184,7 @@ func (s *Server) notifyPlugins(ev Event) {
 			go func(inv plugin.Invocation, id string) {
 				defer s.wg.Done()
 				defer host.leave(id)
-				if result := plugin.Run(s.context(), inv); result.Err != "" {
+				if result := host.RunPlugin(s.context(), inv); result.Err != "" {
 					s.logf("plugin %s: %s: %s", id, inv.Event, result.Err)
 				}
 			}(inv, hook.Plugin.ID)

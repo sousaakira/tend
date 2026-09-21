@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/plugin"
 	"github.com/sousaakira/tend/internal/session"
 )
 
@@ -93,7 +92,7 @@ func (s *Server) runPluginAction(from session.PaneID, id string) error {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		if result := plugin.Run(s.context(), inv); result.Err != "" {
+		if result := host.RunPlugin(s.context(), inv); result.Err != "" {
 			s.logf("plugin %s: action %s: %s", installed.ID, action.ID, result.Err)
 		}
 	}()
