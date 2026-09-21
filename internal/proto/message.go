@@ -179,13 +179,15 @@ const (
 	// FeatureWindowTitle: the snapshot says which machine the server is on
 	// and carries any window title set over the API.
 	FeatureWindowTitle = "window-title"
+	// FeatureTabBarStatus: the snapshot carries the right end of the tab bar.
+	FeatureTabBarStatus = "tab-bar-status"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
 // KnownMethods exists.
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
-	FeatureLifecycle, FeatureWindowTitle,
+	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus,
 }
 
 // --- session ---------------------------------------------------------------
@@ -333,6 +335,18 @@ type SessionSnapshot struct {
 	// WindowTitle is a title set over the API, which every client writes in
 	// place of its own template until it is cleared.
 	WindowTitle string `json:"window_title,omitempty"`
+	// TabBarRight is what goes at the right end of the tab bar, and
+	// TabBarSeparator what goes between two entries.
+	TabBarRight     []StatusSegment `json:"tab_bar_right,omitempty"`
+	TabBarSeparator string          `json:"tab_bar_separator,omitempty"`
+}
+
+// StatusSegment is one entry at the right of the tab bar. Zoom marks the
+// entry that reads ZOOM while this client has a pane zoomed, which only the
+// client knows.
+type StatusSegment struct {
+	Text string `json:"text,omitempty"`
+	Zoom bool   `json:"zoom,omitempty"`
 }
 
 // --- pane operations -------------------------------------------------------

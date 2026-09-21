@@ -101,3 +101,53 @@ func TestTheWindowIsNamedAfterTheSession(t *testing.T) {
 		t.Error("detaching did not give the window its title back")
 	}
 }
+
+// TestTheTabBarShowsWhatTheSettingsAskFor: entries from ui.tab_bar_right
+// reach the right end of the bar through the real server, including a
+// command's output and ZOOM only while this client is zoomed. If it
+// regresses, the bar stays empty with nothing to say why.
+func TestTheTabBarShowsWhatTheSettingsAskFor(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte(`[ui]
+tab_bar_right = [
+  { type = "zoom" },
+  { type = "text", text = "prod" },
+  { type = "command", command = "echo from-a-command" },
+]
+tab_bar_right_separator = " / "
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The real binary, so the server is the daemon a user gets, configured
+	// from the file the way it is on start.
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh", "TEND_CONFIG="+configPath)
+	p, err := pty.Start(bin, []string{"attach", "-s", "barred"}, pty.Options{
+		Size: pty.Size{Cols: 100, Rows: 16}, Env: env,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(100, 16, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "barred") })
+
+	a.waitForScreen(t, "the status entries", func(s string) bool {
+		first, _, _ := strings.Cut(s, "\n")
+		return strings.HasSuffix(strings.TrimRight(first, " "), "prod / from-a-command")
+	})
+	if strings.Contains(a.text(), "ZOOM") {
+		t.Error("ZOOM shown with nothing zoomed")
+	}
+
+	// A second pane, so there is something to zoom away from.
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool { return strings.Count(s, "┌") >= 2 })
+	a.send(t, "\x02z")
+	a.waitForScreen(t, "ZOOM in the bar", func(s string) bool {
+		first, _, _ := strings.Cut(s, "\n")
+		return strings.Contains(first, "ZOOM / prod / from-a-command")
+	})
+}

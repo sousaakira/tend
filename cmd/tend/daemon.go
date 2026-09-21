@@ -241,6 +241,7 @@ func runServe(args []string) error {
 		pluginEnv = append(pluginEnv, api.EnvBinPath+"="+self)
 	}
 	srvCfg.Plugins = pluginHost(pluginEnv)
+	srvCfg.CommandEnv = pluginEnv
 
 	srvCfg.PaneEnv = func(id session.PaneID) []string {
 		return api.PaneEnv(apiPath, id, bin)
@@ -297,6 +298,7 @@ func runServe(args []string) error {
 
 	// Started once the server is up and answering: a startup command that
 	// calls back into the session must find it there.
+	srv.ConfigureTabBar(cfg.UI.TabBarRight, cfg.UI.TabBarSeparator)
 	srv.RunStartupPlugins()
 
 	fmt.Fprintf(os.Stderr, "%s session %q listening on %s\n", tag(), *name, path)

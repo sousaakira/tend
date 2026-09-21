@@ -207,6 +207,10 @@ type Tab struct {
 type Frame struct {
 	Panes []Pane
 	Tabs  []Tab
+	// Status is what goes at the right end of the tab bar (ui.tab_bar_right),
+	// and StatusSeparator what goes between two entries.
+	Status          []StatusEntry
+	StatusSeparator string
 
 	Session   string
 	Workspace string
@@ -303,6 +307,37 @@ func TabRows(tabs int) int {
 	return 0
 }
 
+// StatusEntry is one thing at the right of the tab bar. Accent is herdr's
+// emphasis, which only ZOOM uses.
+type StatusEntry struct {
+	Text   string
+	Accent bool
+}
+
+// minTabStrip is how much of the bar the tabs keep before the status gives
+// way: herdr's MIN_TAB_STRIP_WIDTH, one short tab, the new-tab button and
+// two scroll buttons. The tabs are what the bar is for.
+const minTabStrip = 17
+
+// StatusArea is where the right end of the tab bar is drawn, as a start
+// column and a width, or a width of zero when there is none or no room.
+func StatusArea(f Frame, cols int) (start, width int) {
+	for i, e := range f.Status {
+		if i > 0 {
+			width += runewidth.StringWidth(f.StatusSeparator)
+		}
+		width += runewidth.StringWidth(e.Text)
+	}
+	if width == 0 {
+		return cols, 0
+	}
+	// One column of space before it, as herdr leaves.
+	if cols-SidebarGutter(f, cols)-(width+1) < minTabStrip {
+		return cols, 0
+	}
+	return cols - width, width
+}
+
 // NewTabLabel is the button at the end of the bar.
 const NewTabLabel = " + "
 
@@ -327,6 +362,10 @@ type TabSegment struct {
 func TabSegments(f Frame, cols int) []TabSegment {
 	var out []TabSegment
 	x := SidebarGutter(f, cols)
+	// The tabs stop where the status starts, and a column short of it.
+	if start, width := StatusArea(f, cols); width > 0 {
+		cols = start - 1
+	}
 	for _, tab := range f.Tabs {
 		label := tabLabel(tab)
 		width := runewidth.StringWidth(label)
@@ -429,6 +468,27 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 			style = theme.StatusAlert
 		}
 		writeString(dst, seg.Start, 0, tabLabel(tab), style, dst.Cols())
+	}
+	drawTabBarStatus(dst, f, theme)
+}
+
+// drawTabBarStatus writes the right end of the tab bar.
+func drawTabBarStatus(dst *vt.Grid, f Frame, theme Theme) {
+	x, width := StatusArea(f, dst.Cols())
+	if width == 0 {
+		return
+	}
+	for i, e := range f.Status {
+		if i > 0 && f.StatusSeparator != "" {
+			writeString(dst, x, 0, f.StatusSeparator, theme.Status, dst.Cols())
+			x += runewidth.StringWidth(f.StatusSeparator)
+		}
+		style := theme.Status
+		if e.Accent {
+			style = theme.StatusKey
+		}
+		writeString(dst, x, 0, e.Text, style, dst.Cols())
+		x += runewidth.StringWidth(e.Text)
 	}
 }
 

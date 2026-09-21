@@ -221,6 +221,10 @@ type Config struct {
 	// server runs none, which is what a test that does not care about them
 	// gets.
 	Plugins *Plugins
+	// CommandEnv is added to the environment of a command the server runs
+	// for the user — a tab bar entry — so it can call back on the automation
+	// socket. Nil adds nothing.
+	CommandEnv []string
 }
 
 // PaneSpec describes a pane to open.
@@ -309,6 +313,10 @@ type Server struct {
 	// client.window_title.set). A fact about the session, not about one
 	// client, so it is here and goes out in the snapshot.
 	windowTitle string
+	// tabBar is the right end of the tab bar, kept current by the commands
+	// and the clock it runs. It has its own lock: a command finishing must
+	// not wait on the lock every pane operation needs.
+	tabBar tabBar
 
 	// retick carries a new detection interval to the loop, which cannot read
 	// the configuration under the lock while it is doing a round of work.

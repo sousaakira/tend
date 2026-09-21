@@ -683,6 +683,7 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 	var snap proto.SessionSnapshot
 
 	snap.Hostname = hostname()
+	snap.TabBarRight, snap.TabBarSeparator = s.tabBarSnapshot()
 	s.mu.Lock()
 	snap.WindowTitle = s.windowTitle
 	sess := s.session

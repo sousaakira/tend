@@ -1626,3 +1626,35 @@ func TestNamedThemeColoursTheInterfaceAndOverridesStillWin(t *testing.T) {
 		t.Error("no name should leave the terminal-colour default alone")
 	}
 }
+
+// TestTabBarStatusSitsRightOfTheTabsAndGivesWay: the status is drawn at the
+// right end of the bar, the tabs stop short of it so a click cannot land on a
+// tab hidden under it, and on a bar too narrow for both the tabs win.
+func TestTabBarStatusSitsRightOfTheTabsAndGivesWay(t *testing.T) {
+	f := Frame{
+		Tabs:            []Tab{{ID: 1, Name: "build", Active: true}, {ID: 2, Name: "review"}},
+		Status:          []StatusEntry{{Text: "ZOOM", Accent: true}, {Text: "09:05"}},
+		StatusSeparator: " · ",
+	}
+	dst := vt.NewGrid(60, 5, 0)
+	Draw(dst, f, DefaultTheme())
+	line := strings.TrimRight(gridText(dst)[0], " ")
+	if !strings.HasSuffix(line, "ZOOM · 09:05") {
+		t.Errorf("tab bar = %q, want the status at its right end", line)
+	}
+	start, width := StatusArea(f, 60)
+	if width != len("ZOOM · 09:05")-1 || start != 60-width { // "·" is one column, three bytes
+		t.Errorf("StatusArea = %d, %d", start, width)
+	}
+	for _, seg := range TabSegments(f, 60) {
+		if seg.End > start-1 {
+			t.Errorf("segment %+v runs into the status at %d", seg, start)
+		}
+	}
+
+	narrow := vt.NewGrid(24, 5, 0)
+	Draw(narrow, f, DefaultTheme())
+	if strings.Contains(gridText(narrow)[0], "09:05") {
+		t.Error("on a narrow bar the status should give way to the tabs")
+	}
+}

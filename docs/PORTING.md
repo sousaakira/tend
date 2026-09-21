@@ -192,6 +192,17 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   script's title over the template until cleared. herdr renders on the server;
   tend renders in the client from the snapshot, which carries the server's
   hostname, so `{hostname}` still names the machine the panes are on.
+- **Tab bar status** (herdr's `config/tab_bar.rs`, `app/tab_bar_status.rs`):
+  `[ui] tab_bar_right` with herdr's entry types (zoom, hostname, datetime,
+  text, command), defaults (command every 5s, killed after 2s) and limits
+  (16 entries, 80 characters, last line of output with escapes stripped by
+  herdr's state machine), and `tab_bar_right_separator`. The server works out
+  hostname, datetime and commands, as in herdr, and sends them in the
+  snapshot; ZOOM is filled in by the client, whose zoom it is. A command runs
+  in the focused pane's directory with `TEND_SOCKET_PATH`, `TEND_BIN_PATH` and
+  `TEND_ACTIVE_{WORKSPACE,TAB,PANE}_ID`, in a process group killed on timeout
+  or reload. The status gives way to the tabs on a bar narrower than herdr's
+  minimum strip.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -307,6 +318,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Claude / JSONC settings | `jsonc_parser` preserves comments and compact layout | `encoding/json`; comments lost and **keys re-sorted alphabetically** on rewrite (content otherwise identical — checked against the owner's real 44 KB `settings.json`: install adds one `SessionStart` entry, a second install adds nothing, uninstall restores it exactly) | avoid a new dependency; invalid JSON is an error, not silently stripped |
 | Default theme | catppuccin | the terminal's own colours when no `name` is set | an unset theme keeps what tend has always looked like; the owner picks a palette in the settings screen or the file |
 | Window title on detach | writes "herdr" | saves the window's title when it first writes one (`CSI 22;0t`) and puts it back on detach (`CSI 23;0t`) | detaching should leave the window as tend found it; a terminal without the title stack keeps tend's last title, which is no worse than herdr's name |
+| Invalid tab bar entry | hidden, with a diagnostic | the settings file is refused at load, like every other value tend cannot use | one rule for every setting; a gap in the bar with the reason in a log nobody reads is harder to notice |
 | Integration assets | `.sh` and `.ps1` | Unix `.sh` / `.js` / `.ts` / Hermes plugin only | Windows PowerShell assets not ported yet; platform code is compile-gated when they are |
 
 ---
@@ -480,7 +492,12 @@ Keys are rebindable (see "Ported, and checked"). Left:
 - **Sidebar rows as tokens** (`config/sidebar.rs`, 729 lines, and
   `ui/sidebar/tokens.rs`): herdr lets the user say what each row shows and in
   what style. tend's rows are fixed.
-- **Tab bar** (`config/tab_bar.rs`): what goes in it, as a template.
+- **Tab bar**: `hide_tab_bar_when_single_tab` and `tab_bar_position`
+  (top or bottom). Datetime uses a strftime written for tend covering the
+  common directives; herdr's `time` crate takes a few more, and `%z`/`%Z` are
+  refused by both.
+- A tab bar command runs in the directory the focused pane started in; herdr
+  asks the pane for its current directory (`cwd_for_pane`).
 - A title set with `tend terminal title set` is held in the server's memory
   only, so a `tend handoff` or a restart forgets it.
 - **The rest of the themes**: the palette's backgrounds (`panel_bg`,

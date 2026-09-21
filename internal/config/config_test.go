@@ -327,3 +327,61 @@ func TestWindowTitlesAreSanitisedAndBounded(t *testing.T) {
 		t.Errorf("title of %d characters, want %d", len([]rune(got)), MaxWindowTitle)
 	}
 }
+
+// TestTabBarEntries: herdr's entries load as herdr writes them, with its
+// defaults, and an entry that could never be shown is refused at load rather
+// than found missing from the bar.
+func TestTabBarEntries(t *testing.T) {
+	c, err := LoadFile(writeConfig(t, `[ui]
+tab_bar_right = [
+  { type = "zoom" },
+  { type = "hostname" },
+  { type = "datetime", format = "%H:%M" },
+  { type = "text", text = "prod" },
+  { type = "command", command = "status.sh" },
+]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.UI.TabBarRight) != 5 {
+		t.Fatalf("%d entries, want 5", len(c.UI.TabBarRight))
+	}
+	cmd := c.UI.TabBarRight[4]
+	if cmd.Interval() != 5*time.Second || cmd.Timeout() != 2*time.Second {
+		t.Errorf("command defaults = %v, %v; want herdr's 5s and 2s", cmd.Interval(), cmd.Timeout())
+	}
+	if c.UI.TabBarSeparator != " " {
+		t.Errorf("separator = %q, want a space", c.UI.TabBarSeparator)
+	}
+
+	for name, body := range map[string]string{
+		"unknown type":    `tab_bar_right = [{ type = "weather" }]`,
+		"bad directive":   `tab_bar_right = [{ type = "datetime", format = "%Q" }]`,
+		"offset":          `tab_bar_right = [{ type = "datetime", format = "%z" }]`,
+		"empty command":   `tab_bar_right = [{ type = "command", command = " " }]`,
+		"endless timeout": `tab_bar_right = [{ type = "command", command = "x", timeout_seconds = 3601 }]`,
+	} {
+		if _, err := LoadFile(writeConfig(t, "[ui]\n"+body+"\n")); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+// TestStrftime covers the directives people put in a clock.
+func TestStrftime(t *testing.T) {
+	at := time.Date(2026, time.September, 7, 9, 5, 3, 0, time.UTC)
+	for format, want := range map[string]string{
+		"%H:%M":       "09:05",
+		"%I:%M %p":    "09:05 AM",
+		"%a %e %b":    "Mon  7 Sep",
+		"%Y-%m-%d":    "2026-09-07",
+		"%F %T":       "2026-09-07 09:05:03",
+		"%A %B %d %%": "Monday September 07 %",
+		"%j %u %w":    "250 1 1",
+	} {
+		if got := Strftime(format, at); got != want {
+			t.Errorf("Strftime(%q) = %q, want %q", format, got, want)
+		}
+	}
+}

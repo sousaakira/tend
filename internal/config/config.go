@@ -116,6 +116,10 @@ type UI struct {
 	// WindowTitle is the template for the outer terminal's title; "" leaves
 	// that title alone. See windowtitle.go.
 	WindowTitle string `toml:"window_title"`
+	// TabBarRight is what goes at the right end of the tab bar, and
+	// TabBarSeparator what goes between two of them. See tabbar.go.
+	TabBarRight     []TabBarEntry `toml:"tab_bar_right"`
+	TabBarSeparator string        `toml:"tab_bar_right_separator"`
 }
 
 // Theme names the colours. Name picks one of the palettes in ThemeNames; each
@@ -145,7 +149,7 @@ func Defaults() Config {
 	return Config{
 		Keys:      Keys{Prefix: "ctrl+b"},
 		Pane:      Pane{Scrollback: 5000},
-		UI:        UI{Mouse: true, Sidebar: true, WindowTitle: DefaultWindowTitle},
+		UI:        UI{Mouse: true, Sidebar: true, WindowTitle: DefaultWindowTitle, TabBarSeparator: " "},
 		Server:    Server{DetectInterval: "150ms", Persist: true},
 		Worktrees: Worktrees{Directory: "~/.tend/worktrees"},
 		Notify:    Notify{Toasts: "tend"},
@@ -231,6 +235,9 @@ func (c Config) validate() error {
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
+	}
+	if err := checkTabBar(c.UI.TabBarRight); err != nil {
+		return err
 	}
 	if _, err := ParseWindowTitle(c.UI.WindowTitle); err != nil {
 		return fmt.Errorf("ui.window_title %q %v", c.UI.WindowTitle, err)
@@ -409,6 +416,19 @@ grouped = false
 # braces. {hostname} is the machine the server runs on, even when attaching
 # from another one. Set to "" to leave the outer title alone.
 # window_title = "{hostname}: {workspace}"
+
+# What goes at the right end of the tab bar, in order. Types: zoom (ZOOM
+# while a pane is zoomed), hostname, datetime (format is strftime, "%H:%M"
+# by default), text, and command (the last line it prints, run every
+# interval_seconds, 5 by default, and killed after timeout_seconds, 2).
+# Hostname, datetime and command are worked out by the server, where the
+# panes are.
+# tab_bar_right = [
+#   { type = "zoom" },
+#   { type = "datetime", format = "%H:%M" },
+#   { type = "command", command = "git -C ~/src/app branch --show-current" },
+# ]
+# tab_bar_right_separator = " "
 
 [ui.theme]
 # A named theme: catppuccin, catppuccin-latte, terminal, tokyo-night,

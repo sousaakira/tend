@@ -42,6 +42,12 @@ func (s *Server) ReloadFromFile() proto.ReloadResult {
 		DetectInterval: interval,
 		Scrollback:     cfg.Scrollback(),
 	})
+	if s.tabBarDiffers(cfg.UI.TabBarRight, cfg.UI.TabBarSeparator) {
+		// Reconfigured only when it changed: doing it anyway would restart
+		// every command and blank the bar for a reload about something else.
+		s.ConfigureTabBar(cfg.UI.TabBarRight, cfg.UI.TabBarSeparator)
+		result.Changed = append(result.Changed, "tab bar")
+	}
 	return result
 }
 

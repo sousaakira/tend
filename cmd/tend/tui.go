@@ -897,6 +897,18 @@ func (t *tui) buildFrame() ui.Frame {
 		frame.Tabs = append(frame.Tabs, label)
 	}
 
+	frame.StatusSeparator = t.snap.TabBarSeparator
+	for _, seg := range t.snap.TabBarRight {
+		switch {
+		case seg.Zoom && t.zoom:
+			// Zoom is this client's view, so the server leaves the slot and
+			// the client fills it.
+			frame.Status = append(frame.Status, ui.StatusEntry{Text: "ZOOM", Accent: true})
+		case !seg.Zoom && seg.Text != "":
+			frame.Status = append(frame.Status, ui.StatusEntry{Text: seg.Text})
+		}
+	}
+
 	if t.sidebar {
 		frame.Sidebar = true
 		frame.Navigating = t.navigating
