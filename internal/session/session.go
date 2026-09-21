@@ -40,6 +40,10 @@ type Pane struct {
 
 	// Title is what the pane calls itself, usually from its terminal title.
 	Title string
+	// Named marks a title the user gave it, which the program's own title no
+	// longer replaces: somebody who named a pane "api" meant it to stay "api"
+	// when the shell inside it runs something else.
+	Named bool
 	// Command is what was started in it.
 	Command []string
 	// Dir is the working directory it started in.
@@ -445,6 +449,21 @@ func (s *Session) RenameTab(id TabID, name string) error {
 		return fmt.Errorf("%w: %d", ErrNoSuchTab, id)
 	}
 	t.Name = name
+	return nil
+}
+
+// RenamePane changes a pane's title.
+//
+// A pane's title is otherwise whatever its program set, which for a shell is
+// the command it is running and for an agent is the agent. A name given here
+// stays: it is the user's, and the program does not get to overwrite it.
+func (s *Session) RenamePane(id PaneID, name string) error {
+	p, ok := s.Pane(id)
+	if !ok {
+		return fmt.Errorf("%w: %d", ErrNoSuchPane, id)
+	}
+	p.Title = name
+	p.Named = name != ""
 	return nil
 }
 

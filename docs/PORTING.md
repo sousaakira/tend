@@ -205,6 +205,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   URL, and nothing checks or downloads on its own**: tend publishes no
   releases, and pointing an updater at a guess would install somebody else's
   binary. Tested against a local HTTP server.
+- **Focus events**: a program that asked for mode 1004 is told when its pane
+  gains or loses focus (`pane.focus`), and one that did not ask is not — an
+  unasked-for report is a stray "[I" in somebody's shell.
+- **Naming a pane**: `pane.rename` and "rename pane" in the pane menu. The
+  name is the user's and the program's own terminal title no longer replaces
+  it.
+- **Double-click selects a word**, by herdr's word classes — the same ones
+  copy mode moves by, so a double click and `w` cannot disagree — and copies
+  it at once.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -476,17 +485,20 @@ agent's:
   Windows counterpart, and the transport is a Unix socket. An agent on
   Linux can get it to cross-compile and no further; say so rather than claiming
   it works.
+- What is kept true from here: `GOOS=windows go build ./...` and `GOOS=windows
+  go vet ./...` both pass, so whoever starts the port starts from a tree that
+  compiles. Tests that need a pty carry `//go:build unix`.
 
 ### Smaller gaps in what already exists
 
-- Double-click does not select a word (see item 5).
 - Claude Code asks for any-motion mouse reports; tend enables motion reporting
   on the outer terminal only while a menu is open, so hover never reaches it.
-- `pane.rename` does not exist; the pane menu renames the tab instead.
-- tend records that a program asked for focus events (mode 1004) and never
-  sends any. herdr does (`terminal/runtime.rs`).
 - `tend attach -ssh` has not been tried against a real sshd, and the mismatch
   notice's restart has not been exercised over it.
+- Copy mode does not refuse a motion over content that changed underneath, as
+  herdr does (`stale_content`).
+- The pane title a user gives is kept in the session but not in the state
+  file, so a restart loses the name and the program's own title returns.
 
 ---
 

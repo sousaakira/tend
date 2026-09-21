@@ -51,6 +51,8 @@ var Methods = []string{
 	proto.MethodPaneCopyMotion,
 	proto.MethodPaneCopySearch,
 	proto.MethodServerReloadConfig,
+	proto.MethodPaneFocus,
+	proto.MethodPaneRename,
 	proto.MethodPaneGraphics,
 	proto.MethodPaneSwap,
 	proto.MethodTabMove,
@@ -486,6 +488,21 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 	case proto.MethodServerReloadConfig:
 		return c.srv.ReloadFromFile(), nil
 
+	case proto.MethodPaneRename:
+		var p proto.PaneRenameParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.RenamePane(session.PaneID(p.Pane), p.Name)
+
+	case proto.MethodPaneFocus:
+		var p proto.PaneFocusParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		c.srv.FocusPane(session.PaneID(p.Pane), session.PaneID(p.Lost))
+		return nil, nil
+
 	case proto.MethodPaneGraphics:
 		var p proto.PaneScreenParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -659,6 +676,7 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 					snap.Panes = append(snap.Panes, proto.PaneInfo{
 						ID:      uint64(p.ID),
 						Title:   p.Title,
+						Named:   p.Named,
 						Agent:   p.Agent,
 						State:   p.State.String(),
 						Command: p.Command,
@@ -703,7 +721,9 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Panes[i].MouseMotion = st.MouseMotion
 		snap.Panes[i].MouseSGR = st.MouseSGR
 		snap.Panes[i].Graphics = st.Graphics
-		if st.Title != "" {
+		if st.Title != "" && !snap.Panes[i].Named {
+			// A pane the user named keeps that name. The program's terminal
+			// title is what a pane is called when nobody has said otherwise.
 			snap.Panes[i].Title = st.Title
 		}
 	}

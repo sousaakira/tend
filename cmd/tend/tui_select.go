@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/sousaakira/tend/internal/clipboard"
 	"github.com/sousaakira/tend/internal/proto"
@@ -414,4 +416,126 @@ func (t *tui) continueGesture(ev ui.MouseEvent) (bool, error) {
 	}
 	_, err := t.forwardMouse(pane, ev, true)
 	return true, err
+}
+
+// doubleClickWindow is how close two presses must be to count as one gesture.
+// Terminals do not report double clicks; this is the client's own reckoning,
+// and it is the interval every desktop uses.
+const doubleClickWindow = 400 * time.Millisecond
+
+// selectWord selects the word under a double click, which is what a
+// double click does everywhere else and what herdr does
+// (`client/shell/word_selection.rs`).
+//
+// The word is worked out from the pane's text rather than guessed at here: the
+// classes are the same ones copy mode moves by, so what a double click takes
+// and what `w` steps over cannot disagree.
+func (t *tui) selectWord(ev ui.MouseEvent) bool {
+	pane := t.paneAt(ev.X, ev.Y)
+	if pane == 0 {
+		return false
+	}
+	if t.forwardsMouse(pane) && !ev.Mods.Has(forceModifier) {
+		return false
+	}
+
+	t.mu.Lock()
+	x, y, ok := t.paneCellLocked(pane, ev.X, ev.Y)
+	scroll := t.selectionScrollLocked(pane)
+	t.mu.Unlock()
+	if !ok {
+		return false
+	}
+
+	// The row the click landed on, as text: one call rather than a walk
+	// through the grid, because the grid is the server's.
+	line, err := t.client.PaneText(proto.PaneTextParams{
+		Pane: pane, Scroll: scroll,
+		FromRow: y, FromCol: 0, ToRow: y, ToCol: 1 << 14,
+	})
+	if err != nil {
+		return false
+	}
+	from, to, found := wordAt([]rune(strings.TrimRight(line, "\n")), x)
+	if !found {
+		return false
+	}
+
+	t.mu.Lock()
+	t.sel = &ui.Selection{
+		Pane: pane, AnchorX: from, AnchorY: y, CursorX: to, CursorY: y, Scroll: scroll,
+	}
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+
+	// Copied at once, as a double click does elsewhere: the selection is
+	// finished the moment it is made, and there is no release to wait for.
+	text, err := t.client.PaneText(proto.PaneTextParams{
+		Pane: pane, Scroll: scroll, FromRow: y, FromCol: from, ToRow: y, ToCol: to,
+	})
+	if err != nil || strings.TrimSpace(text) == "" {
+		return true
+	}
+	t.copyToClipboard(text, copiedMessage(text, false))
+	return true
+}
+
+// wordAt is the run of like characters around a column: letters and digits
+// together, punctuation together, and whitespace selecting nothing.
+func wordAt(line []rune, at int) (from, to int, ok bool) {
+	if at < 0 || at >= len(line) {
+		return 0, 0, false
+	}
+	class := wordClass(line[at])
+	if class == classSpace {
+		return 0, 0, false
+	}
+	from, to = at, at
+	for from > 0 && wordClass(line[from-1]) == class {
+		from--
+	}
+	for to+1 < len(line) && wordClass(line[to+1]) == class {
+		to++
+	}
+	return from, to, true
+}
+
+type runeClass uint8
+
+const (
+	classSpace runeClass = iota
+	classSeparator
+	classWord
+)
+
+// wordSeparators is herdr's set, which copy mode uses too.
+const wordSeparators = "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~"
+
+func wordClass(r rune) runeClass {
+	switch {
+	case r == 0 || unicode.IsSpace(r):
+		return classSpace
+	case r < 0x80 && strings.ContainsRune(wordSeparators, r):
+		return classSeparator
+	}
+	return classWord
+}
+
+// isDoubleClick reports whether this press follows another in the same cell,
+// quickly enough to be one gesture.
+func (t *tui) isDoubleClick(ev ui.MouseEvent) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	now := time.Now()
+	double := ev.Button == t.lastClickButton &&
+		ev.X == t.lastClickX && ev.Y == t.lastClickY &&
+		now.Sub(t.lastClickAt) < doubleClickWindow
+	t.lastClickAt, t.lastClickX, t.lastClickY, t.lastClickButton = now, ev.X, ev.Y, ev.Button
+	if double {
+		// Cleared, so a third press starts counting again rather than being
+		// a second double click.
+		t.lastClickAt = time.Time{}
+	}
+	return double
 }

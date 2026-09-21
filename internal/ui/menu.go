@@ -30,8 +30,10 @@ const (
 	// MenuMoveBack and MenuMoveOn move a tab or a space one place along its
 	// row. herdr has the actions and binds no key to them; a menu is where
 	// somebody looking to reorder a tab will look.
-	MenuMoveBack = "menu-move-back"
-	MenuMoveOn   = "menu-move-on"
+	// MenuRenamePane names the pane itself rather than its tab.
+	MenuRenamePane = "menu-rename-pane"
+	MenuMoveBack   = "menu-move-back"
+	MenuMoveOn     = "menu-move-on"
 )
 
 // MenuItem is one line of a menu.
@@ -139,6 +141,7 @@ func PaneMenu(pane uint64, x, y int, closable bool) Menu {
 		{Label: "split right", Action: MenuSplitRight},
 		{Label: "split down", Action: MenuSplitDown},
 		{Label: "zoom", Action: MenuZoom},
+		{Label: "rename pane", Action: MenuRenamePane},
 		{Label: "rename tab", Action: MenuRename},
 	}
 	if closable {

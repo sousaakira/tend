@@ -434,6 +434,17 @@ func (c *Client) CopySearch(pane uint64, from proto.CopyPoint, query, direction 
 	}, &out)
 }
 
+// RenamePane gives a pane a name of its own.
+func (c *Client) RenamePane(pane uint64, name string) error {
+	return c.Call(proto.MethodPaneRename, proto.PaneRenameParams{Pane: pane, Name: name}, nil)
+}
+
+// FocusPane tells the server which pane is being looked at, so a program that
+// asked for focus events hears about it.
+func (c *Client) FocusPane(pane, lost uint64) error {
+	return c.Call(proto.MethodPaneFocus, proto.PaneFocusParams{Pane: pane, Lost: lost}, nil)
+}
+
 // PaneGraphics fetches a pane's images and where they go.
 func (c *Client) PaneGraphics(pane uint64) (proto.PaneGraphicsResult, error) {
 	var out proto.PaneGraphicsResult

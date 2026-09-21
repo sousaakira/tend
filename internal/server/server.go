@@ -703,6 +703,11 @@ func (s *Server) Write(id session.PaneID, data []byte) error {
 	return err
 }
 
+// RenamePane gives a pane a name of its own.
+func (s *Server) RenamePane(id session.PaneID, name string) error {
+	return s.rearrange(func(sess *session.Session) error { return sess.RenamePane(id, name) })
+}
+
 // RenameTab changes a tab's label.
 func (s *Server) RenameTab(id session.TabID, name string) error {
 	return s.rearrange(func(sess *session.Session) error { return sess.RenameTab(id, name) })
@@ -1095,7 +1100,9 @@ func (s *Server) detectOnce() {
 		}
 		if obs.titleChanged {
 			s.titles[w.rt.id] = obs.title
-			if p, ok := s.session.Pane(w.rt.id); ok {
+			if p, ok := s.session.Pane(w.rt.id); ok && !p.Named {
+				// A pane the user named keeps that name: the program's own
+				// title is a default, not an instruction.
 				p.Title = obs.title
 			}
 		}

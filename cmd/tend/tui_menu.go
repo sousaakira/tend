@@ -242,6 +242,16 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	case ui.MenuRename:
 		return t.renameFor(m)
 
+	case ui.MenuRenamePane:
+		if m.Pane == 0 {
+			return nil
+		}
+		if err := t.jumpToPane(m.Pane); err != nil {
+			return err
+		}
+		t.startPrompt(promptRenamePane)
+		return nil
+
 	case ui.MenuSplitRight, ui.MenuSplitDown:
 		dir := "columns"
 		if item.Action == ui.MenuSplitDown {

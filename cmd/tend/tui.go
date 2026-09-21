@@ -195,6 +195,12 @@ type tui struct {
 	scrollOffset int
 	scrollDepth  int
 	scrollScreen *vt.Screen
+	// The last press, for telling a double click from two clicks. Terminals
+	// report presses and leave the counting to whoever cares.
+	lastClickAt     time.Time
+	lastClickX      int
+	lastClickY      int
+	lastClickButton int
 	// graphics is what this client has drawn on the outer terminal, or nil
 	// when the terminal does not take images.
 	graphics *graphicsState
@@ -779,7 +785,11 @@ func (t *tui) buildFrame() ui.Frame {
 	// of those and the ninth would forget. The caller holds the lock, which
 	// is why this does not take it.
 	if t.focus != t.seenFocus {
+		gained, lost := t.focus, t.seenFocus
 		t.lastFocus, t.seenFocus = t.seenFocus, t.focus
+		// Off this goroutine: it is a round trip, and this runs under the
+		// lock that every redraw needs.
+		go t.tellFocus(gained, lost)
 	}
 
 	frame := ui.Frame{

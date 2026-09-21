@@ -1,3 +1,5 @@
+//go:build unix
+
 package main
 
 import (
@@ -96,4 +98,46 @@ func TestNavigationKeysReachPanesAndAgents(t *testing.T) {
 	a.sendUntil(t, "to-the-agent\n", "the agent's pane to take the typing", func(s string) bool {
 		return strings.Contains(s, "to-the-agent")
 	})
+}
+
+// TestNamingAPaneSticks: a pane's title is whatever its program set, which
+// for a shell changes with every command. A name the user gave has to survive
+// that, or naming a pane is pointless.
+func TestNamingAPaneSticks(t *testing.T) {
+	a := startSession(t, 100, 18)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Inside the pane, past the sidebar: a right-click on the sidebar opens
+	// the sidebar's own menu.
+	a.openMenuOn(t, 60, 5, "rename pane")
+	// On the menu item itself, which is drawn beside where the click landed.
+	row := a.lineContaining(t, "rename pane")
+	a.clickAt(t, columnOfString(a.lines()[row-1], "rename pane")+2, row)
+	a.waitForScreen(t, "the prompt", func(s string) bool { return strings.Contains(s, "rename pane") })
+	a.send(t, "api\r")
+	a.waitForScreen(t, "the name on the pane", func(s string) bool {
+		return strings.Contains(s, "api")
+	})
+
+	// The program sets its own title; the name stays. The check is on the
+	// pane's border, where the title is drawn — the command itself is echoed
+	// into the pane and contains the words either way.
+	border := func() string {
+		for _, line := range a.lines() {
+			if strings.Contains(line, "┌") {
+				return line
+			}
+		}
+		return ""
+	}
+	a.sendUntil(t, "printf '\\033]0;something-else\\007'; printf 'TITLE-SET\\n'\n",
+		"the program's own title", func(s string) bool {
+			return strings.Contains(s, "TITLE-SET")
+		})
+	if strings.Contains(border(), "something-else") {
+		t.Errorf("the program's title replaced the name the user gave:\n%s", border())
+	}
+	if !strings.Contains(border(), "api") {
+		t.Errorf("the name is gone from the pane's border:\n%s", border())
+	}
 }

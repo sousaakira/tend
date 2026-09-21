@@ -1,3 +1,5 @@
+//go:build unix
+
 package main
 
 import (
@@ -89,5 +91,27 @@ func TestCopyModeYanksALineWithNothingSelected(t *testing.T) {
 
 	if got := strings.TrimSpace(copied()); got != "the-whole-line-here" {
 		t.Errorf("copied %q, want the line under the cursor", got)
+	}
+}
+
+// TestDoubleClickSelectsAWord is what a double click does in every other
+// terminal. Without it, taking one word means dragging across it exactly.
+func TestDoubleClickSelectsAWord(t *testing.T) {
+	a := startSession(t, 100, 14)
+	copied := clipboardOf(a)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	a.sendUntil(t, "printf 'alpha bravo-charlie delta\\n'\n", "the words", func(s string) bool {
+		return strings.Count(s, "bravo-charlie") >= 2
+	})
+
+	row := a.lineContaining(t, "alpha bravo-charlie delta")
+	col := columnOfString(a.lines()[row-1], "bravo") + 3 // inside "bravo"
+	a.clickAt(t, col, row)
+	a.clickAt(t, col, row)
+
+	a.waitForScreen(t, "the copy", func(s string) bool { return strings.Contains(s, "copied") })
+	if got := copied(); got != "bravo" {
+		t.Errorf("copied %q, want the word under the pointer", got)
 	}
 }

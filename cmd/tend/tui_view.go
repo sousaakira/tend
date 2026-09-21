@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
 	"github.com/sousaakira/tend/internal/vt"
 )
@@ -341,6 +343,15 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if pane == 0 {
 			return nil
 		}
+		// Two presses in the same cell, close together, are a double click:
+		// terminals report presses and leave the counting to whoever cares.
+		if t.isDoubleClick(ev) {
+			t.clearSelection()
+			t.focusPane(pane)
+			if t.selectWord(ev) {
+				return nil
+			}
+		}
 		// A press anywhere drops the last selection: it marked text the user
 		// has now moved on from, and leaving it lit suggests it is still what
 		// a copy would take.
@@ -660,4 +671,32 @@ func (t *tui) scrollPaneBy(pane uint64, lines int) error {
 		t.mu.Unlock()
 	}
 	return t.scrollBy(lines)
+}
+
+// tellFocus lets the server know which pane is being looked at, so a program
+// that asked for focus events (mode 1004) is told it gained or lost it.
+//
+// Only worth saying when somebody asked: the call is cheap, but a server that
+// has never heard of the method would answer every focus change with an error,
+// and the notice about an older server is not what a user moving between panes
+// wants to see.
+func (t *tui) tellFocus(gained, lost uint64) {
+	if !t.serverKnows(proto.MethodPaneFocus) {
+		return
+	}
+	if err := t.client.FocusPane(gained, lost); err != nil && !errors.Is(err, proto.ErrUnknownMethod) {
+		// Nothing to say to the user: a program not being told about focus is
+		// not something they asked for or can act on.
+		return
+	}
+}
+
+// serverKnows reports whether the server named a method in its handshake.
+func (t *tui) serverKnows(method string) bool {
+	for _, known := range t.client.Server().Methods {
+		if known == method {
+			return true
+		}
+	}
+	return false
 }

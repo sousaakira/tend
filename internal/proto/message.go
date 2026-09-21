@@ -50,6 +50,11 @@ const (
 	// making anything again: the programs keep running wherever they end up.
 	// MethodServerReloadConfig makes the server re-read the settings file.
 	MethodServerReloadConfig = "server.reload_config"
+	// MethodPaneFocus says which pane the client is looking at, so programs
+	// that asked for focus events are told.
+	MethodPaneFocus = "pane.focus"
+	// MethodPaneRename gives a pane a name that its program cannot overwrite.
+	MethodPaneRename = "pane.rename"
 	// MethodPaneGraphics fetches the images a pane holds and where they go.
 	MethodPaneGraphics  = "pane.graphics"
 	MethodPaneSwap      = "pane.swap"
@@ -115,6 +120,8 @@ var KnownMethods = []string{
 	MethodPaneCopyMotion,
 	MethodPaneCopySearch,
 	MethodServerReloadConfig,
+	MethodPaneFocus,
+	MethodPaneRename,
 	MethodPaneGraphics,
 	MethodPaneSwap,
 	MethodTabMove,
@@ -193,7 +200,10 @@ type PaneInfo struct {
 	// Graphics changes whenever a pane's images or their placements do, so a
 	// client can tell whether to ask for them again.
 	Graphics uint64 `json:"graphics,omitempty"`
-	ExitErr  string `json:"exit_error,omitempty"`
+	// Named marks a title the user gave the pane, which its program's own
+	// title does not replace.
+	Named   bool   `json:"named,omitempty"`
+	ExitErr string `json:"exit_error,omitempty"`
 
 	Command []string `json:"command,omitempty"`
 	Dir     string   `json:"dir,omitempty"`
@@ -387,6 +397,18 @@ type PaneResizeParams struct {
 	Pane uint64 `json:"pane"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
+}
+
+// PaneRenameParams names a pane.
+type PaneRenameParams struct {
+	Pane uint64 `json:"pane"`
+	Name string `json:"name"`
+}
+
+// PaneFocusParams says which pane has the focus now and which had it.
+type PaneFocusParams struct {
+	Pane uint64 `json:"pane"`
+	Lost uint64 `json:"lost,omitempty"`
 }
 
 // GraphicsImage is one image a pane holds, as bytes to pass on.

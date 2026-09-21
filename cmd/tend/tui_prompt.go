@@ -12,6 +12,8 @@ const (
 	promptNone promptKind = iota
 	promptRenameTab
 	promptRenameSpace
+	// promptRenamePane names one pane, which its program cannot overwrite.
+	promptRenamePane
 	// promptGroupSpace names the group a space belongs with. An empty answer
 	// takes it out of the one it is in, which is the only way to say that and
 	// the reason this prompt does not treat empty as cancelling.
@@ -43,6 +45,12 @@ func (t *tui) startPrompt(kind promptKind) {
 	case promptRenameSpace:
 		if w, ok := t.workspaceLocked(); ok {
 			t.promptText = w.Name
+		}
+	case promptRenamePane:
+		for _, p := range t.snap.Panes {
+			if p.ID == t.focus {
+				t.promptText = p.Title
+			}
 		}
 	case promptGroupSpace:
 		if w, ok := t.workspaceLocked(); ok {
@@ -133,7 +141,7 @@ func (t *tui) promptKeys(data []byte) (bool, error) {
 func (t *tui) commitPrompt() error {
 	t.mu.Lock()
 	kind, name := t.prompt, strings.TrimSpace(t.promptText)
-	tab, ws, group := t.tab, t.workspace, t.promptGroup
+	tab, ws, group, pane := t.tab, t.workspace, t.promptGroup, t.focus
 	t.prompt, t.promptText, t.promptPristine = promptNone, "", false
 	t.dirty = true
 	t.mu.Unlock()
@@ -161,6 +169,16 @@ func (t *tui) commitPrompt() error {
 		if err := t.client.RenameWorkspace(ws, name); err != nil {
 			return err
 		}
+	case promptRenamePane:
+		if pane == 0 {
+			return nil
+		}
+		if err := t.client.RenamePane(pane, name); err != nil {
+			if t.reportStaleServer(err) {
+				return nil
+			}
+			return err
+		}
 	case promptGroupSpace:
 		if ws == 0 {
 			return nil
@@ -186,6 +204,8 @@ func (t *tui) promptLabelLocked() string {
 		return "rename tab"
 	case promptRenameSpace:
 		return "rename space"
+	case promptRenamePane:
+		return "rename pane"
 	case promptGroupSpace:
 		return "group — empty to ungroup"
 	case promptRenameGroup:
