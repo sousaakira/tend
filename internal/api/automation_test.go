@@ -190,3 +190,55 @@ func TestAWorktreeRootIsNeverRelative(t *testing.T) {
 		}
 	}
 }
+
+// TestSubscribingFollowsTheSessionWithoutGaps is what events.wait cannot do:
+// a caller that acts on every event needs them in order, and a call that
+// answers one and returns loses whatever happened before the next call.
+func TestSubscribingFollowsTheSessionWithoutGaps(t *testing.T) {
+	h := start(t)
+	watcher := h.another(t)
+
+	res := result(t, call(t, watcher, MethodEventsSubscribe, map[string]any{
+		"kinds": []string{"pane.opened", "pane.closed"},
+	}))
+	if res["type"] != "subscribed" {
+		t.Fatalf("subscribe = %v", res)
+	}
+
+	// Three panes in a row, on another connection. A caller that answered one
+	// event at a time would see the first and miss the rest.
+	var ids []string
+	for i := 0; i < 3; i++ {
+		made := result(t, call(t, h, MethodPaneSplit, map[string]any{
+			"pane_id": PaneID(h.pane), "command": []string{"/bin/sh", "-c", "sleep 30"},
+		}))
+		pane, _ := made["pane"].(map[string]any)
+		ids = append(ids, text(pane["pane_id"]))
+	}
+
+	seen := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		ev := watcher.next(t)
+		if ev["event"] != "pane.opened" {
+			t.Fatalf("event %d = %v, want pane.opened", i, ev)
+		}
+		seen[text(ev["pane_id"])] = true
+	}
+	for _, id := range ids {
+		if !seen[id] {
+			t.Errorf("the stream missed %s; it saw %v", id, seen)
+		}
+	}
+
+	// Only what was asked for: a state change is not one of the two kinds.
+	call(t, h, MethodPaneClose, map[string]any{"pane_id": ids[0]})
+	if ev := watcher.next(t); ev["event"] != "pane.closed" {
+		t.Errorf("after closing a pane the stream said %v", ev)
+	}
+}
+
+// text is the string at a key, for reading a result.
+func text(v any) string {
+	s, _ := v.(string)
+	return s
+}

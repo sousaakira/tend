@@ -31,6 +31,7 @@ commands:
   handoff           replace a session's server, keeping its programs
   agent             drive an agent: read it, prompt it, wait for it
   pane              drive a pane: read it, type into it, wait for it
+  events            follow a session's events as they happen
   api               call the automation socket directly
   plugin            install and run plugins
   worktree          give an agent a checkout of its own, as a space
@@ -99,6 +100,8 @@ func main() {
 		err = runAgent(args[1:])
 	case "pane":
 		err = runPane(args[1:])
+	case "events":
+		err = runEvents(args[1:])
 	case "api":
 		err = runAPI(args[1:])
 	case "plugin":

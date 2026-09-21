@@ -266,6 +266,12 @@ func (a *API) handle(conn net.Conn) {
 		if err := enc.Encode(successResponse{ID: req.ID, Result: result}); err != nil {
 			return
 		}
+		if pending.stream != nil {
+			// From here the connection is a stream. Returning ends the
+			// handler, which closes it.
+			_ = pending.stream(conn)
+			return
+		}
 		if pending.after != nil {
 			// Stopping the server, or letting go of its panes, cuts this
 			// connection. Doing it after the reply is on the wire is what lets
@@ -358,7 +364,12 @@ func (a *API) info(st server.PaneStatus) PaneInfo {
 // pending is what one call asked to happen after its reply has been written.
 // It belongs to the connection being answered, not to the API: two scripts
 // calling at once must not inherit each other's.
-type pending struct{ after func() }
+type pending struct {
+	after func()
+	// stream turns the connection into an event stream once the reply has
+	// been written. Nothing else can be asked on it afterwards.
+	stream func(net.Conn) error
+}
 
 func (a *API) call(req Request, p *pending) (any, error) {
 	switch req.Method {

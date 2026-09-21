@@ -388,3 +388,56 @@ func TestAWorktreeBecomesASpace(t *testing.T) {
 		t.Error("the space is still open after its worktree was removed")
 	}
 }
+
+// TestFollowingASessionsEventsFromTheShell: a script that reacts to a session
+// reads this. If it regresses, the only way to follow a session is to poll it.
+func TestFollowingASessionsEventsFromTheShell(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+
+	if out, err := exec.Command(bin, "new", "-s", "ev", "--", "/bin/sh").CombinedOutput(); err != nil {
+		t.Fatalf("tend new: %v\n%s", err, out)
+	}
+	// The command above ran with the test's own environment; the session it
+	// made is in the temporary runtime directory because of t.Setenv.
+	t.Cleanup(func() { stopSession(t, "ev") })
+
+	watch := exec.Command(bin, "events", "-s", "ev", "-kinds", "pane.opened")
+	watch.Env = env
+	out, err := watch.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = watch.Process.Kill(); _ = watch.Wait() }()
+
+	lines := bufio.NewScanner(out)
+	// Give the subscription a moment to be in place before making an event.
+	time.Sleep(300 * time.Millisecond)
+	if out, err := exec.Command(bin, "new", "-s", "ev", "--", "/bin/sh").CombinedOutput(); err != nil {
+		t.Fatalf("second pane: %v\n%s", err, out)
+	}
+
+	done := make(chan string, 1)
+	go func() {
+		for lines.Scan() {
+			if strings.Contains(lines.Text(), "pane.opened") {
+				done <- lines.Text()
+				return
+			}
+		}
+		done <- ""
+	}()
+	select {
+	case line := <-done:
+		if !strings.Contains(line, `"pane_id"`) {
+			t.Errorf("the event does not name the pane: %q", line)
+		}
+	case <-time.After(15 * time.Second):
+		t.Error("no event arrived on the stream")
+	}
+}

@@ -79,6 +79,21 @@ func (h *harness) send(line string) error {
 	return err
 }
 
+// next reads one more line from a connection that has become a stream.
+func (h *harness) next(t *testing.T) map[string]any {
+	t.Helper()
+	_ = h.conn.SetDeadline(time.Now().Add(10 * time.Second))
+	line, err := h.r.ReadString('\n')
+	if err != nil {
+		t.Fatalf("the stream ended: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(line), &out); err != nil {
+		t.Fatalf("stream line %q: %v", line, err)
+	}
+	return out
+}
+
 // call sends one line and reads one back, which is the whole protocol.
 //
 // The deadline is far longer than any wait these tests ask for. It used to be

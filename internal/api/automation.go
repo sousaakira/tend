@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -56,6 +57,7 @@ const (
 	MethodAgentStart    = "agent.start"
 
 	MethodEventsWait = "events.wait"
+	// MethodEventsSubscribe is in subscribe.go, where the stream is.
 
 	MethodPaneSwap      = "pane.swap"
 	MethodTabMove       = "tab.move"
@@ -474,6 +476,22 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			return nil, paneErr(p.PaneID, err)
 		}
 		return map[string]any{"type": "agent_started", "pane_id": p.PaneID, "argv": argv}, nil
+
+	case MethodEventsSubscribe:
+		var p struct {
+			Kinds  []string `json:"kinds"`
+			PaneID string   `json:"pane_id"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.PaneID != "" {
+			if _, err := a.pane(p.PaneID); err != nil {
+				return nil, err
+			}
+		}
+		pend.stream = func(conn net.Conn) error { return a.subscribe(conn, p.Kinds, p.PaneID) }
+		return map[string]any{"type": "subscribed"}, nil
 
 	case MethodEventsWait:
 		var p struct {

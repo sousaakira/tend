@@ -214,6 +214,11 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 - **Double-click selects a word**, by herdr's word classes — the same ones
   copy mode moves by, so a double click and `w` cannot disagree — and copies
   it at once.
+- **Event streaming**: `events.subscribe` turns the connection into a feed —
+  one JSON object per line until the caller hangs up — beside `events.wait`,
+  which answers one and returns. `tend events [-kinds …] [-pane …]` is that
+  feed from a shell. A slow reader loses the middle rather than holding the
+  server's publisher.
 - **Lifecycle events**: `pane.focused`, `tab.focused`, `workspace.focused`,
   `tab.created` and `workspace.created`, over both sockets and to plugin
   hooks, under herdr's names. Focus is the client's, so a client reports it
@@ -304,9 +309,6 @@ an agent may name one, by id, except pi and omp which resume from a path.
 
 What a script needs is ported (see "Ported, and checked"). What is left:
 
-- **Streaming**: `events.subscribe` as a stream. `events.wait` returns one
-  event; a caller that wants a feed calls again, which drops what happened in
-  between. herdr: `api/subscriptions.rs` (842 lines).
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
 - `layout.export|apply`, `pane.move|swap|neighbor|edges|zoom|process_info`,

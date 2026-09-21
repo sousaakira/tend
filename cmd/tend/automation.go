@@ -136,6 +136,66 @@ func printJSON(v any) error {
 	return enc.Encode(v)
 }
 
+// runEvents follows a session's events until interrupted, one JSON object per
+// line — the shape a script pipes into jq or reads line by line.
+func runEvents(args []string) error {
+	fs := flag.NewFlagSet("events", flag.ExitOnError)
+	name := sessionFlag(fs)
+	kinds := fs.String("kinds", "", "only these events, comma separated")
+	pane := fs.String("pane", "", "only this pane's events")
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(),
+			"usage: tend events [options]\n\n"+
+				"prints the session's events as they happen, one JSON object per line,\n"+
+				"until interrupted.\n\n")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	conn, err := dialAPI(*name)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	params := map[string]any{}
+	if *kinds != "" {
+		params["kinds"] = strings.Split(*kinds, ",")
+	}
+	if *pane != "" {
+		params["pane_id"] = *pane
+	}
+	request, err := json.Marshal(map[string]any{
+		"id": "events", "method": api.MethodEventsSubscribe, "params": params,
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(append(request, '\n')); err != nil {
+		return err
+	}
+
+	// The first line is the answer to the request; every line after it is an
+	// event. No deadline: following a session is waiting on purpose.
+	lines := bufio.NewScanner(conn)
+	lines.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	if !lines.Scan() {
+		return errors.New("the server did not answer")
+	}
+	var reply struct {
+		Error *api.ErrorBody `json:"error"`
+	}
+	if err := json.Unmarshal(lines.Bytes(), &reply); err == nil && reply.Error != nil {
+		return fmt.Errorf("%s: %s", reply.Error.Code, reply.Error.Message)
+	}
+	for lines.Scan() {
+		fmt.Println(lines.Text())
+	}
+	return lines.Err()
+}
+
 // runAPI is the escape hatch: any method, params as JSON.
 func runAPI(args []string) error {
 	fs := flag.NewFlagSet("api", flag.ExitOnError)
