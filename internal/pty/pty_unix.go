@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
 	creack "github.com/creack/pty"
 )
@@ -196,11 +197,23 @@ func (p *Pty) Write(b []byte) (int, error) { return p.f.Write(b) }
 
 // Resize tells the process its terminal changed size, which also delivers
 // SIGWINCH so a full-screen application redraws.
+//
+// The ioctl is made through control, not creack.Setsize: that one takes the
+// descriptor with Fd(), which does not hold the file open while it is used:
+// the race detector caught a resize reading it while the reader goroutine,
+// its pane just exited, was closing it. Dup and Foreground borrow it the same
+// way for the same reason.
 func (p *Pty) Resize(size Size) error {
 	if !size.Valid() {
 		return nil
 	}
-	return creack.Setsize(p.f, &creack.Winsize{Cols: size.Cols, Rows: size.Rows})
+	ws := creack.Winsize{Rows: size.Rows, Cols: size.Cols}
+	return p.control(func(fd uintptr) error {
+		if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, uintptr(syscall.TIOCSWINSZ), uintptr(unsafe.Pointer(&ws))); errno != 0 {
+			return errno
+		}
+		return nil
+	})
 }
 
 // Pid is the process id.

@@ -94,6 +94,65 @@ func TestResize(t *testing.T) {
 	_ = p.Wait()
 }
 
+// TestAResizeReachesTheProgramAndLeavesTheReaderInterruptible: a program sees
+// the size a pane was given, a pause — which a handoff is built on — still
+// wakes the reader after a resize, and resizing while the pane closes does not
+// race the close, as creack.Setsize's Fd() did under the race detector.
+func TestAResizeReachesTheProgramAndLeavesTheReaderInterruptible(t *testing.T) {
+	p, err := Start("/bin/sh", []string{"-c", "read go; stty size; sleep 30"}, Options{Size: Size{Cols: 80, Rows: 24}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = p.Close() }()
+
+	if err := p.Resize(Size{Cols: 101, Rows: 33}); err != nil {
+		t.Fatalf("Resize: %v", err)
+	}
+	if _, err := p.Write([]byte("\n")); err != nil {
+		t.Fatal(err)
+	}
+	var seen strings.Builder
+	buf := make([]byte, 256)
+	for deadline := time.Now().Add(5 * time.Second); !strings.Contains(seen.String(), "33 101"); {
+		if time.Now().After(deadline) {
+			t.Fatalf("stty size = %q, want 33 101", seen.String())
+		}
+		n, err := p.Read(buf)
+		if err != nil {
+			t.Fatalf("read: %v (seen %q)", err, seen.String())
+		}
+		seen.Write(buf[:n])
+	}
+
+	woke := make(chan error, 1)
+	go func() {
+		_, err := p.Read(make([]byte, 256))
+		woke <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	p.Pause()
+	select {
+	case err := <-woke:
+		if !errors.Is(err, ErrPaused) {
+			t.Fatalf("a paused read after a resize = %v, want ErrPaused", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("after a resize, Pause no longer wakes the reader")
+	}
+
+	// Resizing while the terminal closes is an error at worst, never a race.
+	p.Resume()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			_ = p.Resize(Size{Cols: uint16(80 + i%20), Rows: 24})
+		}
+	}()
+	_ = p.Close()
+	<-done
+}
+
 func TestStartRejectsEmptyCommand(t *testing.T) {
 	if _, err := Start("", nil, Options{}); err == nil {
 		t.Error("Start with no command should fail")
