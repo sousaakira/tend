@@ -101,6 +101,9 @@ type Screen struct {
 	parser Parser
 	// replyBuf is reused so cursor reports do not allocate per request.
 	replyBuf []byte
+	// kitty holds the images a program in this terminal has sent, and where
+	// it asked for them. Nil until one does: most panes never do.
+	kitty *kittyState
 }
 
 // NewScreen returns a cols × rows screen with the given number of scrollback
@@ -623,6 +626,12 @@ func (s *Screen) setTitle(t string) {
 func (s *Screen) DCSHook(*Params, []byte, byte, bool) {}
 func (s *Screen) DCSPut(byte)                         {}
 func (s *Screen) DCSUnhook()                          {}
-func (s *Screen) APCDispatch([]byte)                  {}
+
+// APCDispatch handles a kitty graphics command and discards anything else.
+func (s *Screen) APCDispatch(data []byte) {
+	if s.apcGraphics(data) {
+		return
+	}
+}
 
 var _ Handler = (*Screen)(nil)

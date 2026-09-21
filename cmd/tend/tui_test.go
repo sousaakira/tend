@@ -51,9 +51,10 @@ func withConfig(t *testing.T, path string) {
 
 // attached is a running TUI and a terminal reading it.
 type attached struct {
-	pty    *pty.Pty
-	mu     sync.Mutex
-	screen *vt.Screen
+	pty      *pty.Pty
+	mu       sync.Mutex
+	screen   *vt.Screen
+	rawBytes strings.Builder
 }
 
 func (a *attached) send(t *testing.T, keys string) {
@@ -77,11 +78,21 @@ func (a *attached) lines() []string {
 
 func (a *attached) text() string { return strings.Join(a.lines(), "\n") }
 
+// raw is every byte the client has written, for the tests about sequences the
+// emulator does not keep — an image is drawn by the terminal, not stored in
+// its grid.
+func (a *attached) raw() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.rawBytes.String()
+}
+
 // Write feeds the TUI's output into the terminal emulator under a lock, since
 // the test goroutine reads it while this one writes.
 func (a *attached) Write(p []byte) (int, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.rawBytes.Write(p)
 	return a.screen.Write(p)
 }
 
@@ -130,6 +141,18 @@ func startSessionOlder(t *testing.T, cols, rows int, build string) *attached {
 
 // startSessionIn runs the session's server rooted at a directory, which is
 // what a workspace with none of its own takes.
+// startSessionEnv is a session whose client is told something extra about the
+// terminal it is drawing to.
+func startSessionEnv(t *testing.T, cols, rows int, env ...string) *attached {
+	t.Helper()
+	extraClientEnv = env
+	t.Cleanup(func() { extraClientEnv = nil })
+	return startSessionIn(t, cols, rows, t.TempDir())
+}
+
+// extraClientEnv is added to the client's environment by the next session.
+var extraClientEnv []string
+
 func startSessionIn(t *testing.T, cols, rows int, dir string) *attached {
 	t.Helper()
 	return startSessionWith(t, cols, rows, version, dir)
@@ -180,14 +203,14 @@ func startSessionConfigured(t *testing.T, cols, rows int, cfg server.Config) *at
 	bin := buildBinary(t)
 	p, err := pty.Start(bin, []string{"attach", "-s", "tui"}, pty.Options{
 		Size: pty.Size{Cols: uint16(cols), Rows: uint16(rows)},
-		Env: append(os.Environ(),
+		Env: append(append(os.Environ(),
 			"TEND_RUNTIME_DIR="+runtimeDir,
 			"TEND_CONFIG="+configPath,
 			// A predictable shell, so what a new pane runs does not depend on
 			// whoever is running the tests.
 			"SHELL=/bin/sh",
 			"TERM=xterm-256color",
-		),
+		), extraClientEnv...),
 	})
 	if err != nil {
 		t.Fatalf("attaching: %v", err)

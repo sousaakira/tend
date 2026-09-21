@@ -513,6 +513,11 @@ func CursorPosition(f Frame, cols, rows int) (x, y int, visible bool) {
 	return 0, 0, false
 }
 
+// PaneInner is the area inside a pane's border, for a client drawing over a
+// pane rather than into the frame — an image, which the terminal draws and
+// this package cannot.
+func PaneInner(r Rect) Rect { return innerRect(r) }
+
 // innerRect is the area inside a pane's border.
 func innerRect(r Rect) Rect {
 	return Rect{X: r.X + 1, Y: r.Y + 1, Cols: r.Cols - 2, Rows: r.Rows - 2}

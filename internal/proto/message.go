@@ -50,9 +50,11 @@ const (
 	// making anything again: the programs keep running wherever they end up.
 	// MethodServerReloadConfig makes the server re-read the settings file.
 	MethodServerReloadConfig = "server.reload_config"
-	MethodPaneSwap           = "pane.swap"
-	MethodTabMove            = "tab.move"
-	MethodWorkspaceMove      = "workspace.move"
+	// MethodPaneGraphics fetches the images a pane holds and where they go.
+	MethodPaneGraphics  = "pane.graphics"
+	MethodPaneSwap      = "pane.swap"
+	MethodTabMove       = "tab.move"
+	MethodWorkspaceMove = "workspace.move"
 )
 
 // Request is a call from a client.
@@ -113,6 +115,7 @@ var KnownMethods = []string{
 	MethodPaneCopyMotion,
 	MethodPaneCopySearch,
 	MethodServerReloadConfig,
+	MethodPaneGraphics,
 	MethodPaneSwap,
 	MethodTabMove,
 	MethodWorkspaceMove,
@@ -156,11 +159,16 @@ const (
 	// FeatureSessionChanged: the server says when panes are swapped, and tabs
 	// or spaces moved, renamed or regrouped.
 	FeatureSessionChanged = "session-changed"
+	// FeatureGraphics: the server keeps the images a pane's program sent and
+	// hands them over, so a client can draw them on its own terminal.
+	FeatureGraphics = "graphics"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
 // KnownMethods exists.
-var KnownFeatures = []string{FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged}
+var KnownFeatures = []string{
+	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
+}
 
 // --- session ---------------------------------------------------------------
 
@@ -179,10 +187,13 @@ type PaneInfo struct {
 	Mouse bool `json:"mouse,omitempty"`
 	// MouseDrag and MouseMotion say how much the program subscribed to, and
 	// MouseSGR how it wants reports written.
-	MouseDrag   bool   `json:"mouse_drag,omitempty"`
-	MouseMotion bool   `json:"mouse_motion,omitempty"`
-	MouseSGR    bool   `json:"mouse_sgr,omitempty"`
-	ExitErr     string `json:"exit_error,omitempty"`
+	MouseDrag   bool `json:"mouse_drag,omitempty"`
+	MouseMotion bool `json:"mouse_motion,omitempty"`
+	MouseSGR    bool `json:"mouse_sgr,omitempty"`
+	// Graphics changes whenever a pane's images or their placements do, so a
+	// client can tell whether to ask for them again.
+	Graphics uint64 `json:"graphics,omitempty"`
+	ExitErr  string `json:"exit_error,omitempty"`
 
 	Command []string `json:"command,omitempty"`
 	Dir     string   `json:"dir,omitempty"`
@@ -376,6 +387,36 @@ type PaneResizeParams struct {
 	Pane uint64 `json:"pane"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
+}
+
+// GraphicsImage is one image a pane holds, as bytes to pass on.
+type GraphicsImage struct {
+	ID     uint32 `json:"id"`
+	Format uint8  `json:"format"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+	// Data is the image exactly as the program sent it, base64 in JSON.
+	Data []byte `json:"data"`
+}
+
+// GraphicsPlacement is where an image goes, in the pane's own rows counted
+// from the oldest line it keeps.
+type GraphicsPlacement struct {
+	ImageID uint32 `json:"image"`
+	ID      uint32 `json:"id,omitempty"`
+	Row     int    `json:"row"`
+	Col     int    `json:"col"`
+	Cols    int    `json:"cols,omitempty"`
+	Rows    int    `json:"rows,omitempty"`
+	Z       int    `json:"z,omitempty"`
+}
+
+// PaneGraphicsResult is a pane's images and placements.
+type PaneGraphicsResult struct {
+	Revision   uint64              `json:"revision"`
+	History    int                 `json:"history"`
+	Images     []GraphicsImage     `json:"images,omitempty"`
+	Placements []GraphicsPlacement `json:"placements,omitempty"`
 }
 
 // ReloadResult says what a reload changed, or what was wrong with the file.

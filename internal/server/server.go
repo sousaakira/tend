@@ -266,6 +266,8 @@ type PaneStatus struct {
 	MouseDrag   bool
 	MouseMotion bool
 	MouseSGR    bool
+	// Graphics changes whenever the pane's images or their placements do.
+	Graphics uint64
 }
 
 // Server owns a running session.

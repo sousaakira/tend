@@ -434,6 +434,12 @@ func (c *Client) CopySearch(pane uint64, from proto.CopyPoint, query, direction 
 	}, &out)
 }
 
+// PaneGraphics fetches a pane's images and where they go.
+func (c *Client) PaneGraphics(pane uint64) (proto.PaneGraphicsResult, error) {
+	var out proto.PaneGraphicsResult
+	return out, c.Call(proto.MethodPaneGraphics, proto.PaneScreenParams{Pane: pane}, &out)
+}
+
 // ReloadConfig makes the server re-read the settings file.
 func (c *Client) ReloadConfig() (proto.ReloadResult, error) {
 	var out proto.ReloadResult

@@ -319,6 +319,7 @@ func (rt *paneRuntime) status() PaneStatus {
 		MouseDrag:   modes.Mouse >= vt.MouseButtonEvent,
 		MouseMotion: modes.Mouse >= vt.MouseAnyEvent,
 		MouseSGR:    modes.MouseEncoding == vt.MouseEncodingSGR || modes.MouseEncoding == vt.MouseEncodingSGRPixels,
+		Graphics:    rt.screen.KittyRevision(),
 		ID:          rt.id,
 		Title:       rt.title,
 		Agent:       rt.shown.Agent,

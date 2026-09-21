@@ -85,6 +85,7 @@ func runAttach(args []string) error {
 		lostConn: make(chan struct{}, 1),
 		resync:   make(chan struct{}, 1),
 		notices:  make(map[uint64]paneNotice),
+		graphics: graphicsFor(os.Getenv),
 		toasts:   cfg.Toasts(),
 		notifier: notify.New(),
 		sound: &notify.Player{
@@ -194,6 +195,9 @@ type tui struct {
 	scrollOffset int
 	scrollDepth  int
 	scrollScreen *vt.Screen
+	// graphics is what this client has drawn on the outer terminal, or nil
+	// when the terminal does not take images.
+	graphics *graphicsState
 	// settings is the settings screen while it is open.
 	settings *settingsState
 	// notices is what was last announced about each pane, so an agent that
@@ -248,6 +252,10 @@ func (t *tui) run() error {
 		return err
 	}
 	defer restore()
+	// Images this client put on the terminal are taken off before it leaves:
+	// they are drawn over the screen, not part of it, and would otherwise sit
+	// on top of whatever the shell does next.
+	defer t.clearGraphics()
 
 	t.cols, t.rows = terminalCells()
 	t.warnIfServerIsOlder()
@@ -706,8 +714,13 @@ func (t *tui) paint() error {
 	ui.Draw(buf, frame, t.theme)
 
 	x, y, visible := ui.CursorPosition(frame, t.cols, t.rows)
-	_, err := os.Stdout.Write(t.painter.Paint(buf, x, y, visible))
-	return err
+	if _, err := os.Stdout.Write(t.painter.Paint(buf, x, y, visible)); err != nil {
+		return err
+	}
+	// After the cells, because an image goes over them and the paint would
+	// otherwise cover it.
+	t.syncGraphics(frame)
+	return nil
 }
 
 // toggleSidebar shows or hides the column, from either the key or the handle.

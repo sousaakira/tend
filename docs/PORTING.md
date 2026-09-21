@@ -187,6 +187,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   agent, herdr's table. Only the integration tend ships for that agent may
   name one, and the reference is refused if it is empty, has control
   characters, or is a path where an id belongs: it goes onto a command line.
+- **Kitty graphics** (herdr's `kitty_graphics.rs`): `internal/vt` keeps what a
+  pane's program transmitted and where it placed it — direct transfers of RGB,
+  RGBA or PNG, in chunks, placed at the cursor in absolute rows so an image
+  travels with its text — and the client draws the visible ones on its own
+  terminal after each paint, with ids of its own, removing what scrolled away.
+  Kitty, Ghostty and WezTerm get images; other terminals get nothing, which is
+  what they would have shown anyway (`TEND_GRAPHICS=off` turns it off). A file
+  transfer (`t=f`) is refused: the path would be chosen by whatever is running
+  in the pane.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -417,12 +426,21 @@ Ported (see "Ported, and checked"). Left:
 - `agent.start` does not take a session to resume; a script that wants one
   passes the flag itself.
 
-### 13. Kitty graphics — medium
+### 13. Kitty graphics — the path works; the hard parts of herdr's are not here
 
-- herdr: `kitty_graphics.rs` (1509), `kitty_graphics/surface.rs`,
-  `server/headless/pane_graphics.rs`, `client/shell/graphics.rs`.
-- tend today: `internal/vt` parses APC sequences and discards them
-  (`Screen.APCDispatch` is empty), so an image never reaches the outer terminal.
+Ported (see "Ported, and checked"). Left:
+
+- **Unicode placeholders**, animation, `a=q` queries, cropping (`x y w h`) and
+  cell-precise offsets: parsed and ignored rather than honoured.
+- **Pane layers and client surfaces** (`plugin`-drawn images, `pane.graphics.*`
+  over the API, `api/server/pane_graphics_stream.rs`, 1115 lines): a plugin
+  cannot draw an image into a pane.
+- **Sizing against the cell size**: herdr asks the terminal how big a cell is
+  and scales; tend passes on the sender's `c`/`r` and leaves the rest to the
+  terminal.
+- Images are fetched on the paint goroutine when a pane's revision moves. A
+  slow server would show as a slow redraw for that frame; herdr streams them.
+- Verified with a stand-in program, not with a real image viewer.
 
 ### 14. Updater with channels — medium
 

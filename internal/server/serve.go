@@ -51,6 +51,7 @@ var Methods = []string{
 	proto.MethodPaneCopyMotion,
 	proto.MethodPaneCopySearch,
 	proto.MethodServerReloadConfig,
+	proto.MethodPaneGraphics,
 	proto.MethodPaneSwap,
 	proto.MethodTabMove,
 	proto.MethodWorkspaceMove,
@@ -485,6 +486,13 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 	case proto.MethodServerReloadConfig:
 		return c.srv.ReloadFromFile(), nil
 
+	case proto.MethodPaneGraphics:
+		var p proto.PaneScreenParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.PaneGraphics(session.PaneID(p.Pane))
+
 	case proto.MethodPaneSwap:
 		var p proto.PaneSwapParams
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -694,6 +702,7 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Panes[i].MouseDrag = st.MouseDrag
 		snap.Panes[i].MouseMotion = st.MouseMotion
 		snap.Panes[i].MouseSGR = st.MouseSGR
+		snap.Panes[i].Graphics = st.Graphics
 		if st.Title != "" {
 			snap.Panes[i].Title = st.Title
 		}
