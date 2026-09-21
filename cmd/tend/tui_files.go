@@ -52,7 +52,7 @@ func (t *tui) toggleFiles() error {
 	}
 
 	t.mu.Lock()
-	cols, onRight := t.config.FilesWidth(), t.config.Files.Dock == "right"
+	cols, onRight := t.config.FilesWidth(), !t.config.FilesOnLeft()
 	t.mu.Unlock()
 	share := 0.25
 	if width := right - left; width > 0 {

@@ -46,9 +46,14 @@ type Files struct {
 	Follow *bool `toml:"follow"`
 	// Hidden hides entries whose name starts with a dot.
 	Hidden bool `toml:"hidden"`
-	// Dock is the edge it opens on: "left" (the default) or "right".
+	// Dock is the edge it opens on: "right" (the default, the owner's
+	// choice) or "left".
 	Dock string `toml:"dock"`
 }
+
+// FilesOnLeft is whether the files panel opens on the left edge: only when
+// the settings say so.
+func (c Config) FilesOnLeft() bool { return c.Files.Dock == "left" }
 
 // FilesFollow is whether the panel follows the pane beside it.
 func (c Config) FilesFollow() bool { return c.Files.Follow == nil || *c.Files.Follow }

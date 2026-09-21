@@ -56,7 +56,7 @@ func gitProject(t *testing.T) string {
 // git's news beside each file; pressed in the panel it closes it again. If
 // it regresses, the key that shows the project shows nothing, or a panel
 // that cannot be put away.
-func TestTheFilesPanelDocksOnTheLeftAndShowsTheProject(t *testing.T) {
+func TestTheFilesPanelDocksOnTheRightAndShowsTheProject(t *testing.T) {
 	project := gitProject(t)
 	// The test's server runs in this process and names no binary for its
 	// panes (TEND_BIN_PATH), so the panel finds tend on the PATH: this build.
@@ -72,12 +72,10 @@ func TestTheFilesPanelDocksOnTheLeftAndShowsTheProject(t *testing.T) {
 	a.waitForScreen(t, "the panel", func(s string) bool {
 		return strings.Contains(s, "files │ search │ changes") && strings.Contains(s, "brandnew.md") && strings.Contains(s, "kept.txt")
 	})
-	// Docked on the left: the panel's header is left of the shell's pane.
-	header := a.lineContaining(t, "files │ search │ changes")
-	line := []rune(a.lines()[header-1])
-	at := strings.Index(string(line), "files │ search │ changes")
-	if at < 0 || at > 60 {
-		t.Errorf("the panel should be on the left of the tab:\n%s", a.text())
+	// Docked on the right unless the settings say left: the panel's frame
+	// comes after the shell's.
+	if top := a.lines()[1]; strings.Index(top, "files") < strings.Index(top, "sh ") {
+		t.Errorf("the panel should be on the right of the tab:\n%s", a.text())
 	}
 	// The branch, and the letters git gives the new file and the changed
 	// directory.
@@ -263,8 +261,9 @@ func TestThePanelFollowsThePaneBesideItToAnotherProject(t *testing.T) {
 		return strings.Contains(s, "brandnew.md") && !strings.Contains(s, "only-in-second.txt")
 	})
 
-	// Back to the shell, by a click on it, and into the other project.
-	a.clickAt(t, 100, 15)
+	// Back to the shell, by a click on it — left of the panel, which is on
+	// the right — and into the other project.
+	a.clickAt(t, 50, 15)
 	a.sendUntil(t, "cd "+second+" && echo in-second\n", "the shell in the second project",
 		func(s string) bool { return strings.Contains(s, "in-second") })
 	a.waitForScreen(t, "the panel to follow", func(s string) bool { return strings.Contains(s, "only-in-second.txt") })
@@ -322,13 +321,13 @@ func TestThePanelPreviewsBesideTheMainPaneAndReusesIt(t *testing.T) {
 	}
 }
 
-// TestTheFilesPanelDocksOnTheRightWhenSetTo: dock = "right" in [files]
+// TestTheFilesPanelDocksOnTheLeftWhenSetTo: dock = "left" in [files]
 // opens the panel on the other edge. If it regresses, the setting is
 // written and ignored.
-func TestTheFilesPanelDocksOnTheRightWhenSetTo(t *testing.T) {
+func TestTheFilesPanelDocksOnTheLeftWhenSetTo(t *testing.T) {
 	t.Setenv("PATH", filepath.Dir(buildBinary(t))+string(os.PathListSeparator)+os.Getenv("PATH"))
 	cfg := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(cfg, []byte("[files]\ndock = \"right\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfg, []byte("[files]\ndock = \"left\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	configOverride = cfg
@@ -337,12 +336,8 @@ func TestTheFilesPanelDocksOnTheRightWhenSetTo(t *testing.T) {
 	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
 	a.send(t, "\x02f")
 	a.waitForScreen(t, "the panel", func(s string) bool { return strings.Contains(s, "files │ search │ changes") })
-	line := a.lines()[a.lineContaining(t, "files │ search │ changes")-1]
-	if at := strings.Index(line, "files │ search"); at < strings.Index(line, "│$") && strings.Contains(line, "│$") {
-		t.Errorf("the panel should be right of the shell:\n%s", a.text())
-	}
-	if top := a.lines()[1]; strings.Index(top, "files") < strings.Index(top, "sh ") {
-		t.Errorf("the panel's frame should come after the shell's:\n%s", top)
+	if top := a.lines()[1]; strings.Index(top, "files") > strings.Index(top, "sh ") {
+		t.Errorf("the panel's frame should come before the shell's:\n%s", top)
 	}
 }
 

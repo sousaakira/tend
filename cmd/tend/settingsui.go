@@ -87,12 +87,12 @@ var settingRows = []settingRow{
 	},
 	{
 		label: "files side", section: "files", key: "dock",
-		choices: []settingChoice{{"left", `"left"`}, {"right", `"right"`}},
+		choices: []settingChoice{{"right", `"right"`}, {"left", `"left"`}},
 		value: func(c config.Config) string {
-			if c.Files.Dock == "right" {
-				return `"right"`
+			if c.FilesOnLeft() {
+				return `"left"`
 			}
-			return `"left"`
+			return `"right"`
 		},
 	},
 	{
