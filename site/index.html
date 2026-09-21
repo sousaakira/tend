@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tend — terminal runtime for coding agents</title>
+  <meta name="description" content="tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="mark" href="#top">tend</a>
+    <nav>
+      <a href="#session">session</a>
+      <a href="#keys">keys</a>
+      <a href="#install">install</a>
+      <a href="https://github.com/sousaakira/tend">source</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="lead">
+      <h1>tend</h1>
+      <p class="deck">A terminal runtime for coding agents. The server stays up when you leave. Each pane is marked working, blocked, or idle.</p>
+    </section>
+
+    <section id="session" class="stage" aria-label="A tend session">
+      <div class="frame">
+        <aside class="side">
+          <p class="side-h">spaces</p>
+          <p class="row on"><span class="dot"></span> main</p>
+          <p class="row dim">master</p>
+          <p class="rule" aria-hidden="true"></p>
+          <p class="side-h">agents <span>flat</span></p>
+          <p class="row on"><span class="dot work"></span> claude</p>
+          <p class="row"><span class="dot block"></span> codex</p>
+        </aside>
+        <div class="panes">
+          <article class="pane focus">
+            <header><span class="id">1</span> claude <span class="st work" title="working">●</span></header>
+            <pre>⠋ Pondering the refactor…
+
+The panes belong to the server.
+Closing this window does not
+stop them.</pre>
+          </article>
+          <article class="pane">
+            <header><span class="id">2</span> codex <span class="st block" title="blocked">▲</span></header>
+            <pre>Do you want to proceed?
+
+ ❯ 1. Yes
+   2. No</pre>
+          </article>
+        </div>
+      </div>
+      <p class="status"><span>work · main · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+    </section>
+
+    <section class="facts">
+      <h2>What stays when you detach</h2>
+      <dl>
+        <div>
+          <dt>The programs</dt>
+          <dd>A session is a background server. <kbd>ctrl</kbd><kbd>b</kbd> then <kbd>d</kbd> leaves the agents running. Opening tend again attaches to the same panes.</dd>
+        </div>
+        <div>
+          <dt>The state</dt>
+          <dd>A pane is working, blocked, or idle. The mark is what the screen is showing — a spinner, a permission prompt, a shell waiting — not a guess about the process name.</dd>
+        </div>
+        <div>
+          <dt>The layout</dt>
+          <dd>A space holds tabs. A tab holds panes. Split beside or below, zoom one pane, scroll its history, jump to the agent that stopped.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section id="keys">
+      <h2>Prefix is ctrl+b</h2>
+      <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lists every key inside the session.</p>
+      <table>
+        <tbody>
+          <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>split beside, below</td></tr>
+          <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>move focus</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>resize</td></tr>
+          <tr><th><kbd>z</kbd></th><td>zoom a pane to the window</td></tr>
+          <tr><th><kbd>[</kbd></th><td>scroll back through its history</td></tr>
+          <tr><th><kbd>x</kbd></th><td>close a pane</td></tr>
+          <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>tabs: new, next, previous, by number</td></tr>
+          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>spaces: new, previous, next</td></tr>
+          <tr><th><kbd>a</kbd></th><td>show every agent, grouped</td></tr>
+          <tr><th><kbd>g</kbd></th><td>pick one and jump to it</td></tr>
+          <tr><th><kbd>d</kbd></th><td>detach, leaving everything running</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <pre class="cmd">make install <span># into GOBIN, or ~/.local/bin</span>
+tend</pre>
+      <p>With no arguments, tend opens a session and starts a server if there is not one. <code>tend new -- claude</code> opens a pane. <code>tend ls</code> lists what is running. <code>-s NAME</code> runs another session beside the first.</p>
+      <p>Written in Go. One binary. No cgo.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Apache-2.0. An independent Go implementation; see NOTICE in the repository.</p>
+  </footer>
+</body>
+</html>
