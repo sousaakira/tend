@@ -374,3 +374,40 @@ func TestTwoPanesInOneConversationResumeOnce(t *testing.T) {
 		t.Errorf("%d panes resumed shared-7, want exactly one", resumes)
 	}
 }
+
+// TestAPanelStillClosesWithItsProgramAfterARestart: a pane opened to run
+// one thing — the files panel — goes when that thing ends, after a restart
+// as before one. If it regresses, quitting a restored panel leaves a
+// finished pane to close by hand.
+func TestAPanelStillClosesWithItsProgramAfterARestart(t *testing.T) {
+	stateFile := filepath.Join(t.TempDir(), "session.json")
+	first := persistentServer(t, stateFile)
+	ws, _ := first.NewWorkspace("main")
+	_, keep, err := first.NewTab(ws, "t", PaneSpec{Command: []string{"/bin/sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.DockPane(keep, 0.25, PaneSpec{
+		Command: []string{"/bin/sh"}, Title: "files", Named: true, CloseOnExit: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	first.saveStructure()
+	_ = first.Close()
+
+	second := persistentServer(t, stateFile)
+	waitFor(t, "both panes back", func() bool { return len(paneIDs(second)) == 2 })
+	var panel session.PaneID
+	for _, st := range second.Statuses() {
+		if st.Title == "files" {
+			panel = st.ID
+		}
+	}
+	if panel == 0 {
+		t.Fatalf("the panel did not come back: %+v", second.Statuses())
+	}
+	if err := second.Write(panel, []byte("exit\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the restored panel to close with its program", func() bool { return len(paneIDs(second)) == 1 })
+}

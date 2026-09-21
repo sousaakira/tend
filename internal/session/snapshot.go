@@ -78,6 +78,9 @@ type PaneSnapshot struct {
 	// which one it was in. It is what lets a restored pane carry on rather
 	// than start over; see internal/agent's Resume.
 	Session *AgentSession `json:"agent_session,omitempty"`
+	// CloseOnExit is a pane that goes with its program, which it still does
+	// after a restart.
+	CloseOnExit bool `json:"close_on_exit,omitempty"`
 }
 
 // AgentSession is a conversation as the agent names it. It is written down
@@ -140,6 +143,7 @@ func (s *Session) SnapshotWith(dirs map[PaneID]string, sessions map[PaneID]Agent
 				pane := PaneSnapshot{
 					ID: uint64(p.ID), Title: p.Title, Named: p.Named,
 					Command: p.Command, Dir: dir, Agent: p.Agent, AgentName: p.AgentName,
+					CloseOnExit: p.CloseOnExit,
 				}
 				if conversation, ok := sessions[id]; ok {
 					pane.Session = &conversation
@@ -245,7 +249,7 @@ func Restore(snap Snapshot) (*Session, error) {
 				t.panes[id] = &Pane{
 					ID: id, Title: ps.Title, Named: ps.Named,
 					Command: ps.Command, Dir: ps.Dir, Agent: ps.Agent, AgentName: ps.AgentName,
-					State: detect.StateUnknown,
+					State: detect.StateUnknown, CloseOnExit: ps.CloseOnExit,
 				}
 				s.index[id] = t
 			}

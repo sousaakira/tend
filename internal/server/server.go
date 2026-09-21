@@ -792,6 +792,8 @@ func (spec PaneSpec) record() session.PaneSpec {
 		Title:   spec.Title,
 		Named:   spec.Named,
 		Agent:   spec.Agent,
+
+		CloseOnExit: spec.CloseOnExit,
 	}
 }
 

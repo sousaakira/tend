@@ -48,6 +48,10 @@ type Pane struct {
 	Command []string
 	// Dir is the working directory it started in.
 	Dir string
+	// CloseOnExit is a pane opened to run one thing — the files panel, an
+	// editor on the scrollback — which goes when that thing ends. It is kept
+	// here so a pane restarted after the server was keeps it too.
+	CloseOnExit bool
 
 	// Agent is the detection manifest id, empty when the pane is not running
 	// a recognised agent.
@@ -73,9 +77,10 @@ type PaneSpec struct {
 	Command []string
 	Dir     string
 	// Named marks a title the user gave rather than one a program reported.
-	Named bool
-	Title string
-	Agent string
+	Named       bool
+	Title       string
+	Agent       string
+	CloseOnExit bool
 }
 
 // Tab is one layout of panes.
@@ -369,6 +374,8 @@ func (s *Session) newPane(spec PaneSpec) *Pane {
 		Dir:     spec.Dir,
 		Agent:   spec.Agent,
 		State:   detect.StateUnknown,
+
+		CloseOnExit: spec.CloseOnExit,
 	}
 }
 

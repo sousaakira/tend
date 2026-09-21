@@ -132,6 +132,8 @@ func (s *Server) restartPaneLocked(p session.PaneSnapshot, past paneHistory, res
 		Named:   p.Named,
 		Agent:   p.Agent,
 		history: []byte(past.ANSI),
+
+		CloseOnExit: p.CloseOnExit,
 	}
 
 	// An agent whose conversation is known is started back in it. Restoring
