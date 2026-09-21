@@ -706,6 +706,7 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 	snap.TabBarRight, snap.TabBarSeparator = s.tabBarSnapshot()
 	s.mu.Lock()
 	snap.WindowTitle = s.windowTitle
+	snap.AgentView = s.agentView
 	sess := s.session
 	if active := sess.ActiveWorkspace(); active != nil {
 		snap.ActiveWorkspace = uint64(active.ID)

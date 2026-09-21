@@ -572,3 +572,32 @@ func TestAScriptCanSaySomethingAboutASpace(t *testing.T) {
 		t.Errorf("an unknown space gave %q", code)
 	}
 }
+
+// TestAScriptCanPutAViewOnTheAgentList is herdr's agent.view.set and
+// agent.view.clear: the view goes into the session clients draw from, and a
+// clear naming another source leaves it in place. If it regresses, one
+// plugin's clear wipes another's view, or a set changes nothing.
+func TestAScriptCanPutAViewOnTheAgentList(t *testing.T) {
+	h := start(t)
+	res := result(t, call(t, h, MethodAgentViewSet, map[string]any{
+		"source": "triage", "label": "waiting",
+		"filter": map[string]any{"op": "eq", "field": "status", "value": "blocked"},
+	}))
+	if res["active"] != true || res["source"] != "triage" {
+		t.Fatalf("set = %v", res)
+	}
+	if v := h.srv.Snapshot().AgentView; v == nil || v.Label != "waiting" || v.Filter == nil {
+		t.Fatalf("snapshot view = %+v", v)
+	}
+	if res := result(t, call(t, h, MethodAgentViewClear, map[string]any{"source": "someone-else"})); res["active"] != true {
+		t.Error("a clear by another source should leave the view")
+	}
+	if res := result(t, call(t, h, MethodAgentViewClear, map[string]any{"source": "triage"})); res["active"] != false {
+		t.Error("a clear by its own source should take it away")
+	}
+	if code := errorCode(call(t, h, MethodAgentViewSet, map[string]any{
+		"source": "x", "filter": map[string]any{"op": "like"},
+	})); code != "invalid_agent_view" {
+		t.Errorf("a bad view gave %q", code)
+	}
+}

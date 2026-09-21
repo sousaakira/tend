@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sousaakira/tend/internal/agent"
+	"github.com/sousaakira/tend/internal/agentview"
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/plugin"
@@ -51,15 +52,17 @@ const (
 	MethodPaneResize        = "pane.resize"
 	MethodPaneWaitForOutput = "pane.wait_for_output"
 
-	MethodAgentList     = "agent.list"
-	MethodAgentGet      = "agent.get"
-	MethodAgentRead     = "agent.read"
-	MethodAgentPrompt   = "agent.prompt"
-	MethodAgentSendKeys = "agent.send_keys"
-	MethodAgentWait     = "agent.wait"
-	MethodAgentStart    = "agent.start"
-	MethodAgentExplain  = "agent.explain"
-	MethodAgentRename   = "agent.rename"
+	MethodAgentList      = "agent.list"
+	MethodAgentGet       = "agent.get"
+	MethodAgentRead      = "agent.read"
+	MethodAgentPrompt    = "agent.prompt"
+	MethodAgentSendKeys  = "agent.send_keys"
+	MethodAgentWait      = "agent.wait"
+	MethodAgentStart     = "agent.start"
+	MethodAgentExplain   = "agent.explain"
+	MethodAgentRename    = "agent.rename"
+	MethodAgentViewSet   = "agent.view.set"
+	MethodAgentViewClear = "agent.view.clear"
 
 	MethodLayoutExport = "layout.export"
 	MethodLayoutApply  = "layout.apply"
@@ -674,6 +677,41 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		MethodAgentWait, MethodAgentExplain:
 		return a.agentCall(req)
 
+	case MethodAgentViewSet:
+		var v agentview.View
+		if err := decode(req.Params, &v); err != nil {
+			return nil, err
+		}
+		if err := v.Validate(); err != nil {
+			return nil, fail("invalid_agent_view", "%v", err)
+		}
+		if id, ok := strings.CutPrefix(v.Source, "plugin:"); ok && a.srv.PluginHost() != nil {
+			// A plugin's view names the plugin, which must be one that is
+			// installed and on, as herdr checks.
+			installed, found := a.srv.PluginHost().Registry.Get(id)
+			if !found {
+				return nil, fail("plugin_not_found", "plugin not found")
+			}
+			if !installed.Enabled {
+				return nil, fail("plugin_disabled", "plugin is disabled")
+			}
+		}
+		return viewResult(a.srv.SetAgentView(&v, "")), nil
+
+	case MethodAgentViewClear:
+		var p struct {
+			Source string `json:"source"`
+		}
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Source != "" {
+			if err := agentview.ValidSource(p.Source); err != nil {
+				return nil, fail("invalid_agent_view", "%v", err)
+			}
+		}
+		return viewResult(a.srv.SetAgentView(nil, p.Source)), nil
+
 	case MethodAgentRename:
 		var p struct {
 			Target string  `json:"target"`
@@ -1154,6 +1192,19 @@ func (a *API) target(name string) (session.PaneID, error) {
 		return 0, fail("ambiguous_target", "%v", err)
 	}
 	return id, nil
+}
+
+// viewResult is herdr's agent_view answer: whether a view is in place, and
+// whose.
+func viewResult(v *agentview.View) map[string]any {
+	out := map[string]any{"type": "agent_view", "active": v != nil}
+	if v != nil {
+		out["source"] = v.Source
+		if v.Label != "" {
+			out["label"] = v.Label
+		}
+	}
+	return out
 }
 
 // agentNameErr gives naming's refusals herdr's codes.

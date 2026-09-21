@@ -443,8 +443,9 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 - **Scroll and the current pane** (`agent.focus`, `pane.scroll`,
   `pane.current`): absent, see "Different from herdr on purpose".
   `pane.focus` and `tab.focus` are ported as requests to the clients.
-- `view.*` (saved agent views, herdr's `agent_view.rs`) and the graphics
-  API. (`command.invoke` is left out
+- The graphics API. (`agent.view.set` and `agent.view.clear` are ported:
+  herdr's filter and sort, its limits, the view kept by the server and
+  applied by each client, with its label in the list's heading.) (`command.invoke` is left out
   on purpose; see item 11.)
 - A published schema (`herdr api schema`, `schemars`), which plugins read.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,

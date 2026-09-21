@@ -21,6 +21,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"github.com/sousaakira/tend/internal/agentview"
 	"os"
 	"sync"
 	"time"
@@ -328,6 +329,9 @@ type Server struct {
 	tabBar tabBar
 	// workspaceMeta is what scripts reported about each space.
 	workspaceMeta workspaceMeta
+	// agentView is the filter and order a script set on the agent list
+	// (agent.view.set), or nil.
+	agentView *agentview.View
 
 	// retick carries a new detection interval to the loop, which cannot read
 	// the configuration under the lock while it is doing a round of work.
@@ -869,6 +873,23 @@ func (s *Server) MoveWorkspaceBlock(ids []session.WorkspaceID, before session.Wo
 		}
 	}
 	return err
+}
+
+// SetAgentView puts a view on the agent list, or with nil takes it away; a
+// source given with nil takes it away only if that source set it, as
+// herdr's agent.view.clear does. It returns the view now in place.
+func (s *Server) SetAgentView(v *agentview.View, clearSource string) *agentview.View {
+	s.mu.Lock()
+	switch {
+	case v != nil:
+		s.agentView = v
+	case clearSource == "" || (s.agentView != nil && s.agentView.Source == clearSource):
+		s.agentView = nil
+	}
+	now := s.agentView
+	s.mu.Unlock()
+	s.publish(Event{Kind: EventSessionChanged})
+	return now
 }
 
 // announce publishes ev when err is nil, and passes err on.

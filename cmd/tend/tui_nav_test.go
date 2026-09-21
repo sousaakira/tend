@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/sousaakira/tend/internal/agentview"
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/proto"
 )
@@ -50,5 +52,37 @@ func TestPriorityPutsWhatNeedsYouFirst(t *testing.T) {
 	}
 	if got[0] != 1 || got[4] != 5 {
 		t.Errorf("spaces order %v, want the session's", got)
+	}
+}
+
+// TestAViewDecidesWhichAgentsAreListed: with a view set, the list is what
+// its filter keeps, in its order, and the heading says the list is not all
+// of them. If it regresses, a plugin's view is set and nothing changes.
+func TestAViewDecidesWhichAgentsAreListed(t *testing.T) {
+	var view agentview.View
+	if err := json.Unmarshal([]byte(`{"source":"s","label":"urgent",
+		"filter":{"op":"in","field":"status","values":["blocked","working"]},
+		"sort":[{"field":"state_change_seq","order":"desc"}]}`), &view); err != nil {
+		t.Fatal(err)
+	}
+	tu := &tui{config: config.Defaults()}
+	tu.snap = proto.SessionSnapshot{
+		Workspaces: []proto.WorkspaceInfo{{ID: 1, Name: "main", Tabs: []proto.TabInfo{{ID: 1, Panes: []uint64{1, 2, 3}}}}},
+		Panes: []proto.PaneInfo{
+			{ID: 1, Agent: "claude", State: "idle", Running: true, StateSeq: 9},
+			{ID: 2, Agent: "claude", State: "working", Running: true, StateSeq: 1},
+			{ID: 3, Agent: "codex", State: "blocked", Running: true, StateSeq: 5},
+		},
+		AgentView: &view,
+	}
+	var got []uint64
+	for _, r := range tu.agentRowsLocked() {
+		got = append(got, r.Pane)
+	}
+	if len(got) != 2 || got[0] != 3 || got[1] != 2 {
+		t.Errorf("rows = %v, want the blocked then the working one", got)
+	}
+	if heading := tu.agentsSectionLocked().Rows[0].Label; heading != "agents · urgent" {
+		t.Errorf("heading = %q", heading)
 	}
 }

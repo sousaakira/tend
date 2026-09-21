@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"github.com/sousaakira/tend/internal/agentview"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
 	"sort"
@@ -352,9 +354,19 @@ func (t *tui) agentsSectionLocked() ui.SidebarSection {
 	if t.grouped {
 		grouped = "grouped"
 	}
+	heading := "agents"
+	if v := t.snap.AgentView; v != nil {
+		// Said, so a list that shows three agents of eight does not look
+		// like the whole session (herdr labels it, "filtered" by default).
+		label := v.Label
+		if label == "" {
+			label = "filtered"
+		}
+		heading += " · " + label
+	}
 	rows := []ui.SidebarRow{{
 		Kind:           ui.SidebarHeading,
-		Label:          "agents",
+		Label:          heading,
 		Trailing:       grouped,
 		Action:         ui.ActionToggleGrouped,
 		TrailingAction: ui.ActionToggleGrouped,
@@ -516,6 +528,12 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 			rows = append(rows, entries...)
 		}
 	}
+	if view := t.snap.AgentView; view != nil {
+		// A view a script set replaces the order and decides what is shown,
+		// as herdr's agent_view_override does; tab headings mean nothing in
+		// an order that is not the session's.
+		return t.applyAgentViewLocked(view, rows, info)
+	}
 	if priority {
 		// herdr's attention queue: what needs you first, and within that the
 		// most recent change first. Tab headings mean nothing in this order,
@@ -539,6 +557,60 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 		rows = sorted
 	}
 	return rows
+}
+
+// applyAgentViewLocked filters and orders the agent rows by a view. The
+// caller holds the lock.
+func (t *tui) applyAgentViewLocked(view *agentview.View, rows []ui.SidebarRow, info map[uint64]proto.PaneInfo) []ui.SidebarRow {
+	wsOrder := map[uint64]uint64{}
+	tabOrder := map[uint64]uint64{}
+	paneOrder := map[uint64]uint64{}
+	for i, w := range t.snap.Workspaces {
+		wsOrder[w.ID] = uint64(i + 1)
+		for j, tab := range w.Tabs {
+			tabOrder[tab.ID] = uint64(j + 1)
+			for k, id := range tab.Panes {
+				paneOrder[id] = uint64(k + 1)
+			}
+		}
+	}
+	ctx := agentview.Context{WorkspaceID: fmt.Sprintf("w_%d", t.workspace), TabID: fmt.Sprintf("t_%d", t.tab)}
+	type entry struct {
+		row ui.SidebarRow
+		e   agentview.Entry
+	}
+	var kept []entry
+	for _, r := range rows {
+		if r.Kind != ui.SidebarAgent {
+			continue
+		}
+		p := info[r.Pane]
+		state := displayState(p)
+		if !p.Running || state == "" {
+			state = "unknown"
+		}
+		e := agentview.Entry{
+			Status: state, WorkspaceID: fmt.Sprintf("w_%d", r.Workspace), TabID: fmt.Sprintf("t_%d", r.Tab),
+			PaneID: fmt.Sprintf("p_%d", r.Pane), Agent: p.Agent, Seen: !p.Done, StateChangeSeq: p.StateSeq,
+			WorkspaceOrder: wsOrder[r.Workspace], TabOrder: tabOrder[r.Tab], PaneOrder: paneOrder[r.Pane],
+			Attention: uint64(attentionPriority(state, p.Running)),
+			Tokens:    map[string]string{},
+		}
+		for _, tok := range p.Tokens {
+			e.Tokens[tok.Key] = tok.Value
+		}
+		if view.Filter == nil || view.Filter.Matches(ctx, e) {
+			kept = append(kept, entry{row: r, e: e})
+		}
+	}
+	if len(view.Sort) > 0 {
+		sort.SliceStable(kept, func(i, j int) bool { return view.Less(kept[i].e, kept[j].e) })
+	}
+	out := make([]ui.SidebarRow, 0, len(kept))
+	for _, k := range kept {
+		out = append(out, k.row)
+	}
+	return out
 }
 
 // displayState is the state as the list shows it: herdr's "done" for an

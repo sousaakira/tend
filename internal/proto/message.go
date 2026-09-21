@@ -3,6 +3,8 @@ package proto
 import (
 	"encoding/json"
 	"errors"
+
+	"github.com/sousaakira/tend/internal/agentview"
 )
 
 // Method names are permanent. Renaming one is a protocol break; adding one is
@@ -192,6 +194,8 @@ const (
 	FeatureWindowFocus = "window-focus"
 	// FeatureFocusRequest: the server asks clients to show a pane.
 	FeatureFocusRequest = "focus-request"
+	// FeatureAgentView: the snapshot carries agent.view.set's view.
+	FeatureAgentView = "agent-view"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
@@ -199,7 +203,7 @@ const (
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
-	FeatureFocusRequest,
+	FeatureFocusRequest, FeatureAgentView,
 }
 
 // --- session ---------------------------------------------------------------
@@ -357,7 +361,9 @@ type SessionSnapshot struct {
 	WindowTitle string `json:"window_title,omitempty"`
 	// TabBarRight is what goes at the right end of the tab bar, and
 	// TabBarSeparator what goes between two entries.
-	TabBarRight     []StatusSegment `json:"tab_bar_right,omitempty"`
+	TabBarRight []StatusSegment `json:"tab_bar_right,omitempty"`
+	// AgentView is a filter and order a script set on the agent list.
+	AgentView       *agentview.View `json:"agent_view,omitempty"`
 	TabBarSeparator string          `json:"tab_bar_separator,omitempty"`
 }
 
