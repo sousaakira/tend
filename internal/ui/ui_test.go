@@ -2277,3 +2277,23 @@ func TestLinkAtFindsWebURLsAsHerdrDoes(t *testing.T) {
 		t.Errorf("columns %d-%d, want 4-28", span.Start, span.End)
 	}
 }
+
+// TestControlCharactersInATitleAreSpaces: a pane titled with a newline in
+// it — a command of several lines, a title a program set — draws within
+// its frame. If it regresses, the newline reaches the terminal raw and the
+// frame breaks where the title is.
+func TestControlCharactersInATitleAreSpaces(t *testing.T) {
+	g := vt.NewGrid(30, 5, 0)
+	drawPane(g, Pane{ID: 2, Rect: Rect{Cols: 30, Rows: 5}, Title: "printf 'x\n'; read y\tz", Running: true}, DefaultTheme())
+	top := g.Line(0)
+	for x := 0; x < top.Len(); x++ {
+		for _, mark := range top.Combining(x) {
+			if mark < 0x20 {
+				t.Fatalf("a control character was kept on the title row at %d", x)
+			}
+		}
+	}
+	if line := gridText(g)[0]; !strings.HasSuffix(strings.TrimRight(line, " "), "┐") {
+		t.Errorf("the frame's corner is gone: %q", line)
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/sousaakira/tend/internal/config"
+	"github.com/sousaakira/tend/internal/proto"
 )
 
 // The user's own commands ([[keys.command]]), from the client's side: the key
@@ -30,7 +31,7 @@ func (t *tui) runCustomCommand(i int) error {
 	focus, zoom := t.focus, t.zoom
 	t.mu.Unlock()
 
-	pane, err := t.client.RunCommand(focus, c.Kind(), c.Command)
+	pane, err := t.client.RunCommand(focus, c.Kind(), c.Command, config.PopupSize(c.Width), config.PopupSize(c.Height))
 	if err != nil {
 		if t.reportStaleServer(err) {
 			return nil
@@ -46,6 +47,11 @@ func (t *tui) runCustomCommand(i int) error {
 		return nil
 	}
 
+	if c.Kind() == config.CommandPopup && t.serverHas(proto.FeaturePopup) {
+		// A popup floats over the tab and has the keys by itself; nothing
+		// to zoom or to come back from.
+		return t.refresh()
+	}
 	t.mu.Lock()
 	t.transient = &transientPane{pane: pane, previous: focus, previousZoom: zoom}
 	t.focus, t.zoom = pane, true

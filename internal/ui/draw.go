@@ -967,6 +967,13 @@ func writeString(dst *vt.Grid, x, y int, text string, style vt.Style, limit int)
 		return x
 	}
 	for _, r := range text {
+		if r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0 {
+			// A control character in text from outside — a title a program
+			// set, a command with a newline in it — is a space here. Kept as
+			// a mark on the cell before, it went to the terminal raw, and a
+			// newline broke the frame it was drawn in.
+			r = ' '
+		}
 		w := runewidth.RuneWidth(r)
 		if w == 0 {
 			row.AddCombining(x-1, r)
@@ -990,6 +997,12 @@ func truncate(text string, cols int) string {
 	if cols <= 0 {
 		return ""
 	}
+	text = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' ' // as writeString draws it, so the width counted is the width drawn
+		}
+		return r
+	}, text)
 	if runewidth.StringWidth(text) <= cols {
 		return text
 	}

@@ -67,6 +67,7 @@ var methodParams = map[string]any{
 	MethodPaneSplit:               PaneSplitParams{},
 	MethodPaneSwap:                PaneSwapParams{},
 	MethodPaneWaitForOutput:       PaneWaitForOutputParams{},
+	MethodPopupClose:              EmptyParams{},
 	MethodPing:                    EmptyParams{},
 	MethodPluginActionInvoke:      PluginActionInvokeParams{},
 	MethodPluginActionList:        EmptyParams{},

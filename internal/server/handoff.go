@@ -125,6 +125,12 @@ func (h *Handoff) CloseFiles() {
 // It ends in one of two ways, and the caller owes it one of them: CommitHandoff
 // once the replacement has taken over, or AbortHandoff if it did not.
 func (s *Server) BeginHandoff() (*Handoff, error) {
+	// A popup is not carried across: it is in no layout to put it back
+	// into, and herdr's handoff leaves it out too. Closed first, so its
+	// process is not left behind as a pane nobody has.
+	if p, ok := s.PopupOpen(); ok {
+		s.closePopupIf(p.Pane)
+	}
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()

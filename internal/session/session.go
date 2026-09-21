@@ -364,6 +364,14 @@ func (s *Session) CloseWorkspace(id WorkspaceID) ([]PaneID, error) {
 	return nil, fmt.Errorf("%w: %d", ErrNoSuchWorkspace, id)
 }
 
+// AllocPaneID hands out a pane identifier for a pane that is in no tab: a
+// popup, which floats over the layout rather than taking a place in it. It
+// comes from the same counter, so it never collides with a pane's.
+func (s *Session) AllocPaneID() PaneID {
+	s.nextPane++
+	return PaneID(s.nextPane)
+}
+
 func (s *Session) newPane(spec PaneSpec) *Pane {
 	s.nextPane++
 	return &Pane{

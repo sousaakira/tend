@@ -102,10 +102,12 @@ type Pane struct {
 	Title       string   `toml:"title" json:"title"`
 	Description string   `toml:"description,omitempty" json:"description,omitempty"`
 	Platforms   []string `toml:"platforms,omitempty" json:"platforms,omitempty"`
-	// Placement is "split" or "tab". herdr also has popups, which tend has no
-	// equivalent for yet.
+	// Placement is "split", "tab" or "popup", herdr's three.
 	Placement string   `toml:"placement,omitempty" json:"placement,omitempty"`
 	Command   []string `toml:"command" json:"command"`
+	// Width and Height size a popup: cells, or a percentage like "80%".
+	Width  any `toml:"width,omitempty" json:"width,omitempty"`
+	Height any `toml:"height,omitempty" json:"height,omitempty"`
 }
 
 // Events a hook may name: herdr's names (`api/schema/events.rs`), so a hook
@@ -280,16 +282,17 @@ func (m *Manifest) check() ([]string, error) {
 		switch p.Placement {
 		case "", "split":
 			m.Panes[i].Placement = "split"
-		case "tab":
-		case "popup":
-			m.Panes[i].Placement = "split"
-			warnings = append(warnings, fmt.Sprintf(
-				"pane %q asks for a popup, which tend has no equivalent for; it opens as a split", p.ID))
+		case "tab", "popup":
 		default:
 			return nil, fmt.Errorf("plugin: pane %q asks for placement %q, which is not split or tab", p.ID, p.Placement)
 		}
 		if err := checkCommand("pane "+p.ID, p.Command); err != nil {
 			return nil, err
+		}
+		// A size is a popup's, as herdr has it; on a split or a tab it would
+		// be ignored, so it is refused.
+		if (p.Width != nil || p.Height != nil) && m.Panes[i].Placement != "popup" {
+			return nil, fmt.Errorf("plugin: pane %q gives a size, which only a popup takes", p.ID)
 		}
 	}
 	return warnings, nil

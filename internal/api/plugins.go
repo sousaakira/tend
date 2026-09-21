@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"github.com/sousaakira/tend/internal/config"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/plugin"
@@ -177,6 +178,23 @@ func (a *API) openPluginPane(host *server.Plugins, name, target string) (any, bo
 	}
 
 	var beside session.PaneID
+	if pane.Placement == "popup" {
+		if target != "" {
+			if beside, err = a.pane(target); err != nil {
+				return nil, true, err
+			}
+		} else if focused := a.srv.FocusedPane(); focused != 0 {
+			beside = focused
+		} else if statuses := a.srv.Statuses(); len(statuses) > 0 {
+			beside = statuses[0].ID
+		}
+		opened, err := a.srv.OpenPopup(beside, spec, config.PopupSize(pane.Width), config.PopupSize(pane.Height))
+		if err != nil {
+			return nil, true, fail("plugin_pane_failed", "%v", err)
+		}
+		st, _ := a.srv.PaneStatus(opened)
+		return map[string]any{"type": "pane_info", "pane": a.info(st)}, true, nil
+	}
 	if target != "" {
 		if beside, err = a.pane(target); err != nil {
 			return nil, true, err

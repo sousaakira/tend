@@ -61,13 +61,12 @@ command = ["./hello.sh"]
 	if !strings.Contains(joined, "moon.rose") {
 		t.Errorf("warnings = %q, want the unknown event named", joined)
 	}
-	// A popup has no equivalent here, and silently dropping the pane would
-	// leave the user with a plugin whose button does nothing.
-	if !strings.Contains(joined, "popup") {
-		t.Errorf("warnings = %q, want the popup explained", joined)
+	// A popup is a popup now, with nothing to warn about.
+	if strings.Contains(joined, "popup") {
+		t.Errorf("warnings = %q; a popup needs no explaining any more", joined)
 	}
-	if m.Panes[0].Placement != "split" {
-		t.Errorf("placement = %q, want split", m.Panes[0].Placement)
+	if m.Panes[0].Placement != "popup" {
+		t.Errorf("placement = %q, want popup", m.Panes[0].Placement)
 	}
 
 	for _, bad := range []string{
@@ -317,5 +316,27 @@ func TestLinkHandlersAreCheckedAsHerdrChecksThem(t *testing.T) {
 	m, _, err := Load(dir)
 	if err != nil || len(m.LinkHandlers) != 1 {
 		t.Errorf("a good handler: %v %+v", err, m.LinkHandlers)
+	}
+}
+
+// TestAPluginPaneCanBeAPopup: placement popup is herdr's third, with a
+// size; a size on anything else is refused, as herdr refuses it. If it
+// regresses, a popup plugin opens as a split again.
+func TestAPluginPaneCanBeAPopup(t *testing.T) {
+	base := "id = \"p\"\nversion = \"1\"\n[[panes]]\nid = \"picker\"\ncommand = [\"true\"]\n"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ManifestName), []byte(base+"placement = \"popup\"\nwidth = 60\nheight = \"40%\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, _, err := Load(dir)
+	if err != nil || m.Panes[0].Placement != "popup" {
+		t.Fatalf("popup pane: %v %+v", err, m.Panes)
+	}
+	dir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ManifestName), []byte(base+"placement = \"split\"\nwidth = 60\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(dir); err == nil {
+		t.Error("a size on a split should be refused")
 	}
 }

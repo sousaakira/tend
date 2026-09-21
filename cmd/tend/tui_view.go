@@ -361,6 +361,12 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if pane == 0 {
 			return nil
 		}
+		t.mu.Lock()
+		blocked := t.popupRect != nil && pane != t.popupRect.Pane
+		t.mu.Unlock()
+		if blocked {
+			return nil // the popup has the input, as herdr's has
+		}
 		// Two presses in the same cell, close together, are a double click:
 		// terminals report presses and leave the counting to whoever cares.
 		if t.isDoubleClick(ev) {
@@ -761,7 +767,10 @@ func (t *tui) dropSpace() (bool, error) {
 func (t *tui) paneAt(x, y int) uint64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for _, r := range t.paneRects() {
+	rects := t.paneRects()
+	// From the end: what is drawn last is on top, and a popup is drawn last.
+	for i := len(rects) - 1; i >= 0; i-- {
+		r := rects[i]
 		if x >= r.X && x < r.X+r.Cols && y >= r.Y && y < r.Y+r.Rows {
 			return r.Pane
 		}

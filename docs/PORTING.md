@@ -490,8 +490,7 @@ The host is ported (see "Ported, and checked"). Left:
 - `tend plugin install owner/repo[/subdir] [-ref] [-yes]` and `uninstall`
   are ported (herdr's GitHub shorthand only; clone, preview, confirm, build,
   keep under tend's state directory), and so is `plugin.log.list` (`tend
-  plugin log`, the last 200 runs). Left: the marketplace, popups as a
-  placement, `min_herdr_version` enforcement (tend's builds have no
+  plugin log`, the last 200 runs). Left: the marketplace, `min_herdr_version` enforcement (tend's builds have no
   ordering to compare against). `link_handlers` are ported: a regex over
   the URL and an action of the plugin, checked as herdr checks them, the
   first match over plugins in id order run with TEND_PLUGIN_CLICKED_URL and
@@ -637,12 +636,22 @@ Keys are rebindable (see "Ported, and checked"). Left:
   `alt+x` cannot be bound: the terminal sends control bytes tend forwards to
   the pane. herdr reads key events with modifiers through crossterm.
 - herdr's remaining default keys, listed under item 7.
-- **Custom commands**: `popup` runs as a pane, since tend has no popups, and
-  `width`/`height` are read and unused. A key can only be one after the
+- **Custom commands**: `popup` is herdr's popup (below), sized by
+  `width`/`height`. A key can only be one after the
   prefix; herdr's direct chords (`alt+g` without the prefix) cannot be read,
   for the reason above. `command.invoke` over the socket is not ported: in
   herdr it takes an id from the thin client's command manifest, and a script
   on tend's socket can run the command itself.
+
+- **Popups** are ported (herdr's app/popup.rs and popup_size.rs): one at
+  a time, over the tab it was opened from, in no layout, centred, sized in
+  cells or percent (half the area by default), with agent detection off;
+  it has the keyboard and the mouse while it is up and goes when its
+  program ends, on popup.close, or when its tab closes; a handoff closes
+  it first. Opened by a user's command of type popup and a plugin pane
+  placed as a popup. Different on purpose: the prefix keys still work
+  while one is up, since tend reads them before a pane does and a popup
+  whose program hangs would otherwise have no way out but the socket.
 
 ### 12. Agent session resume — done
 

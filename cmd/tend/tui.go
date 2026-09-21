@@ -172,6 +172,11 @@ type tui struct {
 	// motionOn is whether the terminal is reporting every pointer move, as
 	// last asked by the paint goroutine, which alone touches it.
 	motionOn bool
+	// popupRect is the popup open over this tab, relative to the layout
+	// area as rects are, and popupReturn the pane focused before it, which
+	// the focus goes back to when it closes.
+	popupRect   *proto.PaneRect
+	popupReturn uint64
 	// linkHover is the link underlined under the pointer, ctrl held.
 	linkHover *ui.LinkHover
 	// worktreeOpen is herdr's open-worktree popup while it is up.
@@ -525,7 +530,20 @@ func (t *tui) refresh() error {
 
 	t.mu.Lock()
 	t.rects = layout.Panes
-	if !paneInLayout(layout.Panes, t.focus) &&
+	// A popup over this tab floats over its panes and has the focus while it
+	// is up, as herdr's has the keys; when it goes, the focus goes back.
+	t.popupRect = nil
+	if p := t.snap.Popup; p != nil && p.Tab == tab {
+		if r, ok := ui.PopupRect(ui.Rect{Cols: area.Cols, Rows: area.Rows}, p.Width, p.Height); ok {
+			t.popupRect = &proto.PaneRect{Pane: p.Pane, X: r.X, Y: r.Y, Cols: r.Cols, Rows: r.Rows}
+			if t.focus != p.Pane {
+				t.popupReturn, t.focus = t.focus, p.Pane
+			}
+		}
+	} else if t.popupReturn != 0 && !paneInLayout(layout.Panes, t.focus) && paneInLayout(layout.Panes, t.popupReturn) {
+		t.focus, t.popupReturn = t.popupReturn, 0
+	}
+	if t.popupRect == nil && !paneInLayout(layout.Panes, t.focus) &&
 		!t.returnFromTransientLocked(func(id uint64) bool { return paneInLayout(layout.Panes, id) }) {
 		t.focus = firstPane(layout.Panes)
 		// The pane being zoomed into is gone, so the zoom goes with it.
@@ -544,7 +562,13 @@ func (t *tui) refresh() error {
 	if err := t.syncPaneSizes(effective); err != nil {
 		return err
 	}
-	if err := t.subscribe(layout.Panes); err != nil {
+	subscribed := layout.Panes
+	t.mu.Lock()
+	if t.popupRect != nil {
+		subscribed = append(append([]proto.PaneRect(nil), subscribed...), *t.popupRect)
+	}
+	t.mu.Unlock()
+	if err := t.subscribe(subscribed); err != nil {
 		return err
 	}
 	_ = focus
@@ -597,19 +621,32 @@ func (t *tui) tabBarFrameLocked() ui.Frame {
 func (t *tui) paneRects() []proto.PaneRect {
 	area := t.layoutAreaLocked()
 
-	if t.zoom && t.focus != 0 {
-		return []proto.PaneRect{{
-			Pane: t.focus, X: area.X, Y: area.Y, Cols: area.Cols, Rows: area.Rows,
-		}}
+	var out []proto.PaneRect
+	zoomed := t.focus
+	if t.popupRect != nil {
+		zoomed = t.popupReturn // the popup is over the zoomed pane, not it
 	}
-
-	// The layout comes back relative to the area, so it is shifted here rather
-	// than the server knowing about a tab bar or an agent list.
-	out := make([]proto.PaneRect, len(t.rects))
-	for i, r := range t.rects {
-		out[i] = r
-		out[i].X += area.X
-		out[i].Y += area.Y
+	if t.zoom && zoomed != 0 {
+		out = []proto.PaneRect{{
+			Pane: zoomed, X: area.X, Y: area.Y, Cols: area.Cols, Rows: area.Rows,
+		}}
+	} else {
+		// The layout comes back relative to the area, so it is shifted here
+		// rather than the server knowing about a tab bar or an agent list.
+		out = make([]proto.PaneRect, len(t.rects), len(t.rects)+1)
+		for i, r := range t.rects {
+			out[i] = r
+			out[i].X += area.X
+			out[i].Y += area.Y
+		}
+	}
+	// The popup last, so it is drawn over the panes and found first by a
+	// point (paneAt looks from the end).
+	if p := t.popupRect; p != nil {
+		r := *p
+		r.X += area.X
+		r.Y += area.Y
+		out = append(out, r)
 	}
 	return out
 }

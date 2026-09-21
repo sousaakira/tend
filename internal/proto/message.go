@@ -207,6 +207,8 @@ const (
 	// FeatureServerShell: a pane asked for with no command runs the server's
 	// shell, so a client on another machine need not name one.
 	FeatureServerShell = "server-shell"
+	// FeaturePopup is a server that opens popups and says so in the snapshot.
+	FeaturePopup = "popup"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
@@ -214,7 +216,7 @@ const (
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
-	FeatureFocusRequest, FeatureAgentView, FeatureServerShell,
+	FeatureFocusRequest, FeatureAgentView, FeatureServerShell, FeaturePopup,
 }
 
 // --- session ---------------------------------------------------------------
@@ -360,6 +362,8 @@ type PaneTextResult struct {
 
 // SessionSnapshot is the whole session as a client sees it.
 type SessionSnapshot struct {
+	// Popup is the popup open over a tab, if any.
+	Popup           *PopupInfo      `json:"popup,omitempty"`
 	Workspaces      []WorkspaceInfo `json:"workspaces"`
 	ActiveWorkspace uint64          `json:"active_workspace,omitempty"`
 	Panes           []PaneInfo      `json:"panes"`
@@ -476,6 +480,16 @@ type PaneDockParams struct {
 	Pane  PaneSpec `json:"pane"`
 }
 
+// PopupInfo is a popup: its pane, the tab it floats over, and its size as
+// herdr gives it — cells, or a percentage of the area, empty for half.
+type PopupInfo struct {
+	Pane   uint64 `json:"pane"`
+	Tab    uint64 `json:"tab"`
+	Width  string `json:"width,omitempty"`
+	Height string `json:"height,omitempty"`
+	Title  string `json:"title,omitempty"`
+}
+
 // PaneLinkParams is a URL clicked in a pane.
 type PaneLinkParams struct {
 	Pane uint64 `json:"pane"`
@@ -570,6 +584,9 @@ type CommandRunParams struct {
 	Pane    uint64 `json:"pane,omitempty"`
 	Type    string `json:"type"`
 	Command string `json:"command"`
+	// Width and Height size a popup: cells, or a percentage like "80%".
+	Width  string `json:"width,omitempty"`
+	Height string `json:"height,omitempty"`
 }
 
 // CommandRunResult names the pane a command opened, when it opened one.

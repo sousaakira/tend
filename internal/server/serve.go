@@ -552,7 +552,7 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		if err := decodeParams(req.Params, &p); err != nil {
 			return nil, err
 		}
-		pane, err := c.srv.RunCommand(session.PaneID(p.Pane), p.Type, p.Command)
+		pane, err := c.srv.RunCommand(session.PaneID(p.Pane), p.Type, p.Command, p.Width, p.Height)
 		return proto.CommandRunResult{Pane: uint64(pane)}, err
 
 	case proto.MethodPaneRename:
@@ -740,6 +740,9 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 	snap.TabBarRight, snap.TabBarSeparator = s.tabBarSnapshot()
 	s.mu.Lock()
 	snap.WindowTitle = s.windowTitle
+	if p, ok := s.popupLocked(); ok {
+		snap.Popup = &proto.PopupInfo{Pane: uint64(p.Pane), Tab: uint64(p.Tab), Width: p.Width, Height: p.Height, Title: p.Title}
+	}
 	snap.AgentView = s.agentView
 	sess := s.session
 	if active := sess.ActiveWorkspace(); active != nil {
@@ -780,6 +783,11 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 			info.Tabs = append(info.Tabs, ti)
 		}
 		snap.Workspaces = append(snap.Workspaces, info)
+	}
+	// The popup's pane is in no tab, and listed all the same: a client
+	// draws it, and must know it is running and what it asked of the mouse.
+	if p := s.popup; p != nil {
+		snap.Panes = append(snap.Panes, proto.PaneInfo{ID: uint64(p.pane), Title: p.title, Named: p.title != ""})
 	}
 	runtimes := make(map[session.PaneID]*paneRuntime, len(s.runtimes))
 	for id, rt := range s.runtimes {

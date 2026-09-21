@@ -24,7 +24,7 @@ var ErrUnknownCommandType = errors.New("server: unknown command type")
 // a pane of its own that closes when it is done (pane, and popup, which tend
 // runs as a pane), or as an installed plugin's action. It returns the pane it
 // opened, if it opened one.
-func (s *Server) RunCommand(from session.PaneID, kind, command string) (session.PaneID, error) {
+func (s *Server) RunCommand(from session.PaneID, kind, command string, size ...string) (session.PaneID, error) {
 	if strings.TrimSpace(command) == "" {
 		return 0, errors.New("server: the command is empty")
 	}
@@ -32,7 +32,24 @@ func (s *Server) RunCommand(from session.PaneID, kind, command string) (session.
 	switch kind {
 	case "", config.CommandShell:
 		return 0, s.runDetached(command, env, dir)
-	case config.CommandPane, config.CommandPopup:
+	case config.CommandPopup:
+		if from == 0 {
+			return 0, fmt.Errorf("%w: no pane to open it over", session.ErrNoSuchPane)
+		}
+		var width, height string
+		if len(size) == 2 {
+			width, height = size[0], size[1]
+		}
+		// A popup over the pane's tab, herdr's spawn_custom_popup_command.
+		// Titled by the command's first line: the frame is one row.
+		title, _, _ := strings.Cut(strings.TrimSpace(command), "\n")
+		return s.OpenPopup(from, PaneSpec{
+			Command: []string{"/bin/sh", "-c", command},
+			Env:     env,
+			Dir:     dir,
+			Title:   title,
+		}, width, height)
+	case config.CommandPane:
 		if from == 0 {
 			return 0, fmt.Errorf("%w: no pane to open it beside", session.ErrNoSuchPane)
 		}

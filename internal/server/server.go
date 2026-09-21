@@ -257,6 +257,10 @@ type PaneSpec struct {
 
 	// Size is the pane's initial terminal size. Zero uses the server default.
 	Size pty.Size
+
+	// NoDetect runs no agent detection in the pane: a popup, which herdr
+	// starts with detection disabled.
+	NoDetect bool
 }
 
 // PaneStatus is what a client needs to show about a pane.
@@ -318,6 +322,9 @@ type Server struct {
 	// a snapshot identical to it is not written again.
 	lastSaved []byte
 
+	// popup is the one popup open, if any: a pane floating over the tab it
+	// was opened from, in no layout.
+	popup *popupState
 	// windowTitle is a title a script set over the API, which replaces the
 	// configured template in every client until it is cleared (herdr's
 	// client.window_title.set). A fact about the session, not about one
@@ -604,6 +611,11 @@ func (s *Server) DockPane(beside session.PaneID, share float64, right bool, spec
 
 // ClosePane stops a pane's process and removes it from the session.
 func (s *Server) ClosePane(id session.PaneID) error {
+	if s.closePopupIf(id) {
+		return nil
+	}
+	// The last pane of a tab takes the tab, and a popup of that tab with it.
+	defer s.reconcilePopup()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -630,6 +642,7 @@ func (s *Server) ClosePane(id session.PaneID) error {
 
 // CloseTab stops every pane in a tab and removes it.
 func (s *Server) CloseTab(id session.TabID) error {
+	defer s.reconcilePopup()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -687,6 +700,7 @@ func (s *Server) GroupWorkspace(id session.WorkspaceID, group string) error {
 
 // CloseWorkspace closes a workspace and stops every pane in it.
 func (s *Server) CloseWorkspace(id session.WorkspaceID) error {
+	defer s.reconcilePopup()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -735,6 +749,9 @@ func (s *Server) startLocked(id session.PaneID, spec PaneSpec) error {
 	manifest, err := agent.ResolveManifest(s.catalog, spec.Agent, spec.Command[0])
 	if err != nil {
 		return err
+	}
+	if spec.NoDetect {
+		manifest = nil
 	}
 
 	size := spec.Size

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -33,10 +34,28 @@ type CommandKey struct {
 	Command     string `toml:"command"`
 	Type        string `toml:"type"`
 	Description string `toml:"description,omitempty"`
-	// Width and Height size a popup in herdr. They are read so a herdr config
-	// loads, and unused: tend runs a popup as a pane.
+	// Width and Height size a popup, as herdr's do: a number of cells, or a
+	// percentage like "80%". Unset is half the area.
 	Width  any `toml:"width,omitempty"`
 	Height any `toml:"height,omitempty"`
+}
+
+// PopupSize is a popup width or height as written in the settings — a
+// number of cells or a percentage — as the text the server reads.
+func PopupSize(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case int:
+		return strconv.Itoa(x)
+	case float64:
+		return strconv.Itoa(int(x))
+	case string:
+		return x
+	}
+	return fmt.Sprint(v)
 }
 
 // Kind is the entry's type, with herdr's default.

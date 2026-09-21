@@ -96,7 +96,9 @@ const (
 	MethodTabMove                 = "tab.move"
 	MethodWorkspaceMove           = "workspace.move"
 
-	MethodServerStop    = "server.stop"
+	MethodServerStop = "server.stop"
+	// MethodPopupClose closes the popup open, herdr's popup.close.
+	MethodPopupClose    = "popup.close"
 	MethodServerHandoff = "server.live_handoff"
 )
 
@@ -949,6 +951,12 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		if err != nil {
 			return nil, moveErr(err)
+		}
+		return ok2(), nil
+
+	case MethodPopupClose:
+		if err := a.srv.ClosePopup(); err != nil {
+			return nil, fail("popup_not_open", "no popup is open")
 		}
 		return ok2(), nil
 

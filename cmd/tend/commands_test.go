@@ -64,3 +64,58 @@ func waitForFileContent(t *testing.T, path, want string) {
 	}
 	t.Fatalf("%s never said %q", path, want)
 }
+
+// TestAPopupCommandFloatsOverTheTabAndHasTheKeys is herdr's popup: a
+// command of type popup runs in a box over the tab, of the size asked for,
+// with the panes still there under it; what is typed goes to it; when its
+// program ends it goes, and the keys are the shell's again. If it
+// regresses, a popup command takes a pane of the layout, or leaves the
+// keyboard with nowhere to go.
+func TestAPopupCommandFloatsOverTheTabAndHasTheKeys(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(configPath, []byte(`[[keys.command]]
+key = "prefix+Y"
+type = "popup"
+width = 40
+height = "50%"
+command = "printf 'IN-THE-POPUP\n'; read x; printf 'got-%s\n' \"$x\"; sleep 1"
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, configPath)
+
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "printf 'BEFORE-THE-POPUP\\n'\n", "the shell's output", func(s string) bool {
+		return strings.Count(s, "BEFORE-THE-POPUP") >= 2
+	})
+
+	a.send(t, "\x02Y")
+	a.waitForScreen(t, "the popup over the pane", func(s string) bool {
+		return strings.Contains(s, "IN-THE-POPUP") && strings.Contains(s, "BEFORE-THE-POPUP")
+	})
+	if strings.Contains(a.text(), "exited") {
+		t.Errorf("a running popup is not exited:\n%s", a.text())
+	}
+	// 40 columns wide, framed, drawn inside the pane that is still there.
+	top := []rune(a.lines()[a.lineContaining(t, "┌ 2 ")-1])
+	start := -1
+	for i, r := range top {
+		if r == '┌' && i > 30 {
+			start = i
+			break
+		}
+	}
+	if start < 0 || start+39 >= len(top) || top[start+39] != '┐' {
+		t.Errorf("the popup should be a 40-wide box:\n%s", a.text())
+	}
+
+	a.send(t, "hello\r")
+	a.waitForScreen(t, "the popup to answer", func(s string) bool { return strings.Contains(s, "got-hello") })
+	a.waitForScreen(t, "the popup to go", func(s string) bool {
+		return !strings.Contains(s, "IN-THE-POPUP") && strings.Count(s, "┌") == 1
+	})
+	a.sendUntil(t, "printf 'AFTER-THE-POPUP\\n'\n", "the shell to have the keys again", func(s string) bool {
+		return strings.Count(s, "AFTER-THE-POPUP") >= 2
+	})
+}
