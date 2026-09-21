@@ -274,6 +274,7 @@ var helpLines = []string{
 	"  S       stage everything",
 	"  x x     discard the change",
 	"  c       commit what is staged",
+	"  A       ✧ draft the message (claude)",
 	"search (2, ctrl+f)",
 	"  type    search as you type",
 	"  tab     include, exclude globs",
@@ -329,7 +330,7 @@ func (m *Model) drawFooter(g *vt.Grid) (int, int, bool) {
 	hint := "? keys  / find"
 	switch {
 	case m.view == ViewChanges && m.git.Top != "":
-		hint = "s stage  c commit  ? keys"
+		hint = "s stage  c commit  A ✧  ? keys"
 	case m.view == ViewSearch && m.csearch.editing:
 		hint = "enter results  tab next field"
 	case m.view == ViewSearch:

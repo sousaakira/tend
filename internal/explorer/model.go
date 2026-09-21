@@ -481,6 +481,8 @@ func (m *Model) changesKey(k Key, pending string) {
 			m.say("discarded "+row.change.Path, false)
 		}
 		m.Refresh()
+	case "A":
+		m.startSuggest()
 	case "c":
 		if m.changesStaged == 0 {
 			m.say("nothing staged: s stages a file, S everything", true)
@@ -513,6 +515,10 @@ func (m *Model) commitKey(k Key) {
 		m.input = dropLastRune(m.input)
 	case "ctrl+w":
 		m.input = dropLastWord(m.input)
+	case "alt+a":
+		// Drafted here too, as herdr-sidebar's ✧ sits in the commit box.
+		m.mode = modeList
+		m.startSuggest()
 	default:
 		if k.Rune != 0 {
 			m.input += string(k.Rune)

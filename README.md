@@ -82,7 +82,9 @@ there too (`tend files -still` stays put). The line under its header is the
 branch: click it (or `B`) to switch branch, or to make a local one from a
 remote; `⟳` (or `P`) syncs — pull when behind, fast-forward only, push when
 ahead, publish a branch with no upstream to origin — in the background, and
-never asks for a password on the panel. Enter
+never asks for a password on the panel. In the changes view, `A` drafts the
+commit message with the local `claude` CLI (haiku), or from the file names
+without it, and puts it in the commit box to read before Enter. Enter
 opens a file in `$EDITOR` in a tab of its own. It runs on the machine the
 session is on, so over `--remote` it shows the server's project. `ctrl+b f`
 again goes to it, and once more puts it away.

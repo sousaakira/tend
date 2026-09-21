@@ -83,9 +83,11 @@ func (m *Model) gitBarClick(x int) {
 
 // --- work done away from the loop ----------------------------------------------
 
-// Job is something slow the panel asked for — a push, a pull — run away
-// from the loop so the panel keeps drawing, with what to say when it ends.
-type Job func() (string, error)
+// Job is something slow the panel asked for — a push, a pull, a drafted
+// commit message — run away from the loop so the panel keeps drawing. What
+// it returns is applied to the model back on the loop, the only goroutine
+// that touches it.
+type Job func() func(*Model)
 
 // JobDue hands the loop the job waiting to run, if any.
 func (m *Model) JobDue() (Job, bool) {
@@ -98,14 +100,11 @@ func (m *Model) JobDue() (Job, bool) {
 }
 
 // ApplyJob takes a job's answer.
-func (m *Model) ApplyJob(msg string, err error) {
+func (m *Model) ApplyJob(apply func(*Model)) {
 	m.jobRunning = false
-	if err != nil {
-		m.fail(err)
-	} else if msg != "" {
-		m.say(msg, false)
+	if apply != nil {
+		apply(m)
 	}
-	m.Refresh()
 }
 
 // runJobNow runs the waiting job at once: what a test does in place of the
@@ -127,7 +126,17 @@ func (m *Model) startSync() {
 		return
 	}
 	st, g := m.status, m.git
-	m.job = func() (string, error) { return g.Sync(st) }
+	m.job = func() func(*Model) {
+		msg, err := g.Sync(st)
+		return func(m *Model) {
+			if err != nil {
+				m.fail(err)
+			} else {
+				m.say(msg, false)
+			}
+			m.Refresh()
+		}
+	}
 	m.say("syncing…", false)
 }
 
