@@ -47,3 +47,53 @@ func TestSwappingPanesMovesTheProgramNotTheScreen(t *testing.T) {
 		return leftOf(s, "RIGHT-PANE")
 	})
 }
+
+// TestNavigationKeysReachPanesAndAgents covers the keys that move focus
+// without the mouse: prefix+tab through the tab's panes, prefix+; back to the
+// last one, and prefix+< / > through the agents wherever they are. If they
+// regress, reaching the agent that stopped means the sidebar or nothing.
+func TestNavigationKeysReachPanesAndAgents(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	// Two panes, the second focused.
+	a.send(t, "\x02|")
+	a.waitForScreen(t, "two panes", func(s string) bool { return strings.Count(s, "┌") == 2 })
+	a.sendUntil(t, "printf 'IN-SECOND\\n'\n", "the second pane", func(s string) bool {
+		return strings.Contains(s, "IN-SECOND")
+	})
+
+	// prefix+tab cycles to the first, and typing lands there.
+	a.send(t, "\x02\t")
+	a.sendUntil(t, "printf 'IN-FIRST\\n'\n", "the first pane", func(s string) bool {
+		return strings.Contains(s, "IN-FIRST")
+	})
+
+	// prefix+; goes back to where focus was before — the right-hand pane,
+	// which is the side of the divider the mark has to land on.
+	divider := a.dividerColumn()
+	if divider < 0 {
+		t.Fatalf("no divider to tell the panes apart:\n%s", a.text())
+	}
+	a.send(t, "\x02;")
+	a.sendUntil(t, "printf 'BACK-AGAIN\\n'\n", "the pane focused before", func(s string) bool {
+		for _, line := range strings.Split(s, "\n") {
+			if i := strings.Index(line, "BACK-AGAIN"); i > divider {
+				return true
+			}
+		}
+		return false
+	})
+
+	// An agent, reached from anywhere with prefix+>.
+	prog := fakeAgentBin(t, "claude", "printf 'THE-AGENT-IS-HERE\\n'; cat")
+	a.sendUntil(t, prog+"\n", "the agent", func(s string) bool {
+		return strings.Contains(s, "THE-AGENT-IS-HERE")
+	})
+	a.send(t, "\x02\t") // away from it
+	a.waitForScreen(t, "focus to move", func(string) bool { return true })
+	a.send(t, "\x02>")
+	a.sendUntil(t, "to-the-agent\n", "the agent's pane to take the typing", func(s string) bool {
+		return strings.Contains(s, "to-the-agent")
+	})
+}

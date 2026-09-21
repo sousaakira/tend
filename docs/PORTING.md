@@ -152,6 +152,12 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   `ctrl+b R`. A new `session-changed` event (feature `session-changed`) tells
   other clients about swaps, moves, renames and regrouping, which before this
   a second client did not see until something unrelated made it look again.
+- **Navigation keys**: `ctrl+b tab` / `shift+tab` cycle the tab's panes
+  (herdr's `CyclePaneNext|Previous`), `ctrl+b ;` goes back to the pane focused
+  before, `ctrl+b < >` step through the agents in sidebar order wherever they
+  are, and `ctrl+b w` opens the space picker beside the `g` tend already had.
+  herdr leaves `LastPane`, `PreviousAgent` and `NextAgent` unbound by default;
+  `;`, `<` and `>` are tend's choice.
 - **Settings file** with validation, `tend config`.
 - **Agent hooks**: `tend integration install|uninstall|status`, the automation
   socket methods `integration.*` and `pane.report_*`, and Unix assets for every
@@ -311,14 +317,15 @@ Ported (see "Ported, and checked"). Left:
   This item moved the three keys it touched to herdr's (`H J K L`, `r`); the
   rest is a decision about the owner's muscle memory, not a port.
 
-### 8. Navigation extras — medium
+### 8. Navigation extras — done, except what needs multiple machines
 
-- herdr: `WorkspacePicker`, `OpenNavigator`
-  (`client/shell/workspace_navigation.rs`, `aggregate_navigation.rs`),
-  `LastPane`, `CyclePaneNext|Previous`, `EnterResizeMode`, `PreviousAgent`,
-  `NextAgent`, `FocusAgent`. The full list of key actions is the
-  `KeybindAction` enum in `input/keybindings.rs`.
-- tend today: `ctrl+b g` walks the sidebar; focus by direction and `o`.
+Ported (see "Ported, and checked"). Left:
+
+- `OpenNavigator` / `aggregate_navigation.rs` (439 lines): one navigator over
+  several servers at once. herdr's client attaches to many endpoints; tend's
+  attaches to one, so this needs multi-endpoint first.
+- `FocusAgent(index)`: jump to the nth agent. herdr binds no key to it either.
+- Filtering by typing in the picker; tend's walks the list.
 
 ### 9. Notifications and sound — medium
 

@@ -54,6 +54,16 @@ const (
 	// CommandResizeMode enters resize mode, where h/j/k/l move the focused
 	// pane's edges until escape — herdr's prefix+r.
 	CommandResizeMode
+	// CommandFocusPrev goes back through the tab's panes, herdr's
+	// prefix+shift+tab; CommandFocusNext is also on prefix+tab.
+	CommandFocusPrev
+	// CommandLastPane goes back to the pane that was focused before this one,
+	// wherever it is.
+	CommandLastPane
+	// CommandPrevAgent and CommandNextAgent step through the agents in the
+	// order the sidebar lists them.
+	CommandPrevAgent
+	CommandNextAgent
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
@@ -129,6 +139,14 @@ func (c Command) String() string {
 		return "swap-down"
 	case CommandResizeMode:
 		return "resize-mode"
+	case CommandFocusPrev:
+		return "focus-prev"
+	case CommandLastPane:
+		return "last-pane"
+	case CommandPrevAgent:
+		return "prev-agent"
+	case CommandNextAgent:
+		return "next-agent"
 	case CommandLiteralPrefix:
 		return "literal-prefix"
 	default:
@@ -149,7 +167,10 @@ var Keys = []struct {
 	{"l →", CommandFocusRight, "focus right"},
 	{"k ↑", CommandFocusUp, "focus up"},
 	{"j ↓", CommandFocusDown, "focus down"},
-	{"o", CommandFocusNext, "focus next"},
+	{"o tab", CommandFocusNext, "focus next"},
+	{"⇧tab", CommandFocusPrev, "focus previous"},
+	{";", CommandLastPane, "last pane"},
+	{"< >", CommandNextAgent, "previous / next agent"},
 	{"x", CommandClosePane, "close pane"},
 	{"z", CommandZoom, "zoom pane"},
 	{"[", CommandScroll, "copy mode"},
@@ -162,7 +183,7 @@ var Keys = []struct {
 	{"s", CommandNewSpace, "new space"},
 	{"( )", CommandNextSpace, "switch space"},
 	{"a", CommandToggleAgents, "show agents"},
-	{"g", CommandNavigate, "pick an agent"},
+	{"w g", CommandNavigate, "pick a space or agent"},
 	{"m", CommandMenu, "menu"},
 	{",", CommandRenameTab, "rename tab"},
 	{".", CommandRenameSpace, "rename space"},
@@ -328,8 +349,14 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandFocusUp}
 	case 'j':
 		return Result{Command: CommandFocusDown}
-	case 'o':
+	case 'o', '\t':
 		return Result{Command: CommandFocusNext}
+	case ';':
+		return Result{Command: CommandLastPane}
+	case '<':
+		return Result{Command: CommandPrevAgent}
+	case '>':
+		return Result{Command: CommandNextAgent}
 	case 'x':
 		return Result{Command: CommandClosePane}
 	case 'z':
@@ -357,7 +384,9 @@ func (in *Input) command(b byte) Result {
 		return Result{Command: CommandPrevSpace}
 	case 'a':
 		return Result{Command: CommandToggleAgents}
-	case 'g':
+	case 'g', 'w':
+		// w is herdr's workspace picker, which is this: moving through the
+		// spaces with a preview. g stays, for hands that learned it here.
 		return Result{Command: CommandNavigate}
 	case 'm':
 		return Result{Command: CommandMenu}
@@ -398,6 +427,8 @@ func arrowCommand(final byte) Command {
 		return CommandFocusRight
 	case 'D':
 		return CommandFocusLeft
+	case 'Z':
+		return CommandFocusPrev // shift+tab arrives as ESC [ Z
 	}
 	return CommandNone
 }

@@ -199,6 +199,38 @@ func (t *tui) selectTab(n int) error {
 	return t.refresh()
 }
 
+// agentStep is the agent before or after the focused pane, in the order the
+// sidebar lists them. It wraps, and from a pane that is not an agent it starts
+// at either end — which is what herdr does, and what makes the key useful from
+// a shell pane.
+func (t *tui) agentStep(focus uint64, step int) uint64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var agents []uint64
+	for _, row := range t.agentRowsLocked() {
+		if row.Kind == ui.SidebarAgent {
+			agents = append(agents, row.Pane)
+		}
+	}
+	if len(agents) == 0 {
+		return 0
+	}
+	current := -1
+	for i, id := range agents {
+		if id == focus {
+			current = i
+		}
+	}
+	if current < 0 {
+		if step < 0 {
+			return agents[len(agents)-1]
+		}
+		return agents[0]
+	}
+	return agents[(current+step+len(agents))%len(agents)]
+}
+
 // jumpToPane shows whichever workspace and tab hold a pane, and focuses it.
 //
 // This is what the agent list is for: the point of seeing every agent at once

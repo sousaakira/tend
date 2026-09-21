@@ -173,6 +173,11 @@ type tui struct {
 	scrollOffset int
 	scrollDepth  int
 	scrollScreen *vt.Screen
+	// lastFocus is the pane that was focused before this one, for prefix+;.
+	// It is noticed while drawing rather than set at every place focus
+	// changes: there are eight of those, and the ninth would forget.
+	lastFocus uint64
+	seenFocus uint64
 	// resizing is resize mode: h/j/k/l move the focused pane's edges until
 	// escape, without the prefix before every press.
 	resizing bool
@@ -722,6 +727,13 @@ func markSelected(rows []ui.SidebarRow, nav navTarget) {
 
 // buildFrame assembles what to draw. The caller holds the lock.
 func (t *tui) buildFrame() ui.Frame {
+	// Noticed here rather than at every place focus is set: there are eight
+	// of those and the ninth would forget. The caller holds the lock, which
+	// is why this does not take it.
+	if t.focus != t.seenFocus {
+		t.lastFocus, t.seenFocus = t.seenFocus, t.focus
+	}
+
 	frame := ui.Frame{
 		Session:   t.sessionLabel(),
 		Message:   t.message,
@@ -1083,8 +1095,33 @@ func (t *tui) command(action ui.Action) error {
 		return nil
 
 	case ui.CommandFocusNext:
-		t.focusNext(rects, focus)
+		t.focusStep(rects, focus, 1)
 		return nil
+
+	case ui.CommandFocusPrev:
+		t.focusStep(rects, focus, -1)
+		return nil
+
+	case ui.CommandLastPane:
+		t.mu.Lock()
+		last := t.lastFocus
+		t.mu.Unlock()
+		if last == 0 || last == focus {
+			return nil
+		}
+		return t.jumpToPane(last)
+
+	case ui.CommandPrevAgent, ui.CommandNextAgent:
+		step := 1
+		if cmd == ui.CommandPrevAgent {
+			step = -1
+		}
+		next := t.agentStep(focus, step)
+		if next == 0 {
+			t.setMessage("no agents in this session", false)
+			return nil
+		}
+		return t.jumpToPane(next)
 
 	case ui.CommandScroll:
 		// prefix+[ is copy mode, as in tmux and herdr. It used to be a plain
@@ -1245,14 +1282,15 @@ func (t *tui) moveFocus(side session.Side, rects []proto.PaneRect, focus uint64)
 	t.wakeUp()
 }
 
-func (t *tui) focusNext(rects []proto.PaneRect, focus uint64) {
+// focusStep cycles through the tab's panes, forwards or back.
+func (t *tui) focusStep(rects []proto.PaneRect, focus uint64, step int) {
 	if len(rects) == 0 {
 		return
 	}
 	next := rects[0].Pane
 	for i, r := range rects {
 		if r.Pane == focus {
-			next = rects[(i+1)%len(rects)].Pane
+			next = rects[(i+step+len(rects))%len(rects)].Pane
 			break
 		}
 	}
