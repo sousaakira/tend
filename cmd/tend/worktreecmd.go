@@ -36,15 +36,19 @@ func runWorktree(args []string) error {
 	label := fs.String("label", "", "the space's name (default: the branch)")
 	force := fs.Bool("force", false, "remove even with changes that would be lost")
 	asJSON := fs.Bool("json", false, "print the raw result")
+	trust := fs.Bool("trust", false, "trust a repository owned by another user, for this command only (git's safe.directory)")
 	rest = hoistFlags(rest, map[string]bool{
 		"space": true, "base": true, "path": true, "label": true,
-		"force": false, "json": false, "s": true, "session": true,
+		"force": false, "json": false, "trust": false, "s": true, "session": true,
 	})
 	if err := fs.Parse(rest); err != nil {
 		return err
 	}
 
 	source := map[string]any{}
+	if *trust {
+		source["trust_repository"] = true
+	}
 	if *space != "" {
 		source["workspace_id"] = *space
 	} else if wd, err := os.Getwd(); err == nil {
@@ -94,7 +98,7 @@ func runWorktree(args []string) error {
 			return errors.New("usage: tend worktree remove <space>")
 		}
 		result, err = apiCall(*name, api.MethodWorktreeRemove, map[string]any{
-			"workspace_id": fs.Arg(0), "force": *force,
+			"workspace_id": fs.Arg(0), "force": *force, "trust_repository": *trust,
 		}, true)
 	default:
 		usage(os.Stderr)

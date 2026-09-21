@@ -495,7 +495,10 @@ Ported (see "Ported, and checked"). Left:
   group, tabs, each pane a shell in its directory — rather than herdr's
   restore of the very runtimes it paused: tend has ended those programs by
   then.
-- `trust_repository` (`safe.directory`) for repositories owned by another user.
+- `trust_repository` is ported (`-trust` on `tend worktree`, the parameter
+  on `worktree.*`): git runs with `-c safe.directory=<repo>` for that call
+  only. Not verified against a repository actually owned by another user,
+  which a test cannot make without root.
 
 ### 7. Moving and swapping — done over the API; the mouse and a few keys are not
 

@@ -61,6 +61,11 @@ type Repo struct {
 	// Checkout is the checkout the directory was in, which may be a linked
 	// worktree rather than the main one.
 	Checkout string `json:"source_checkout_path"`
+	// Trusted runs git with the repository named safe for this call only,
+	// herdr's trust_repository: a checkout owned by another user is refused
+	// by git ("dubious ownership") otherwise. Nothing is written to the
+	// user's git configuration.
+	Trusted bool `json:"-"`
 }
 
 // Find locates the repository a directory belongs to.
@@ -69,7 +74,12 @@ type Repo struct {
 // directory — the one .git all worktrees share — is what leads back to the
 // main checkout. Asking git for both is how a space opened in a worktree finds
 // its siblings.
-func Find(dir string) (Repo, error) {
+func Find(dir string) (Repo, error) { return FindTrusted(dir, false) }
+
+// FindTrusted is Find with the repository trusted for the call, as herdr's
+// trust_repository does.
+func FindTrusted(dir string, trust bool) (Repo, error) {
+	git := func(dir string, args ...string) (string, error) { return gitTrust(dir, trust, args...) }
 	top, err := git(dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return Repo{}, fmt.Errorf("%w: %s", ErrNotARepository, dir)
@@ -84,12 +94,12 @@ func Find(dir string) (Repo, error) {
 		// unusual. The checkout itself is the best name there is.
 		root = top
 	}
-	return Repo{Root: root, Name: filepath.Base(root), Checkout: top}, nil
+	return Repo{Root: root, Name: filepath.Base(root), Checkout: top, Trusted: trust}, nil
 }
 
 // List returns every worktree of a repository.
 func List(repo Repo) ([]Worktree, error) {
-	out, err := git(repo.Root, "worktree", "list", "--porcelain")
+	out, err := gitTrust(repo.Root, repo.Trusted, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
@@ -150,13 +160,13 @@ func Add(repo Repo, path, branch, base string) error {
 		return err
 	}
 	if branchExists(repo, branch) {
-		_, err := git(repo.Root, "worktree", "add", path, branch)
+		_, err := gitTrust(repo.Root, repo.Trusted, "worktree", "add", path, branch)
 		return err
 	}
 	if base == "" {
 		base = "HEAD"
 	}
-	_, err := git(repo.Root, "worktree", "add", "-b", branch, path, base)
+	_, err := gitTrust(repo.Root, repo.Trusted, "worktree", "add", "-b", branch, path, base)
 	return err
 }
 
@@ -169,7 +179,7 @@ func Remove(repo Repo, path string, force bool) error {
 		args = append(args, "--force")
 	}
 	args = append(args, path)
-	_, err := git(repo.Root, args...)
+	_, err := gitTrust(repo.Root, repo.Trusted, args...)
 	if err != nil && isDirty(err.Error()) {
 		return fmt.Errorf("%w: %s", ErrDirty, path)
 	}
@@ -185,7 +195,7 @@ func isDirty(message string) bool {
 }
 
 func branchExists(repo Repo, branch string) bool {
-	_, err := git(repo.Root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	_, err := gitTrust(repo.Root, repo.Trusted, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
 	return err == nil
 }
 
@@ -260,10 +270,18 @@ func Same(a, b string) bool { return canonical(a) == canonical(b) }
 // Nothing git runs may wait for a person: a hook or a credential helper that
 // prompts would hang the server behind it. GIT_TERMINAL_PROMPT=0 is git's own
 // switch for that, and stdin is closed for anything else that tries.
-func git(dir string, args ...string) (string, error) {
+func git(dir string, args ...string) (string, error) { return gitTrust(dir, false, args...) }
+
+// gitTrust is git, with dir named a safe directory for this one command when
+// trust is set.
+func gitTrust(dir string, trust bool, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	prefix := []string{"-C", dir}
+	if trust {
+		prefix = []string{"-c", "safe.directory=" + dir, "-C", dir}
+	}
+	cmd := exec.CommandContext(ctx, "git", append(prefix, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	cmd.Stdin = nil
 	var stdout, stderr bytes.Buffer

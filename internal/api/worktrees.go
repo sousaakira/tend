@@ -42,11 +42,14 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		var p struct {
 			WorkspaceID string `json:"workspace_id"`
 			Cwd         string `json:"cwd"`
+			// Trust names the repository safe for this call, herdr's
+			// trust_repository, for one owned by another user.
+			Trust bool `json:"trust_repository"`
 		}
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
-		repo, err := a.worktreeRepo(p.WorkspaceID, p.Cwd)
+		repo, err := a.worktreeRepo(p.WorkspaceID, p.Cwd, p.Trust)
 		if err != nil {
 			return nil, true, err
 		}
@@ -64,15 +67,18 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		var p struct {
 			WorkspaceID string `json:"workspace_id"`
 			Cwd         string `json:"cwd"`
-			Branch      string `json:"branch"`
-			Base        string `json:"base"`
-			Path        string `json:"path"`
-			Label       string `json:"label"`
+			// Trust names the repository safe for this call, herdr's
+			// trust_repository, for one owned by another user.
+			Trust  bool   `json:"trust_repository"`
+			Branch string `json:"branch"`
+			Base   string `json:"base"`
+			Path   string `json:"path"`
+			Label  string `json:"label"`
 		}
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
 		}
-		repo, err := a.worktreeRepo(p.WorkspaceID, p.Cwd)
+		repo, err := a.worktreeRepo(p.WorkspaceID, p.Cwd, p.Trust)
 		if err != nil {
 			return nil, true, err
 		}
@@ -98,9 +104,12 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		var p struct {
 			WorkspaceID string `json:"workspace_id"`
 			Cwd         string `json:"cwd"`
-			Path        string `json:"path"`
-			Branch      string `json:"branch"`
-			Label       string `json:"label"`
+			// Trust names the repository safe for this call, herdr's
+			// trust_repository, for one owned by another user.
+			Trust  bool   `json:"trust_repository"`
+			Path   string `json:"path"`
+			Branch string `json:"branch"`
+			Label  string `json:"label"`
 		}
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
@@ -108,7 +117,7 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		if (p.Path == "") == (p.Branch == "") {
 			return nil, true, fail("invalid_request", "exactly one of path or branch is required")
 		}
-		repo, err := a.worktreeRepo(p.WorkspaceID, p.Cwd)
+		repo, err := a.worktreeRepo(p.WorkspaceID, p.Cwd, p.Trust)
 		if err != nil {
 			return nil, true, err
 		}
@@ -133,6 +142,7 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		var p struct {
 			WorkspaceID string `json:"workspace_id"`
 			Force       bool   `json:"force"`
+			Trust       bool   `json:"trust_repository"`
 		}
 		if err := decode(req.Params, &p); err != nil {
 			return nil, true, err
@@ -145,7 +155,7 @@ func (a *API) callWorktrees(req Request) (any, bool, error) {
 		if dir == "" {
 			return nil, true, fail("workspace_not_found", "workspace %s not found", p.WorkspaceID)
 		}
-		repo, err := worktree.Find(dir)
+		repo, err := worktree.FindTrusted(dir, p.Trust)
 		if err != nil {
 			return nil, true, fail("worktree_not_found", "%v", err)
 		}
@@ -275,7 +285,7 @@ func (a *API) worktreeRoot() string {
 // worktreeRepo finds the repository a call is about: the one a space is in,
 // or the one a directory is in. Exactly one may be given; neither means the
 // first space, which is where somebody at a prompt usually is.
-func (a *API) worktreeRepo(workspaceID, cwd string) (worktree.Repo, error) {
+func (a *API) worktreeRepo(workspaceID, cwd string, trust bool) (worktree.Repo, error) {
 	if workspaceID != "" && cwd != "" {
 		return worktree.Repo{}, fail("invalid_request", "only one of workspace_id or cwd may be supplied")
 	}
@@ -297,7 +307,7 @@ func (a *API) worktreeRepo(workspaceID, cwd string) (worktree.Repo, error) {
 	if dir == "" {
 		return worktree.Repo{}, fail("invalid_request", "name a space or a directory inside a repository")
 	}
-	repo, err := worktree.Find(dir)
+	repo, err := worktree.FindTrusted(dir, trust)
 	if err != nil {
 		return worktree.Repo{}, fail("not_a_repository", "%v", err)
 	}

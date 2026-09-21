@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,5 +130,30 @@ func TestPorcelainIsReadBlockByBlock(t *testing.T) {
 func TestGeneratedBranchesAreHerdrsShape(t *testing.T) {
 	if got := GeneratedBranch(0x1234); got != "worktree/lucky-stone-1234" {
 		t.Errorf("GeneratedBranch = %q", got)
+	}
+}
+
+// TestTrustingARepositoryIsForOneCallOnly is herdr's trust_repository: git is
+// told the repository is safe with -c on the command, and nothing is written
+// to the user's git configuration. If it regresses, trusting one repository
+// once would change git's behaviour for good.
+func TestTrustingARepositoryIsForOneCallOnly(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	cmd := exec.Command("git", "init", "-q", dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	repo, err := FindTrusted(dir, true)
+	if err != nil || !repo.Trusted {
+		t.Fatalf("FindTrusted = %+v, %v", repo, err)
+	}
+	if _, err := List(repo); err != nil {
+		t.Fatalf("List on a trusted repository: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(home, ".gitconfig")); err == nil && strings.Contains(string(data), "safe") {
+		t.Errorf("trusting wrote to the user's git configuration:\n%s", data)
 	}
 }
