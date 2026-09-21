@@ -40,6 +40,9 @@ type Installed struct {
 	// refuse it. They are kept so `tend plugin list` can show them long after
 	// the link, rather than only printing them once.
 	Warnings []string `json:"warnings,omitempty"`
+	// Source is where it was installed from, when that was GitHub; nil for a
+	// plugin linked from a directory of the user's own.
+	Source *Source `json:"source,omitempty"`
 }
 
 // Registry is the set of installed plugins, backed by a file.
@@ -140,6 +143,33 @@ func (r *Registry) Link(dir string) (Installed, error) {
 		return Installed{}, err
 	}
 	return *entry, nil
+}
+
+// SetSource records where an installed plugin came from.
+func (r *Registry) SetSource(id string, src Source) error {
+	r.mu.Lock()
+	entry, ok := r.plugins[id]
+	if ok {
+		entry.Source = &src
+	}
+	r.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrNotInstalled, id)
+	}
+	return r.save()
+}
+
+// ByGithubSource is the plugin installed from owner/repo[/subdir], if one is.
+func (r *Registry) ByGithubSource(g GithubSource) (Installed, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.plugins {
+		s := p.Source
+		if s != nil && s.Kind == "github" && s.Owner == g.Owner && s.Repo == g.Repo && s.Subdir == g.Subdir {
+			return *p, true
+		}
+	}
+	return Installed{}, false
 }
 
 // Reload re-reads an installed plugin's manifest, for a plugin the user has

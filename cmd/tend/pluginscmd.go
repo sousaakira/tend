@@ -14,6 +14,8 @@ import (
 	"github.com/sousaakira/tend/internal/plugin"
 	"github.com/sousaakira/tend/internal/server"
 	"github.com/sousaakira/tend/internal/transport"
+
+	"golang.org/x/term"
 )
 
 // `tend plugin …`. Linking and listing work without a running server, because
@@ -79,6 +81,10 @@ func runPlugin(args []string) error {
 		fmt.Fprint(w,
 			"usage: tend plugin <command>\n\n"+
 				"  list                     installed plugins\n"+
+				"  install <owner/repo[/dir]> [-ref REF] [-yes]\n"+
+				"                           install a plugin from GitHub\n"+
+				"  uninstall <id|owner/repo[/dir]>\n"+
+				"                           remove it, and its files if tend installed them\n"+
 				"  link <directory>         install the plugin in that directory\n"+
 				"  build <id>               run its build steps again\n"+
 				"  unlink <id>              forget it (its files are left alone)\n"+
@@ -125,6 +131,12 @@ func runPlugin(args []string) error {
 			}
 		}
 		return nil
+
+	case "install":
+		return installFromGithub(rest)
+
+	case "uninstall":
+		return uninstallPlugin(rest)
 
 	case "link":
 		fs := flag.NewFlagSet("plugin link", flag.ExitOnError)
@@ -285,4 +297,176 @@ func runPlugin(args []string) error {
 
 	usage(os.Stderr)
 	return fmt.Errorf("unknown command %q", sub)
+}
+
+// managedCheckouts is where plugins installed from GitHub are kept: tend's
+// own directory, not the user's, since tend removes them again.
+func managedCheckouts() (string, error) {
+	path, err := transport.StatePath("plugin-checkouts")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(path, ".json"), nil
+}
+
+// installFromGithub is herdr's `plugin install owner/repo[/subdir]`: clone,
+// show what it is, agree, build, then move it where tend keeps it and link
+// it. Nothing is left behind by a step that fails.
+func installFromGithub(args []string) error {
+	fs := flag.NewFlagSet("plugin install", flag.ExitOnError)
+	ref := fs.String("ref", "", "a branch, tag or commit to install instead of the default branch")
+	yes := fs.Bool("yes", false, "install without asking")
+	fs.BoolVar(yes, "y", false, "install without asking")
+	if err := fs.Parse(hoistFlags(args, map[string]bool{"ref": true, "yes": false, "y": false})); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: tend plugin install <owner>/<repo>[/subdir...] [-ref REF] [-yes]")
+	}
+	src, err := plugin.ParseGithubSource(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	if !*yes && !term.IsTerminal(int(os.Stdin.Fd())) {
+		return errors.New("installing from GitHub asks first; pass -yes when nobody is there to answer")
+	}
+	root, err := managedCheckouts()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return err
+	}
+	temp, err := os.MkdirTemp(root, ".install-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(temp)
+
+	checkout := filepath.Join(temp, "checkout")
+	fmt.Fprintf(os.Stderr, "%s cloning %s\n", tag(), src.RemoteURL())
+	commit, err := plugin.Checkout(src, *ref, checkout)
+	if err != nil {
+		return err
+	}
+	manifestRoot := filepath.Join(checkout, filepath.FromSlash(src.Subdir))
+	manifest, warnings, err := plugin.Load(manifestRoot)
+	if err != nil {
+		return err
+	}
+	registry, err := openRegistry()
+	if err != nil {
+		return err
+	}
+	if existing, ok := registry.Get(manifest.ID); ok && (existing.Source == nil || existing.Source.Kind != "github") {
+		return fmt.Errorf("plugin %s is linked from %s; unlink it before installing it from GitHub", manifest.ID, existing.Root)
+	}
+
+	fmt.Fprintf(os.Stderr, "%s %s %s from %s at %s\n", tag(), manifest.ID, manifest.Version, src, shortCommit(commit))
+	if manifest.Description != "" {
+		fmt.Fprintf(os.Stderr, "%s %s\n", tag(), manifest.Description)
+	}
+	for _, step := range manifest.Build {
+		fmt.Fprintf(os.Stderr, "%s builds with: %s\n", tag(), strings.Join(step.Command, " "))
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "%s %s\n", tag(), w)
+	}
+	if !*yes && !confirm("install this plugin?") {
+		fmt.Fprintf(os.Stderr, "%s not installed\n", tag())
+		return nil
+	}
+
+	// Built where it was cloned, so a failed build leaves nothing installed.
+	preview := plugin.Installed{Manifest: manifest, Root: manifestRoot}
+	if len(manifest.Build) > 0 {
+		if err := plugin.Build(preview, nil, os.Stderr); err != nil {
+			return err
+		}
+	}
+
+	final := filepath.Join(root, manifest.ID)
+	backup := filepath.Join(temp, "previous")
+	hadPrevious := false
+	if _, err := os.Stat(final); err == nil {
+		if err := os.Rename(final, backup); err != nil {
+			return err
+		}
+		hadPrevious = true
+	}
+	if err := os.Rename(checkout, final); err != nil {
+		if hadPrevious {
+			_ = os.Rename(backup, final)
+		}
+		return err
+	}
+	installed, err := registry.Link(filepath.Join(final, filepath.FromSlash(src.Subdir)))
+	if err == nil {
+		err = registry.SetSource(installed.ID, plugin.Source{
+			Kind: "github", Owner: src.Owner, Repo: src.Repo, Subdir: src.Subdir,
+			Ref: *ref, Commit: commit, ManagedPath: final,
+		})
+	}
+	if err != nil {
+		_ = os.RemoveAll(final)
+		if hadPrevious {
+			_ = os.Rename(backup, final)
+		}
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "%s installed %s from %s\n", tag(), installed.ID, src)
+	fmt.Fprintf(os.Stderr, "%s restart the session's server for a running session to pick it up\n", tag())
+	return nil
+}
+
+// uninstallPlugin forgets a plugin, by id or by the owner/repo it was
+// installed from, and removes its files when tend put them there.
+func uninstallPlugin(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: tend plugin uninstall <id|owner/repo[/subdir...]>")
+	}
+	registry, err := openRegistry()
+	if err != nil {
+		return err
+	}
+	installed, ok := registry.Get(args[0])
+	if !ok {
+		if src, err := plugin.ParseGithubSource(args[0]); err == nil {
+			installed, ok = registry.ByGithubSource(src)
+		}
+	}
+	if !ok {
+		return fmt.Errorf("no plugin %q is installed", args[0])
+	}
+	if err := registry.Unlink(installed.ID); err != nil {
+		return err
+	}
+	if s := installed.Source; s != nil && s.Kind == "github" && s.ManagedPath != "" {
+		root, err := managedCheckouts()
+		// Only inside tend's own directory: a path in the registry is not
+		// enough reason to delete anything anywhere.
+		if err == nil && strings.HasPrefix(filepath.Clean(s.ManagedPath), filepath.Clean(root)+string(os.PathSeparator)) {
+			if err := os.RemoveAll(s.ManagedPath); err != nil {
+				return err
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "%s uninstalled %s\n", tag(), installed.ID)
+	return nil
+}
+
+func shortCommit(c string) string {
+	if len(c) > 12 {
+		return c[:12]
+	}
+	return c
+}
+
+// confirm asks a yes-or-no question on the terminal; anything but yes is no.
+func confirm(question string) bool {
+	fmt.Fprintf(os.Stderr, "%s %s [y/N] ", tag(), question)
+	var answer string
+	_, _ = fmt.Fscanln(os.Stdin, &answer)
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	return answer == "y" || answer == "yes"
 }

@@ -464,8 +464,10 @@ The host is ported (see "Ported, and checked"). Left:
   `HERDR_PLUGIN_STATE_DIR` where tend sets `TEND_*`. tend does not export
   herdr-named variables (AGENTS.md: no herdr name in the product). Not run
   against tend yet.
-- Installing from a URL or GitHub (`plugin install`), the marketplace, popups
-  as a placement, `link_handlers`, `plugin.log.list`, `min_herdr_version`
+- `tend plugin install owner/repo[/subdir] [-ref] [-yes]` and `uninstall`
+  are ported (herdr's GitHub shorthand only; clone, preview, confirm, build,
+  keep under tend's state directory). Left: the marketplace, popups as a
+  placement, `link_handlers`, `plugin.log.list`, `min_herdr_version`
   enforcement (tend's builds have no ordering to compare against).
 - herdr: `plugin_command.rs`, `plugin_paths.rs`, `cli/plugin.rs`,
   `persist/plugin_registry.rs`, `app/api/plugins/`, `api/schema/plugins.rs`;

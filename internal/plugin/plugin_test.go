@@ -273,3 +273,19 @@ command = ["/bin/sh", "-c", "printf 'no such crate\n' >&2; exit 3"]
 		t.Errorf("what the build said was lost:\n%s", out.String())
 	}
 }
+
+// TestGithubSourcesAreHerdrsShorthandOnly: owner/repo[/subdir] and nothing
+// else, so what is installed is always a GitHub repository named plainly.
+func TestGithubSourcesAreHerdrsShorthandOnly(t *testing.T) {
+	src, err := ParseGithubSource("alexarthurs/herdr-sidebar/plugins/herdr-sidebar")
+	if err != nil || src.Owner != "alexarthurs" || src.Repo != "herdr-sidebar" || src.Subdir != "plugins/herdr-sidebar" {
+		t.Errorf("parsed %+v, %v", src, err)
+	}
+	for _, bad := range []string{
+		"https://github.com/a/b", "git@github.com:a/b.git", "a", "a/../b", "a/b/../c", "a/b c",
+	} {
+		if _, err := ParseGithubSource(bad); err == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+}

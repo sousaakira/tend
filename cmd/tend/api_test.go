@@ -708,3 +708,68 @@ func TestAKeyGoesToWhatTheLastNotificationWasAbout(t *testing.T) {
 	a.send(t, "\x02O")
 	a.waitForScreen(t, "the agent's tab", func(s string) bool { return strings.Contains(s, "AGENT-TAB") })
 }
+
+// TestInstallingAPluginFromGithub is herdr's `plugin install owner/repo/dir`
+// end to end, against a local repository standing in for GitHub: cloned,
+// built, kept where tend keeps it, listed, and removed with its files by the
+// same shorthand. If it regresses, a plugin published the way herdr's are
+// has to be cloned and linked by hand.
+func TestInstallingAPluginFromGithub(t *testing.T) {
+	base := t.TempDir()
+	work := filepath.Join(t.TempDir(), "repo")
+	pluginDir := filepath.Join(work, "plugins", "demo")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "id = \"demo\"\nname = \"demo\"\nversion = \"1.0.0\"\n\n[[build]]\ncommand = [\"/bin/sh\", \"-c\", \"echo built > built.txt\"]\n"
+	if err := os.WriteFile(filepath.Join(pluginDir, "tend-plugin.toml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitEnv := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	for _, args := range [][]string{
+		{"-C", work, "init", "-q", "-b", "main"}, {"-C", work, "add", "."},
+		{"-C", work, "commit", "-q", "-m", "plugin"},
+		{"clone", "-q", "--bare", work, filepath.Join(base, "someone", "tools.git")},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Env = gitEnv
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	runtimeDir := t.TempDir()
+	cfg := filepath.Join(t.TempDir(), "tend.toml")
+	bin := buildBinary(t)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "TEND_CONFIG="+cfg,
+		"TEND_GITHUB_URL=file://"+base)
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(bin, args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	if out, err := run("plugin", "install", "someone/tools/plugins/demo"); err == nil || !strings.Contains(out, "-yes") {
+		t.Fatalf("without a terminal to ask, install should want -yes: %v\n%s", err, out)
+	}
+	out, err := run("plugin", "install", "someone/tools/plugins/demo", "-yes")
+	if err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	managed := filepath.Join(runtimeDir, "state", "plugin-checkouts", "demo")
+	if data, err := os.ReadFile(filepath.Join(managed, "plugins", "demo", "built.txt")); err != nil || !strings.Contains(string(data), "built") {
+		t.Fatalf("the plugin was not built where tend keeps it: %v", err)
+	}
+	if out, _ := run("plugin", "list"); !strings.Contains(out, "demo") || !strings.Contains(out, managed) {
+		t.Errorf("plugin list = %s", out)
+	}
+
+	if out, err := run("plugin", "uninstall", "someone/tools/plugins/demo"); err != nil {
+		t.Fatalf("uninstall: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(managed); !os.IsNotExist(err) {
+		t.Error("the checkout tend made is still there")
+	}
+}
