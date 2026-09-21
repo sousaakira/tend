@@ -7,6 +7,7 @@ import (
 
 	"github.com/sousaakira/tend/internal/client"
 	"github.com/sousaakira/tend/internal/machines"
+	"github.com/sousaakira/tend/internal/notify"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/transport"
 	"github.com/sousaakira/tend/internal/ui"
@@ -42,6 +43,9 @@ type endpoint struct {
 	// it, which link.forward says.
 	client *client.Client
 	link   *endpointLink
+	// notices is what was last announced of each of its panes, as the
+	// client's own record is for the machine shown.
+	notices map[uint64]paneNotice
 }
 
 // localEndpoint is this machine's id, herdr's ClientEndpointId::Local.
@@ -77,6 +81,12 @@ func (l *endpointLink) Event(ev proto.Event) {
 		proto.EventTabFocused, proto.EventWorkspaceFocused:
 		// Nothing a list of spaces shows.
 		return
+	case proto.EventPaneState:
+		// Its agents are announced as the shown machine's are: herdr's
+		// client takes notifications from every endpoint.
+		l.t.announceFrom(l.e, ev)
+	case proto.EventNotify:
+		l.t.raiseOn(l.e.id, ui.ToastCustom, ev.Title, l.e.label+" · "+ev.Body, ev.Pane, notify.SoundRequest)
 	}
 	l.fetch()
 }
@@ -139,7 +149,7 @@ func (t *tui) loadMachines() {
 	if len(catalog.Machines) == 0 {
 		return
 	}
-	local := &endpoint{id: localEndpoint, label: "Local", session: transport.DefaultSessionName, enabled: true, status: ui.MachineOnline}
+	local := &endpoint{id: localEndpoint, label: "Local", session: transport.DefaultSessionName, enabled: true, status: ui.MachineOnline, notices: map[uint64]paneNotice{}}
 	if t.host == "" {
 		local.session = t.session
 	}
@@ -149,7 +159,7 @@ func (t *tui) loadMachines() {
 		active = localEndpoint
 	}
 	for _, m := range catalog.Machines {
-		e := &endpoint{id: m.ID, label: m.Label, host: m.Target, session: m.Session, enabled: m.Enabled, status: ui.MachineDisabled}
+		e := &endpoint{id: m.ID, label: m.Label, host: m.Target, session: m.Session, enabled: m.Enabled, status: ui.MachineDisabled, notices: map[uint64]paneNotice{}}
 		if m.Enabled {
 			e.status = ui.MachineConnecting
 		}
@@ -161,7 +171,7 @@ func (t *tui) loadMachines() {
 	if active == "" {
 		// Attached with -host to a machine that is not saved: shown, as it
 		// is where the client is, under the name it was reached by.
-		list = append(list, &endpoint{id: "attached", label: t.host, host: t.host, session: t.session, enabled: true, status: ui.MachineOnline})
+		list = append(list, &endpoint{id: "attached", label: t.host, host: t.host, session: t.session, enabled: true, status: ui.MachineOnline, notices: map[uint64]paneNotice{}})
 		active = "attached"
 	}
 
@@ -289,6 +299,26 @@ func (t *tui) setEndpointStatus(e *endpoint, status string) {
 	t.wakeUp()
 }
 
+// shownMachineLocked is the id of the machine shown, empty without saved
+// machines.
+func (t *tui) shownMachineLocked() string {
+	if t.machines == nil {
+		return ""
+	}
+	return t.machines.active
+}
+
+// snapOfLocked is a machine's session as last read, nil when it has not been.
+func (t *tui) snapOfLocked(machine string) *proto.SessionSnapshot {
+	if machine == t.shownMachineLocked() {
+		return &t.snap
+	}
+	if e := t.endpointLocked(machine); e != nil && e.have {
+		return &e.snap
+	}
+	return nil
+}
+
 // multiMachineLocked reports whether the sidebar lists machines.
 func (t *tui) multiMachineLocked() bool {
 	return t.machines != nil && len(t.machines.endpoints) > 1
@@ -378,7 +408,7 @@ func (t *tui) clickMachine(id string) error {
 		return nil
 	}
 	t.mu.Unlock()
-	return t.switchMachine(id, 0)
+	return t.switchMachine(id, 0, 0)
 }
 
 // toggleRemoteGroup folds a group on a machine that is not the one shown.
@@ -398,13 +428,14 @@ func (t *tui) toggleRemoteGroup(machine, group string) {
 }
 
 // switchMachine shows another machine, at one of its spaces when workspace is
-// set: herdr's ActivateEndpoint with a focus target.
+// set and at one of its panes when pane is: herdr's ActivateEndpoint with a
+// focus target.
 //
 // The watching connection becomes the client's. The one the client had goes
 // back to watching if it was a watcher, and is closed if the client opened it
 // itself — at start, or on a reconnect — with the machine it showed watched
 // afresh.
-func (t *tui) switchMachine(id string, workspace uint64) error {
+func (t *tui) switchMachine(id string, workspace, pane uint64) error {
 	t.mu.Lock()
 	ms := t.machines
 	e := t.endpointLocked(id)
@@ -446,6 +477,12 @@ func (t *tui) switchMachine(id string, workspace uint64) error {
 	}
 	// What the old machine was showing is kept for its rows: the snapshot is
 	// the one the client just had.
+	// The record of what was announced goes with its machine: pane numbers
+	// are each machine's own.
+	if previous != nil {
+		previous.notices = t.notices
+	}
+	t.notices = e.notices
 	if previous != nil {
 		previous.snap, previous.have = t.snap, true
 		if previous.link != nil && oldWatched {
@@ -476,6 +513,11 @@ func (t *tui) switchMachine(id string, workspace uint64) error {
 	}
 	if err := t.refresh(); err != nil {
 		return err
+	}
+	if pane != 0 {
+		if err := t.jumpToPane(pane); err != nil {
+			return err
+		}
 	}
 	t.setMessage("on "+e.label, false)
 	return nil

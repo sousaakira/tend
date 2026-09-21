@@ -35,7 +35,13 @@ type paneNotice struct {
 
 // announce decides whether a state change is worth telling the user about, and
 // tells them. It runs on the event goroutine, so it does no round trips.
-func (t *tui) announce(ev proto.Event) {
+func (t *tui) announce(ev proto.Event) { t.announceFrom(nil, ev) }
+
+// announceFrom is announce for a machine: the one shown when e is nil,
+// another saved machine otherwise, whose agents are announced as herdr's
+// client announces every endpoint's — never as the pane in view, and saying
+// which machine it is on.
+func (t *tui) announceFrom(e *endpoint, ev proto.Event) {
 	if t.toasts == "off" && !t.sound.Enabled {
 		return
 	}
@@ -45,16 +51,20 @@ func (t *tui) announce(ev proto.Event) {
 	}
 
 	t.mu.Lock()
-	previous := t.notices[ev.Pane]
+	notices, snap, machine := t.notices, &t.snap, t.shownMachineLocked()
 	// The pane in view is not announced — unless the window is behind
 	// something else, when nobody is looking at it either (herdr's
 	// active_tab_suppresses_notifications).
 	focused := ev.Pane == t.focus && t.windowFocused
+	if e != nil {
+		notices, snap, machine, focused = e.notices, &e.snap, e.id, false
+	}
+	previous := notices[ev.Pane]
 	kind, worth := worthAnnouncing(previous, state, time.Now())
-	t.notices[ev.Pane] = paneNotice{state: state, at: time.Now()}
+	notices[ev.Pane] = paneNotice{state: state, at: time.Now()}
 
 	var agent, where string
-	for _, p := range t.snap.Panes {
+	for _, p := range snap.Panes {
 		if p.ID == ev.Pane {
 			agent = p.Agent
 		}
@@ -64,7 +74,7 @@ func (t *tui) announce(ev proto.Event) {
 		// whose first word is "I need you" would otherwise go unannounced.
 		agent = ev.Agent
 	}
-	for _, w := range t.snap.Workspaces {
+	for _, w := range snap.Workspaces {
 		for _, tab := range w.Tabs {
 			for _, id := range tab.Panes {
 				if id == ev.Pane {
@@ -73,6 +83,9 @@ func (t *tui) announce(ev proto.Event) {
 			}
 		}
 	}
+	if e != nil {
+		where = e.label + " · " + where
+	}
 	notifyFocused := t.notifyFocused
 	t.mu.Unlock()
 
@@ -80,13 +93,13 @@ func (t *tui) announce(ev proto.Event) {
 		return
 	}
 	t.mu.Lock()
-	t.lastNotice = ev.Pane // for open-notification
+	t.lastNotice, t.lastNoticeMachine = ev.Pane, machine // for open-notification
 	t.mu.Unlock()
 	switch kind {
 	case announceBlocked:
-		t.raise(ui.ToastAttention, agent+" needs attention", where, ev.Pane, t.soundFor(agent, notify.SoundRequest))
+		t.raiseOn(machine, ui.ToastAttention, agent+" needs attention", where, ev.Pane, t.soundFor(agent, notify.SoundRequest))
 	case announceFinished:
-		t.raise(ui.ToastFinished, agent+" finished", where, ev.Pane, t.soundFor(agent, notify.SoundDone))
+		t.raiseOn(machine, ui.ToastFinished, agent+" finished", where, ev.Pane, t.soundFor(agent, notify.SoundDone))
 	}
 }
 
@@ -125,6 +138,15 @@ func worthAnnouncing(previous paneNotice, state detect.State, now time.Time) (ki
 // meantime is not "needing attention" any more. What a script said goes at
 // once.
 func (t *tui) raise(kind, title, body string, pane uint64, sound notify.Sound) {
+	t.mu.Lock()
+	machine := t.shownMachineLocked()
+	t.mu.Unlock()
+	t.raiseOn(machine, kind, title, body, pane, sound)
+}
+
+// raiseOn is raise for news from a given machine, which is where its pane
+// is looked for and where a click on its card goes.
+func (t *tui) raiseOn(machine, kind, title, body string, pane uint64, sound notify.Sound) {
 	now := time.Now()
 	delay := time.Duration(0)
 	if kind != ui.ToastCustom {
@@ -132,7 +154,7 @@ func (t *tui) raise(kind, title, body string, pane uint64, sound notify.Sound) {
 	}
 	t.mu.Lock()
 	t.pendingNotices = append(t.pendingNotices, pendingNotice{
-		kind: kind, title: title, body: body, pane: pane, sound: sound,
+		kind: kind, title: title, body: body, pane: pane, sound: sound, machine: machine,
 		due: now.Add(delay), expires: now.Add(max(delay, completionGrace)),
 	})
 	t.mu.Unlock()
@@ -151,8 +173,10 @@ const (
 type pendingNotice struct {
 	kind, title, body string
 	pane              uint64
-	sound             notify.Sound
-	due, expires      time.Time
+	// machine is the saved machine the pane is on, empty without any.
+	machine      string
+	sound        notify.Sound
+	due, expires time.Time
 }
 
 // noticeCheck is herdr's NotificationValidation.
@@ -178,7 +202,11 @@ func (t *tui) checkNoticeLocked(n pendingNotice) noticeCheck {
 		}
 		return noticeCurrent
 	}
-	for _, p := range t.snap.Panes {
+	snap := t.snapOfLocked(n.machine)
+	if snap == nil {
+		return noticeAwaiting // its machine has not been read yet
+	}
+	for _, p := range snap.Panes {
 		if p.ID != n.pane {
 			continue
 		}
@@ -219,18 +247,18 @@ func (t *tui) deliverDue() {
 	t.pendingNotices = kept
 	t.mu.Unlock()
 	for _, n := range due {
-		t.deliver(n.kind, n.title, n.body, n.pane, n.sound)
+		t.deliver(n.machine, n.kind, n.title, n.body, n.pane, n.sound)
 	}
 }
 
 // deliver says it, by whichever means are turned on. kind and pane are for
 // tend's own card: what colour its dot is, and where a click on it goes.
-func (t *tui) deliver(kind, title, body string, pane uint64, sound notify.Sound) {
+func (t *tui) deliver(machine, kind, title, body string, pane uint64, sound notify.Sound) {
 	if t.toasts != "off" {
 		// tend's own card, herdr's "herdr" delivery, for every setting but
 		// off: the terminal's or the desktop's notification is for somebody
 		// looking elsewhere, and this is for somebody looking here.
-		t.pushToast(kind, title, body, pane)
+		t.pushToastOn(machine, kind, title, body, pane)
 	}
 	if t.toasts == "system" {
 		// On its own goroutine: raising one runs another program, and the

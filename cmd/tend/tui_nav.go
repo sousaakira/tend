@@ -212,7 +212,9 @@ func (t *tui) agentStep(focus uint64, step int) uint64 {
 
 	var agents []uint64
 	for _, row := range t.agentRowsLocked() {
-		if row.Kind == ui.SidebarAgent {
+		// Another machine's agents are left out: its pane numbers are its
+		// own, and stepping onto one would be going there.
+		if row.Kind == ui.SidebarAgent && row.Machine == "" {
 			agents = append(agents, row.Pane)
 		}
 	}
@@ -543,19 +545,90 @@ func groupStateLabel(snap *proto.SessionSnapshot, members []proto.WorkspaceInfo)
 }
 
 // agentRowsLocked lists what is running, flat or under its tab.
+//
+// With saved machines it is herdr's aggregate list (endpoint_agents.rs):
+// every machine's agents, each row naming its machine through the machine
+// token, and in priority order the attention queue across all of them, with
+// what cannot be reached last.
 func (t *tui) agentRowsLocked() []ui.SidebarRow {
-	info := make(map[uint64]proto.PaneInfo, len(t.snap.Panes))
-	for _, p := range t.snap.Panes {
-		info[p.ID] = p
-	}
 	priority := t.config.UI.AgentPanelSort == "priority"
-	symbols := t.config.UI.StatusIndicators == "symbols"
+	if !t.multiMachineLocked() {
+		// The machine is named only when it is another one: every row saying
+		// this laptop's name is a column of noise.
+		rows, seqs := t.agentEntriesFrom(agentSource{snap: &t.snap, label: t.host, here: true})
+		if view := t.snap.AgentView; view != nil {
+			// A view a script set replaces the order and decides what is
+			// shown, as herdr's agent_view_override does; tab headings mean
+			// nothing in an order that is not the session's.
+			return t.applyAgentViewLocked(view, rows, paneInfo(&t.snap))
+		}
+		if priority {
+			rows = byAttention(rows, seqs, nil)
+		}
+		return rows
+	}
 
 	var rows []ui.SidebarRow
 	var seqs []uint64
-	for _, w := range t.snap.Workspaces {
+	var stale []bool
+	for _, e := range t.machines.endpoints {
+		src := agentSource{snap: &e.snap, machine: e.id, label: e.label, stale: e.status != ui.MachineOnline}
+		if e.id == t.machines.active {
+			src = agentSource{snap: &t.snap, label: e.label, here: true}
+		} else if !e.have {
+			continue
+		}
+		r, s := t.agentEntriesFrom(src)
+		if src.here && t.snap.AgentView != nil {
+			// The view is the shown session's, and orders only its agents;
+			// the other machines' follow in their own order.
+			r = t.applyAgentViewLocked(t.snap.AgentView, r, paneInfo(&t.snap))
+			s = make([]uint64, len(r))
+		}
+		rows, seqs = append(rows, r...), append(seqs, s...)
+		for range r {
+			stale = append(stale, src.stale)
+		}
+	}
+	if priority && t.snap.AgentView == nil {
+		rows = byAttention(rows, seqs, stale)
+	}
+	return rows
+}
+
+// agentSource is one machine's session as the agent list reads it.
+type agentSource struct {
+	snap *proto.SessionSnapshot
+	// machine is empty for the session shown; label is what the machine
+	// token says, empty when there is nothing to say.
+	machine, label string
+	here, stale    bool
+}
+
+// paneInfo indexes a session's panes.
+func paneInfo(snap *proto.SessionSnapshot) map[uint64]proto.PaneInfo {
+	info := make(map[uint64]proto.PaneInfo, len(snap.Panes))
+	for _, p := range snap.Panes {
+		info[p.ID] = p
+	}
+	return info
+}
+
+// agentEntriesFrom is one session's agents in session order, under their
+// tabs when the list is grouped, with each one's state sequence for the
+// attention order.
+func (t *tui) agentEntriesFrom(src agentSource) ([]ui.SidebarRow, []uint64) {
+	info := paneInfo(src.snap)
+	priority := t.config.UI.AgentPanelSort == "priority"
+	symbols := t.config.UI.StatusIndicators == "symbols"
+	multi := t.multiMachineLocked()
+
+	var rows []ui.SidebarRow
+	var seqs []uint64
+	for _, w := range src.snap.Workspaces {
 		for _, tab := range w.Tabs {
 			var entries []ui.SidebarRow
+			var entrySeqs []uint64
 			for _, id := range tab.Panes {
 				p := info[id]
 				if p.Agent == "" {
@@ -567,7 +640,7 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 				entries = append(entries, ui.SidebarRow{
 					Kind:      ui.SidebarAgent,
 					Label:     agentLabel(w, tab),
-					Lines:     t.agentLinesLocked(w, tab, p),
+					Lines:     t.agentLinesLocked(w, tab, p, src.label),
 					Gap:       t.config.UI.Sidebar.Agents.RowGap,
 					Symbols:   symbols,
 					Pane:      id,
@@ -575,53 +648,67 @@ func (t *tui) agentRowsLocked() []ui.SidebarRow {
 					Workspace: w.ID,
 					State:     displayState(p),
 					Running:   p.Running,
-					Active:    id == t.focus && tab.ID == t.tab && w.ID == t.workspace,
+					Active:    src.here && id == t.focus && tab.ID == t.tab && w.ID == t.workspace,
+					Machine:   src.machine,
+					Stale:     src.stale,
 				})
-				seqs = append(seqs, p.StateSeq)
+				entrySeqs = append(entrySeqs, p.StateSeq)
 			}
 			if len(entries) == 0 {
 				continue
 			}
 			if t.grouped && !priority {
+				label := orDash(w.Name) + " · " + orDash(tab.Name)
+				if multi {
+					label = src.label + " · " + label
+				}
 				rows = append(rows, ui.SidebarRow{
 					Kind:      ui.SidebarGroup,
-					Label:     orDash(w.Name) + " · " + orDash(tab.Name),
+					Label:     label,
 					Tab:       tab.ID,
 					Workspace: w.ID,
+					Machine:   src.machine,
 				})
+				seqs = append(seqs, 0)
 			}
 			rows = append(rows, entries...)
+			seqs = append(seqs, entrySeqs...)
 		}
 	}
-	if view := t.snap.AgentView; view != nil {
-		// A view a script set replaces the order and decides what is shown,
-		// as herdr's agent_view_override does; tab headings mean nothing in
-		// an order that is not the session's.
-		return t.applyAgentViewLocked(view, rows, info)
+	return rows, seqs
+}
+
+// byAttention is herdr's attention queue: what needs you first, and within
+// that the most recent change first; across machines, what cannot be reached
+// after what can (sort_aggregate_rows). Tab headings mean nothing in this
+// order, and the list has none in it.
+//
+// A state sequence is counted by each server on its own, so between two
+// machines "more recent" is only a guess; within one it is exact.
+func byAttention(rows []ui.SidebarRow, seqs []uint64, stale []bool) []ui.SidebarRow {
+	order := make([]int, len(rows))
+	for i := range order {
+		order[i] = i
 	}
-	if priority {
-		// herdr's attention queue: what needs you first, and within that the
-		// most recent change first. Tab headings mean nothing in this order,
-		// so there are none.
-		order := make([]int, len(rows))
-		for i := range order {
-			order[i] = i
+	sort.SliceStable(order, func(a, b int) bool {
+		if stale != nil && stale[order[a]] != stale[order[b]] {
+			return !stale[order[a]]
 		}
-		sort.SliceStable(order, func(a, b int) bool {
-			ra, rb := rows[order[a]], rows[order[b]]
-			pa, pb := attentionPriority(ra.State, ra.Running), attentionPriority(rb.State, rb.Running)
-			if pa != pb {
-				return pa > pb
-			}
-			return seqs[order[a]] > seqs[order[b]]
-		})
-		sorted := make([]ui.SidebarRow, len(rows))
-		for i, at := range order {
-			sorted[i] = rows[at]
+		ra, rb := rows[order[a]], rows[order[b]]
+		pa, pb := attentionPriority(ra.State, ra.Running), attentionPriority(rb.State, rb.Running)
+		if pa != pb {
+			return pa > pb
 		}
-		rows = sorted
+		return seqs[order[a]] > seqs[order[b]]
+	})
+	sorted := make([]ui.SidebarRow, 0, len(rows))
+	for _, at := range order {
+		if rows[at].Kind == ui.SidebarGroup {
+			continue
+		}
+		sorted = append(sorted, rows[at])
 	}
-	return rows
+	return sorted
 }
 
 // applyAgentViewLocked filters and orders the agent rows by a view. The
@@ -720,12 +807,13 @@ func spaceTokens(w proto.WorkspaceInfo) map[string]string {
 // agentLinesLocked lays an agent's entry out as the settings say, herdr's
 // agent_rows: what each token says, from the session. The caller holds the
 // lock.
-func (t *tui) agentLinesLocked(w proto.WorkspaceInfo, tab proto.TabInfo, p proto.PaneInfo) [][]ui.SidebarToken {
+func (t *tui) agentLinesLocked(w proto.WorkspaceInfo, tab proto.TabInfo, p proto.PaneInfo, machine string) [][]ui.SidebarToken {
 	v := ui.AgentTokenValues{
 		StateText: displayState(p),
-		// The machine is named only when it is another one: every row saying
-		// this laptop's name is a column of noise.
-		Machine:   t.host,
+		// Empty for this machine when it is the only one; with saved
+		// machines, every row names its own, "Local" included, as herdr's
+		// do.
+		Machine:   machine,
 		Workspace: orDash(w.Name),
 		Tab:       tab.Name,
 		Agent:     p.Agent,
@@ -813,7 +901,7 @@ type navTarget struct {
 func targetOf(r ui.SidebarRow) (navTarget, bool) {
 	switch r.Kind {
 	case ui.SidebarAgent:
-		return navTarget{pane: r.Pane, workspace: r.Workspace}, true
+		return navTarget{pane: r.Pane, workspace: r.Workspace, machine: r.Machine}, true
 	case ui.SidebarSpace:
 		return navTarget{workspace: r.Workspace, machine: r.Machine}, true
 	case ui.SidebarSpaceGroup:
@@ -963,7 +1051,7 @@ func (t *tui) navigateKey(key string) (bool, error) {
 		case target.header:
 			return true, t.clickMachine(target.machine)
 		case target.machine != "" && target.workspace != 0:
-			return true, t.switchMachine(target.machine, target.workspace)
+			return true, t.switchMachine(target.machine, target.workspace, target.pane)
 		case target.machine != "" && target.group != "":
 			t.toggleRemoteGroup(target.machine, target.group)
 			return true, nil

@@ -417,10 +417,19 @@ top of it is not:
   (events only, ssh in herdr's non-interactive mode, reconnecting with
   backoff), and a click on another machine's space, or enter on it from the
   sidebar walk, shows that machine through the connection already open, so
-  the switch is immediate. Left: the agents of every machine in one list
-  and their notifications (`endpoint_agents.rs`, `endpoint_notices.rs`), the
-  navigator's machine rows, next/previous space and agent across machines,
-  and reloading the catalog while the client runs (herdr's `catalog_reload.rs`; tend reads it when a client
+  the switch is immediate. The agent list is herdr's aggregate one
+  (`endpoint_agents.rs`, `aggregate_navigation.rs`): every machine's agents,
+  each row naming its machine through the `machine` token ("Local" for this
+  one), a click going there, and in priority order the attention queue
+  across machines with unreachable ones last — state sequences are each
+  server's own, so "most recent" between machines is approximate. Agents on
+  other machines are announced as this one's are, their cards naming the
+  machine, and a click on one (or open-notification) goes to it. Left: an
+  agent view set by a script orders only the shown machine's agents (herdr
+  filters every machine's with it); herdr's notices about a machine itself
+  (`endpoint_notices.rs`: unsupported, timed out) — tend shows the state on
+  the machine's row; the navigator's machine rows; next/previous space and
+  agent across machines; and reloading the catalog while the client runs (herdr's `catalog_reload.rs`; tend reads it when a client
   starts).
 - A server from before this feature cannot hand off — it has no such method —
   and is replaced only by a restart. `tend handoff` says so rather than doing it.

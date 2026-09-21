@@ -294,6 +294,8 @@ type tui struct {
 	// lastNotice is the pane the last announcement was about, which
 	// open-notification goes to.
 	lastNotice uint64
+	// lastNoticeMachine is the saved machine that pane is on.
+	lastNoticeMachine string
 	// promptRepo is the repository a new worktree is for, so the prompt can
 	// say where the checkout will go.
 	promptRepo string
@@ -1568,13 +1570,13 @@ func (t *tui) command(action ui.Action) error {
 
 	case ui.CommandOpenNotification:
 		t.mu.Lock()
-		pane := t.lastNotice
+		pane, machine := t.lastNotice, t.lastNoticeMachine
 		t.mu.Unlock()
 		if pane == 0 {
 			t.setMessage("no notification to go to", false)
 			return nil
 		}
-		return t.jumpToPane(pane)
+		return t.goToNotice(machine, pane)
 	}
 	return nil
 }

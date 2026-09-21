@@ -29,11 +29,22 @@ func toastDuration(kind string) time.Duration {
 type toastEntry struct {
 	toast    ui.Toast
 	pane     uint64
+	machine  string
 	deadline time.Time
 }
 
-// pushToast shows a card, or queues it behind the one shown.
+// pushToast shows a card about the machine shown, or queues it.
 func (t *tui) pushToast(kind, title, body string, pane uint64) {
+	t.mu.Lock()
+	machine := t.shownMachineLocked()
+	t.mu.Unlock()
+	t.pushToastOn(machine, kind, title, body, pane)
+}
+
+// pushToastOn shows a card, or queues it behind the one shown. A pane is
+// known by its machine and its number together: two machines each have a
+// pane 1.
+func (t *tui) pushToastOn(machine, kind, title, body string, pane uint64) {
 	t.mu.Lock()
 	defer func() {
 		t.dirty = true
@@ -44,16 +55,16 @@ func (t *tui) pushToast(kind, title, body string, pane uint64) {
 	if pane != 0 {
 		kept := t.toastQueue[:0]
 		for _, q := range t.toastQueue {
-			if q.pane != pane {
+			if q.pane != pane || q.machine != machine {
 				kept = append(kept, q)
 			}
 		}
 		t.toastQueue = kept
-		if t.toast != nil && t.toast.pane == pane {
+		if t.toast != nil && t.toast.pane == pane && t.toast.machine == machine {
 			t.toast = nil
 		}
 	}
-	entry := toastEntry{toast: ui.Toast{Kind: kind, Title: title, Body: body}, pane: pane}
+	entry := toastEntry{toast: ui.Toast{Kind: kind, Title: title, Body: body}, pane: pane, machine: machine}
 	if t.toast == nil {
 		t.promoteToastLocked(now)
 	}
@@ -114,13 +125,24 @@ func (t *tui) clickToast(x, y int) (bool, error) {
 		t.mu.Unlock()
 		return false, nil
 	}
-	pane := t.toast.pane
+	pane, machine := t.toast.pane, t.toast.machine
 	t.promoteToastLocked(time.Now())
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
-	if pane != 0 {
-		return true, t.jumpToPane(pane)
+	return true, t.goToNotice(machine, pane)
+}
+
+// goToNotice shows the pane a notice was about, on whichever machine it is.
+func (t *tui) goToNotice(machine string, pane uint64) error {
+	if pane == 0 {
+		return nil
 	}
-	return true, nil
+	t.mu.Lock()
+	shown := t.shownMachineLocked()
+	t.mu.Unlock()
+	if machine != shown {
+		return t.switchMachine(machine, 0, pane)
+	}
+	return t.jumpToPane(pane)
 }

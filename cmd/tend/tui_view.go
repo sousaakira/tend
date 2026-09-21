@@ -662,8 +662,9 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		t.toggleRemoteGroup(row.Machine, row.Group)
 		return true, nil
 	case row.Machine != "" && row.Workspace != 0:
-		// Another machine's space: going there is going to the machine.
-		return true, t.switchMachine(row.Machine, row.Workspace)
+		// Another machine's space or agent: going there is going to the
+		// machine.
+		return true, t.switchMachine(row.Machine, row.Workspace, row.Pane)
 	case row.Action == ui.ActionNewSpace:
 		return true, t.newWorkspace()
 	case row.Action == ui.ActionToggleGroup:
