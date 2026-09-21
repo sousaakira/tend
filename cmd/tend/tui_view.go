@@ -372,6 +372,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return nil
 
 	case ui.MouseDrag:
+		if t.dragTab(ev) {
+			return nil
+		}
 		if took, err := t.continueGesture(ev); took {
 			return err
 		}
@@ -384,6 +387,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		return t.dragDivider(ev)
 
 	case ui.MouseRelease:
+		if dropped, err := t.dropTab(); dropped {
+			return err
+		}
 		// paneAt takes the same lock, so the grab is released first and the
 		// lookup happens after. A mutex that is not reentrant turns a nested
 		// call into a frozen client, which is exactly how this was found.
@@ -534,7 +540,67 @@ func (t *tui) clickTabBar(x, y int) (bool, error) {
 	if newTab {
 		return true, t.newTabHere()
 	}
+	// The press may be the start of a drag that moves the tab: herdr's tab
+	// drag. The tab is shown at once either way.
+	t.mu.Lock()
+	t.tabDrag, t.tabDropTarget = tab, 0
+	t.mu.Unlock()
 	return true, t.showTab(tab)
+}
+
+// dragTab follows a tab being dragged along the bar, marking where it would
+// land. It reports whether a tab drag is under way.
+func (t *tui) dragTab(ev ui.MouseEvent) bool {
+	t.mu.Lock()
+	dragging := t.tabDrag
+	if dragging == 0 {
+		t.mu.Unlock()
+		return false
+	}
+	frame := t.buildFrame()
+	cols, rows := t.cols, t.rows
+	// The bar's row, whatever row the pointer drifted to: a drag along a
+	// one-line bar is rarely exactly on it.
+	target, newTab, ok := ui.TabAt(frame, ev.X, ui.TabBarRow(frame, rows), cols, rows)
+	if !ok || newTab || target == dragging {
+		target = 0
+	}
+	if target != t.tabDropTarget {
+		t.tabDropTarget = target
+		t.dirty = true
+	}
+	t.mu.Unlock()
+	t.wakeUp()
+	return true
+}
+
+// dropTab ends a tab drag, moving the tab to where it was dropped. It
+// reports whether there was one.
+func (t *tui) dropTab() (bool, error) {
+	t.mu.Lock()
+	dragging, target := t.tabDrag, t.tabDropTarget
+	t.tabDrag, t.tabDropTarget = 0, 0
+	from, to := -1, -1
+	for i, tab := range t.tabsLocked() {
+		if tab.ID == dragging {
+			from = i
+		}
+		if tab.ID == target {
+			to = i
+		}
+	}
+	t.dirty = true
+	t.mu.Unlock()
+	if dragging == 0 {
+		return false, nil
+	}
+	if target == 0 || from < 0 || to < 0 {
+		return true, nil // a click, or a drop off the bar
+	}
+	if err := t.client.MoveTab(dragging, to-from); err != nil {
+		return true, err
+	}
+	return true, t.refresh()
 }
 
 // clickSidebar goes wherever the clicked row points.

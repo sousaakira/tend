@@ -498,7 +498,8 @@ Ported (see "Ported, and checked"). Left:
 - Moving a pane into another tab or space is `pane.move` over the socket,
   with no key or menu — as in herdr, which offers it only there too.
   `workspace.move_block` is ported.
-- Dragging a tab or a space with the mouse.
+- Dragging a space in the sidebar with the mouse. (Dragging a tab along the
+  bar is ported, with herdr's mark where it will land.)
 - **The rest of herdr's default keys.** tend's prefix keys are tmux's where
   herdr's differ: herdr detaches on `q` (tend `d`), renames tabs on `shift+t`
   and spaces on `shift+w` (tend `,` and `.`), splits on `v` and `-`, cycles

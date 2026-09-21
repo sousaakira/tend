@@ -216,6 +216,9 @@ type tui struct {
 	windowFocused bool
 	hostAsked     bool
 	hostPending   []byte
+	// tabDrag is a tab pressed on the bar, which a drag moves; tabDropTarget
+	// the tab it would take the place of if let go now.
+	tabDrag, tabDropTarget uint64
 	// transient is a pane opened to run one of the user's commands, and the
 	// view to go back to when it closes.
 	transient *transientPane
@@ -954,6 +957,7 @@ func (t *tui) buildFrame() ui.Frame {
 	}
 
 	frame.StatusSeparator = t.snap.TabBarSeparator
+	frame.TabDropTarget = t.tabDropTarget
 	frame.TabBarBottom = t.config.UI.TabBarPosition == "bottom"
 	frame.HideSingleTab = t.config.UI.HideTabBarWhenSingleTab
 	for _, seg := range t.snap.TabBarRight {

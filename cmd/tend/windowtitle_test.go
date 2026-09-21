@@ -183,3 +183,27 @@ func TestATabBarAtTheBottom(t *testing.T) {
 		return len(lines) >= rows && strings.Contains(lines[rows-2], "2")
 	})
 }
+
+// TestATabIsDraggedToAnotherPlace is herdr's tab drag: pressed on the bar,
+// dragged over another tab and let go, it takes that tab's place. If it
+// regresses, the only way to reorder tabs is the socket.
+func TestATabIsDraggedToAnotherPlace(t *testing.T) {
+	a := startSession(t, 100, 14)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	for range 2 {
+		before := strings.Count(a.lines()[0], "tab ")
+		a.send(t, "\x02c")
+		a.waitForScreen(t, "another tab", func(string) bool { return strings.Count(a.lines()[0], "tab ") > before })
+	}
+	bar := a.lines()[0]
+	from := columnOfString(bar, "tab 3")
+	to := columnOfString(bar, "tab 1")
+	if from < 0 || to < 0 {
+		t.Fatalf("tab bar = %q", bar)
+	}
+	a.dragFromTo(t, 0, from+2, 1, to+2, 1)
+	a.waitForScreen(t, "tab 3 first", func(string) bool {
+		bar := a.lines()[0]
+		return strings.Index(bar, "tab 3") >= 0 && strings.Index(bar, "tab 3") < strings.Index(bar, "tab 1")
+	})
+}

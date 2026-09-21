@@ -291,6 +291,9 @@ type Frame struct {
 	// herdr's tab_bar_position and hide_tab_bar_when_single_tab.
 	TabBarBottom  bool
 	HideSingleTab bool
+	// TabDropTarget is the tab a dragged tab would take the place of, marked
+	// with a bar at its edge as herdr marks where a tab will land.
+	TabDropTarget uint64
 
 	Session   string
 	Workspace string
@@ -567,6 +570,11 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 			style = theme.StatusAlert
 		}
 		writeString(dst, seg.Start, y, tabLabel(tab), style, dst.Cols())
+		if f.TabDropTarget != 0 && seg.Tab == f.TabDropTarget {
+			mark := theme.BorderFocused
+			mark.BG = style.BG
+			writeString(dst, seg.Start, y, "│", mark, dst.Cols())
+		}
 	}
 	drawTabBarStatus(dst, f, theme, y)
 }
