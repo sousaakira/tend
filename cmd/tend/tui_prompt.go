@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,6 +58,15 @@ func (t *tui) startPrompt(kind promptKind) {
 		}
 	case promptNewWorktree:
 		t.promptText = worktree.GeneratedBranch(uint64(time.Now().UnixNano()))
+		// Found once, for the path shown as the branch is typed (herdr's
+		// create overlay shows where the checkout will go). Only here: over
+		// ssh the repository is on the other machine.
+		t.promptRepo = ""
+		if w, ok := t.workspaceLocked(); ok && t.host == "" && w.Dir != "" {
+			if repo, err := worktree.Find(w.Dir); err == nil {
+				t.promptRepo = repo.Name
+			}
+		}
 	case promptRenamePane:
 		for _, p := range t.snap.Panes {
 			if p.ID == t.focus {
@@ -229,4 +240,32 @@ func (t *tui) promptLabelLocked() string {
 		return "rename group"
 	}
 	return ""
+}
+
+// promptHintLocked says where the answer being typed leads: for a new
+// worktree, the checkout's path, recomputed with every key as herdr's create
+// overlay shows it. The caller holds the lock.
+func (t *tui) promptHintLocked() string {
+	if t.prompt != promptNewWorktree || t.promptRepo == "" {
+		return ""
+	}
+	return "→ " + tildeHome(worktree.DefaultPath(t.worktreeRootLocked(), t.promptRepo, t.promptText))
+}
+
+// worktreeRootLocked is where new worktrees go, as the server works it out:
+// the setting, or ~/.tend/worktrees. The caller holds the lock.
+func (t *tui) worktreeRootLocked() string {
+	root := worktree.ExpandHome(t.config.Worktrees.Directory)
+	if root == "" || !filepath.IsAbs(root) {
+		root = worktree.ExpandHome("~/.tend/worktrees")
+	}
+	return root
+}
+
+// tildeHome writes the home directory as ~, so a path fits on a status line.
+func tildeHome(path string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(path, home+string(os.PathSeparator)) {
+		return "~" + path[len(home):]
+	}
+	return path
 }

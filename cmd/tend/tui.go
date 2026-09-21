@@ -257,6 +257,9 @@ type tui struct {
 	// lastNotice is the pane the last announcement was about, which
 	// open-notification goes to.
 	lastNotice uint64
+	// promptRepo is the repository a new worktree is for, so the prompt can
+	// say where the checkout will go.
+	promptRepo string
 	notifier   *notify.Notifier
 	sound      *notify.Player
 	// lastFocus is the pane that was focused before this one, for prefix+;.
@@ -912,6 +915,7 @@ func (t *tui) buildFrame() ui.Frame {
 		frame.Prompt = t.promptLabelLocked()
 		frame.PromptText = t.promptText
 		frame.PromptSelected = t.promptPristine
+		frame.PromptHint = t.promptHintLocked()
 	}
 	if t.scrollPane != 0 {
 		frame.Scroll = t.scrollOffset

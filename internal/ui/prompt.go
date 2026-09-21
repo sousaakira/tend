@@ -21,6 +21,11 @@ const promptMinWidth = 34
 // promptRect is where the box goes.
 func promptRect(f Frame, cols, rows int) Rect {
 	width := max(runewidth.StringWidth(f.Prompt), runewidth.StringWidth(f.PromptText)+1)
+	if f.PromptHint != "" {
+		// Wide enough for the hint and the keys beside it, up to the screen:
+		// a path cut down to its last few characters says little.
+		width = max(width, runewidth.StringWidth(f.PromptHint)+len(" · enter · esc ")+2)
+	}
 	width = max(width, promptMinWidth)
 
 	r := Rect{Cols: min(width+6, cols), Rows: min(5, rows)}
@@ -54,7 +59,18 @@ func drawPrompt(dst *vt.Grid, f Frame, theme Theme) {
 	at := writeString(dst, r.X+2, r.Y+2, truncate(f.PromptText, r.Cols-5), style, limit)
 	writeString(dst, at, r.Y+2, "▏", theme.OverlayTitle, limit)
 
-	writeString(dst, r.X+2, r.Y+r.Rows-1, " enter · esc ", theme.OverlayTitle, limit)
+	footer := " enter · esc "
+	if f.PromptHint != "" {
+		// Cut from the left: the end of a path is the part that changes as
+		// it is typed, and the part worth seeing.
+		hint := f.PromptHint
+		if room := r.Cols - 4 - len([]rune(footer)) - 3; room > 1 && len([]rune(hint)) > room {
+			runes := []rune(hint)
+			hint = "…" + string(runes[len(runes)-room+1:])
+		}
+		footer = " " + hint + " ·" + footer
+	}
+	writeString(dst, r.X+2, r.Y+r.Rows-1, footer, theme.OverlayTitle, limit)
 }
 
 // PromptCursor is where the terminal's own cursor belongs while the field is

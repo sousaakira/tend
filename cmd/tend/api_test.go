@@ -610,14 +610,21 @@ func TestMakingAWorktreeFromTheSpaceMenu(t *testing.T) {
 	a.waitForScreen(t, "the branch prompt", func(s string) bool {
 		return strings.Contains(s, "new worktree — branch")
 	})
-	// Typed over the generated name.
-	a.send(t, "\x15feature/menu\r")
+	// Typed over the generated name, with the checkout's path following the
+	// branch as it is typed, as herdr's overlay shows it.
+	a.send(t, "\x15feature/menu")
+	a.waitForScreen(t, "the path as the branch is typed", func(s string) bool {
+		return strings.Contains(s, "project/feature-menu")
+	})
+	a.send(t, "\r")
 
 	// In the sidebar, not anywhere on screen: the status line says
 	// "making feature/menu…" before the checkout exists, and a wait that
 	// message satisfies raced the git it was waiting for.
-	a.waitForScreen(t, "the worktree as a space", func(string) bool {
-		return strings.Contains(a.sidebarText(), "feature/menu")
+	// And with the prompt gone: its box can be wide enough to reach over
+	// the sidebar with the branch typed in it.
+	a.waitForScreen(t, "the worktree as a space", func(s string) bool {
+		return !strings.Contains(s, "enter · esc") && strings.Contains(a.sidebarText(), "feature/menu")
 	})
 	if _, err := os.Stat(filepath.Join(worktrees, "project", "feature-menu", ".git")); err != nil {
 		t.Errorf("no checkout was made: %v", err)

@@ -372,6 +372,9 @@ type Frame struct {
 
 	// Selection is a range of text being marked in a pane, or nil.
 	Selection *Selection
+	// PromptHint is shown along the prompt's bottom edge: what the answer
+	// being typed will do, such as where a worktree's checkout will go.
+	PromptHint string
 	// Highlight marks every visible match of a copy-mode search, or nil.
 	Highlight *Highlight
 }
