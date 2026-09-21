@@ -208,6 +208,26 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		t.startPrompt(promptGroupSpace)
 		return nil
 
+	case ui.MenuMoveToGroup:
+		t.mu.Lock()
+		current, groups := "", []string(nil)
+		seen := make(map[string]bool)
+		for _, w := range t.snap.Workspaces {
+			if w.ID == m.Workspace {
+				current = w.Group
+			}
+			if w.Group != "" && !seen[w.Group] {
+				seen[w.Group] = true
+				groups = append(groups, w.Group)
+			}
+		}
+		t.mu.Unlock()
+		t.openMenu(ui.GroupPickMenu(m.Workspace, current, groups, m.X, m.Y))
+		return nil
+
+	case ui.MenuPickGroup:
+		return t.moveSpaceToGroup(m.Workspace, item.Arg)
+
 	case ui.MenuFold:
 		t.toggleGroup(m.Group)
 		return nil
@@ -298,6 +318,17 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 		return t.closeFor(m)
 	}
 	return nil
+}
+
+// moveSpaceToGroup puts a space in a group, or in none.
+func (t *tui) moveSpaceToGroup(workspace uint64, group string) error {
+	if err := t.client.GroupWorkspace(workspace, group); err != nil {
+		if t.reportStaleServer(err) {
+			return nil
+		}
+		return err
+	}
+	return t.refresh()
 }
 
 // renameGroup moves every space in a group to a new name, which is what

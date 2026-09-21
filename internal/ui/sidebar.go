@@ -84,7 +84,8 @@ type SidebarRow struct {
 	// the entry (row_gap).
 	Lines [][]SidebarToken
 	Gap   int
-	// DropHere marks the space a dragged one would take the place of.
+	// DropHere marks the space a dragged one would take the place of, or the
+	// group heading it would join.
 	DropHere bool
 	// Symbols draws the state as herdr's distinct glyphs rather than dots
 	// (status_indicators = "symbols").
@@ -468,6 +469,10 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 		style := theme.SidebarGroup
 		if r.Active {
 			style = theme.SidebarGroupActive
+		}
+		if r.DropHere {
+			// A dragged space let go here joins the group.
+			writeString(dst, 0, y, "▎", theme.BorderFocused, limit)
 		}
 		x := writeString(dst, 1, y, marker, style, limit)
 		writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)

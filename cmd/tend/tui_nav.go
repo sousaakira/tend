@@ -398,11 +398,12 @@ func (t *tui) spaceRowsLocked() []ui.SidebarRow {
 		members := t.groupMembersLocked(w.Group)
 		folded := t.folded[w.Group]
 		rows = append(rows, ui.SidebarRow{
-			Kind:   ui.SidebarSpaceGroup,
-			Label:  w.Group,
-			Group:  w.Group,
-			Folded: folded,
-			Action: ui.ActionToggleGroup,
+			Kind:     ui.SidebarSpaceGroup,
+			Label:    w.Group,
+			Group:    w.Group,
+			Folded:   folded,
+			DropHere: w.Group == t.spaceDropGroup,
+			Action:   ui.ActionToggleGroup,
 			// A folded group still says what is happening inside it. Hiding
 			// that would make folding a way to stop being told an agent is
 			// waiting, which is the opposite of what folding is for.
@@ -439,6 +440,16 @@ func (t *tui) spaceRowLocked(w proto.WorkspaceInfo, depth int) ui.SidebarRow {
 		Running:   true,
 		Active:    w.ID == t.workspace,
 	}
+}
+
+// groupOfLocked is the group a space is in, or "".
+func (t *tui) groupOfLocked(workspace uint64) string {
+	for _, w := range t.snap.Workspaces {
+		if w.ID == workspace {
+			return w.Group
+		}
+	}
+	return ""
 }
 
 // groupMembersLocked returns a group's spaces in session order.

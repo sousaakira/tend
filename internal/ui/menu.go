@@ -40,8 +40,13 @@ const (
 	// MenuPickWorktree is an item in the list of worktrees, with the branch or
 	// path in Arg.
 	MenuPickWorktree = "menu-pick-worktree"
-	MenuMoveBack     = "menu-move-back"
-	MenuMoveOn       = "menu-move-on"
+	// MenuMoveToGroup lists the groups a space can be moved into, and
+	// MenuPickGroup is one of them, with its name in Arg — or no name, for
+	// taking the space out of the group it is in.
+	MenuMoveToGroup = "menu-move-to-group"
+	MenuPickGroup   = "menu-pick-group"
+	MenuMoveBack    = "menu-move-back"
+	MenuMoveOn      = "menu-move-on"
 )
 
 // MenuItem is one line of a menu.
@@ -184,7 +189,7 @@ func SpaceMenu(workspace uint64, x, y int) Menu {
 			{Label: "new space", Action: MenuNewSpace},
 			{Label: "new tab", Action: MenuNewTab},
 			{Label: "rename", Action: MenuRename},
-			{Label: "group...", Action: MenuGroup},
+			{Label: "move to group...", Action: MenuMoveToGroup},
 			{Label: "new worktree...", Action: MenuNewWorktree},
 			{Label: "open worktree...", Action: MenuOpenWorktree},
 			{Label: "remove worktree", Action: MenuRemoveWorktree},
@@ -194,6 +199,24 @@ func SpaceMenu(workspace uint64, x, y int) Menu {
 		},
 		X: x, Y: y, Workspace: workspace,
 	}
+}
+
+// GroupPickMenu lists where a space can go: each group it is not in, a new
+// one, and out of the one it is in. Typing a name that already exists is
+// how a space joined a group before, and it is easy to get one letter wrong
+// and make a second group; picking it from a list is not.
+func GroupPickMenu(workspace uint64, current string, groups []string, x, y int) Menu {
+	var items []MenuItem
+	for _, g := range groups {
+		if g != current {
+			items = append(items, MenuItem{Label: g, Action: MenuPickGroup, Arg: g})
+		}
+	}
+	items = append(items, MenuItem{Label: "new group...", Action: MenuGroup})
+	if current != "" {
+		items = append(items, MenuItem{Label: "remove from group", Action: MenuPickGroup})
+	}
+	return Menu{Title: "move to group", Items: items, X: x, Y: y, Workspace: workspace}
 }
 
 // GroupMenu is what a right-click on a group heading offers.

@@ -228,6 +228,9 @@ type tui struct {
 	tabDrag, tabDropTarget uint64
 	// spaceDrag and spaceDropTarget are the same for a space in the sidebar.
 	spaceDrag, spaceDropTarget uint64
+	// spaceDropGroup is the group heading a dragged space is over, which
+	// letting go moves it into.
+	spaceDropGroup string
 	// transient is a pane opened to run one of the user's commands, and the
 	// view to go back to when it closes.
 	transient *transientPane

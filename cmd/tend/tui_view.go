@@ -650,7 +650,7 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		// The press may start a drag that moves the space, as a tab's may.
 		if row.Kind == ui.SidebarSpace {
 			t.mu.Lock()
-			t.spaceDrag, t.spaceDropTarget = row.Workspace, 0
+			t.spaceDrag, t.spaceDropTarget, t.spaceDropGroup = row.Workspace, 0, ""
 			t.mu.Unlock()
 		}
 		return true, t.showWorkspace(row.Workspace)
@@ -669,12 +669,17 @@ func (t *tui) dragSpace(ev ui.MouseEvent) bool {
 	}
 	frame := t.buildFrame()
 	rows := t.rows
-	target := uint64(0)
-	if row, ok := ui.SidebarRowAt(frame, 1, ev.Y, rows); ok && row.Kind == ui.SidebarSpace && row.Workspace != dragging {
-		target = row.Workspace
+	target, group := uint64(0), ""
+	if row, ok := ui.SidebarRowAt(frame, 1, ev.Y, rows); ok {
+		switch {
+		case row.Kind == ui.SidebarSpace && row.Workspace != dragging:
+			target = row.Workspace
+		case row.Kind == ui.SidebarSpaceGroup && row.Group != t.groupOfLocked(dragging):
+			group = row.Group
+		}
 	}
-	if target != t.spaceDropTarget {
-		t.spaceDropTarget = target
+	if target != t.spaceDropTarget || group != t.spaceDropGroup {
+		t.spaceDropTarget, t.spaceDropGroup = target, group
 		t.dirty = true
 	}
 	t.mu.Unlock()
@@ -683,18 +688,25 @@ func (t *tui) dragSpace(ev ui.MouseEvent) bool {
 }
 
 // dropSpace ends a space drag, moving the space to the place of the one it
-// was dropped on. It reports whether there was one.
+// was dropped on, or into the group whose heading it was dropped on. It
+// reports whether there was one.
+//
+// A space dropped among another group's spaces joins that group, and one
+// dropped among spaces in none leaves its own: the sidebar draws a space
+// under its group's heading whatever its place in the session, so moving it
+// without regrouping it would put it back where it came from on screen.
 func (t *tui) dropSpace() (bool, error) {
 	t.mu.Lock()
-	dragging, target := t.spaceDrag, t.spaceDropTarget
-	t.spaceDrag, t.spaceDropTarget = 0, 0
+	dragging, target, group := t.spaceDrag, t.spaceDropTarget, t.spaceDropGroup
+	t.spaceDrag, t.spaceDropTarget, t.spaceDropGroup = 0, 0, ""
 	from, to := -1, -1
+	own, theirs := "", ""
 	for i, w := range t.snap.Workspaces {
 		if w.ID == dragging {
-			from = i
+			from, own = i, w.Group
 		}
 		if w.ID == target {
-			to = i
+			to, theirs = i, w.Group
 		}
 	}
 	t.dirty = true
@@ -702,8 +714,16 @@ func (t *tui) dropSpace() (bool, error) {
 	if dragging == 0 {
 		return false, nil
 	}
+	if group != "" {
+		return true, t.moveSpaceToGroup(dragging, group)
+	}
 	if target == 0 || from < 0 || to < 0 {
 		return true, nil
+	}
+	if theirs != own {
+		if err := t.client.GroupWorkspace(dragging, theirs); err != nil {
+			return true, err
+		}
 	}
 	if err := t.client.MoveWorkspace(dragging, to-from); err != nil {
 		return true, err

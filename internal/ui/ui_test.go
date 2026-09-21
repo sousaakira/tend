@@ -938,6 +938,28 @@ func TestGroupMenuActsOnTheGroup(t *testing.T) {
 	}
 }
 
+// TestGroupPickMenuOffersEveryOtherGroup: moving a space into a group is
+// picking one that exists, making one, or leaving the one it is in. If it
+// regresses, joining a group means typing its name exactly, and a typo makes
+// a second group instead.
+func TestGroupPickMenuOffersEveryOtherGroup(t *testing.T) {
+	m := GroupPickMenu(7, "clients", []string{"clients", "servers", "docs"}, 0, 0)
+	var labels []string
+	for _, it := range m.Items {
+		labels = append(labels, it.Label)
+	}
+	want := []string{"servers", "docs", "new group...", "remove from group"}
+	if strings.Join(labels, "|") != strings.Join(want, "|") {
+		t.Errorf("items = %q, want %q", labels, want)
+	}
+	if m.Workspace != 7 || m.Items[0].Arg != "servers" || m.Items[3].Arg != "" {
+		t.Errorf("menu = %+v", m)
+	}
+	if out := GroupPickMenu(7, "", nil, 0, 0); len(out.Items) != 1 || out.Items[0].Label != "new group..." {
+		t.Errorf("a space in no group, with no groups made, can only make one: %+v", out.Items)
+	}
+}
+
 // --- the divided sidebar ---------------------------------------------------
 
 // TestSidebarSectionsAreSeparate is the bug this was found by: the spaces

@@ -1524,8 +1524,12 @@ func TestAttachMenuButtonAndEscape(t *testing.T) {
 // menu, the way a user would.
 func (a *attached) groupSpace(t *testing.T, space, group string) {
 	t.Helper()
-	a.openMenuOn(t, 6, a.lineContaining(t, space), "group...")
-	a.clickAt(t, 8, a.lineContaining(t, "group..."))
+	a.openMenuOn(t, 6, a.lineContaining(t, space), "move to group...")
+	a.clickAt(t, 8, a.lineContaining(t, "move to group..."))
+	a.waitForScreen(t, "the list of groups", func(s string) bool {
+		return strings.Contains(s, "new group...")
+	})
+	a.clickAt(t, 8, a.lineContaining(t, "new group..."))
 	a.waitForScreen(t, "the group prompt", func(s string) bool {
 		return strings.Contains(s, "empty to ungroup")
 	})
@@ -1585,6 +1589,56 @@ func TestAttachUngroupsFromTheGroupMenu(t *testing.T) {
 	a.waitForScreen(t, "the group to go", func(string) bool {
 		side := a.sidebarText()
 		return !strings.Contains(side, "clients") && strings.Contains(side, "space 2")
+	})
+}
+
+// TestASpaceMovesIntoAGroupPickedFromTheMenu: "move to group..." lists the
+// groups there are, and picking one puts the space in it. If it regresses,
+// joining a group means typing its exact name again.
+func TestASpaceMovesIntoAGroupPickedFromTheMenu(t *testing.T) {
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02N")
+	a.waitForScreen(t, "a second space", func(string) bool { return strings.Contains(a.sidebarText(), "space 2") })
+	a.groupSpace(t, "space 2", "clients")
+	a.waitForScreen(t, "the group", func(string) bool { return strings.Contains(a.sidebarText(), "▼ clients") })
+
+	a.openMenuOn(t, 6, a.lineContaining(t, "main"), "move to group...")
+	a.clickAt(t, 8, a.lineContaining(t, "move to group..."))
+	a.waitForScreen(t, "the list of groups", func(s string) bool { return strings.Contains(s, "new group...") })
+	// The menu's item, not the sidebar's heading, which has the fold marker.
+	item := 0
+	for i, line := range a.lines() {
+		if strings.Contains(line, "clients") && !strings.Contains(line, "▼ clients") {
+			item = i + 1
+		}
+	}
+	if item == 0 {
+		t.Fatalf("clients is not offered:\n%s", a.text())
+	}
+	col := strings.Index(string([]rune(a.lines()[item-1])), "clients")
+	a.clickAt(t, len([]rune(a.lines()[item-1][:col]))+2, item)
+	a.waitForScreen(t, "main under clients", func(string) bool {
+		side := a.sidebarText()
+		return strings.Index(side, "▼ clients") >= 0 && strings.Index(side, "▼ clients") < strings.Index(side, "main")
+	})
+}
+
+// TestASpaceDroppedOnAGroupJoinsIt: dragging a space onto a group's heading
+// puts it in that group. If it regresses, the only way into a group is the
+// menu.
+func TestASpaceDroppedOnAGroupJoinsIt(t *testing.T) {
+	a := startSession(t, 100, 24)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02N")
+	a.waitForScreen(t, "a second space", func(string) bool { return strings.Contains(a.sidebarText(), "space 2") })
+	a.groupSpace(t, "space 2", "clients")
+	a.waitForScreen(t, "the group", func(string) bool { return strings.Contains(a.sidebarText(), "▼ clients") })
+
+	a.dragFromTo(t, 0, 6, a.lineContaining(t, "main"), 4, a.lineContaining(t, "clients"))
+	a.waitForScreen(t, "main under clients", func(string) bool {
+		side := a.sidebarText()
+		return strings.Index(side, "▼ clients") >= 0 && strings.Index(side, "▼ clients") < strings.Index(side, "main")
 	})
 }
 
