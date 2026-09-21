@@ -65,6 +65,9 @@ func (m *Model) Draw(g *vt.Grid) (cx, cy int, visible bool) {
 		return m.drawSearch(g)
 	case modeBranch:
 		return m.drawBranches(g)
+	case modeMenu:
+		m.drawMenu(g)
+		return 0, 0, false
 	}
 
 	m.drawHeader(g)
@@ -267,6 +270,8 @@ var helpLines = []string{
 	"  space   preview beside (click too)",
 	"  ← →     close, open folder",
 	"  .       dotfiles on, off",
+	"  s       stage the file or folder",
+	"  m       menu: new, rename, delete, copy path",
 	"changes",
 	"  enter   diff",
 	"  o       open in the editor",
@@ -305,9 +310,17 @@ func (m *Model) drawHelp(g *vt.Grid) {
 
 func (m *Model) drawFooter(g *vt.Grid) (int, int, bool) {
 	y := m.rows - 1
-	if m.mode == modeCommit {
-		x := put(g, 1, y, "commit: ", styleAccent, m.cols)
-		text := m.input
+	if m.mode == modeCommit || m.mode == modePrompt {
+		label, text := "commit: ", m.input
+		if m.mode == modePrompt {
+			// The question on the row above, the answer on this one: a
+			// question like "delete src and everything in it?" does not fit
+			// beside a name on a narrow panel.
+			fill(g, y-1, 0, m.cols, styleNormal)
+			put(g, 1, y-1, truncate(m.prompt.label, m.cols-2), styleAccent, m.cols)
+			label, text = "› ", m.prompt.text
+		}
+		x := put(g, 1, y, label, styleAccent, m.cols)
 		// The end of what is typed is what is being looked at.
 		if room := m.cols - x - 2; runewidth.StringWidth(text) > room && room > 1 {
 			runes := []rune(text)

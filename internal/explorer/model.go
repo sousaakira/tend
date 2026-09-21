@@ -41,6 +41,8 @@ const (
 	modeCommit
 	modeHelp
 	modeBranch
+	modeMenu
+	modePrompt
 )
 
 // Opener opens a file for editing somewhere other than here: in tend, an
@@ -91,6 +93,9 @@ type Model struct {
 	// what the panel made of it last time.
 	neighbours Neighbours
 	follow     follower
+
+	menu   contextMenu
+	prompt prompt
 
 	branches   branchPicker
 	job        Job
@@ -326,6 +331,10 @@ func (m *Model) Key(k Key) {
 		m.mode = modeList
 	case modeBranch:
 		m.branchKey(k)
+	case modeMenu:
+		m.menuKey(k)
+	case modePrompt:
+		m.promptKey(k)
 	default:
 		if m.view == ViewSearch && m.searchViewKey(k) {
 			return
@@ -442,6 +451,10 @@ func (m *Model) filesKey(k Key) {
 			}
 			m.clamp()
 		}
+	case "m":
+		m.openMenu(n)
+	case "s":
+		m.stagePath(n)
 	case ".":
 		m.tree.Hidden = !m.tree.Hidden
 		m.layout()

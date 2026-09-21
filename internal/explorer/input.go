@@ -229,6 +229,11 @@ func (m *Model) Mouse(ev Mouse) {
 	case modeBranch:
 		m.branchMouse(ev)
 		return
+	case modeMenu:
+		m.menuMouse(ev)
+		return
+	case modePrompt:
+		return
 	case modeHelp, modeCommit:
 		if ev.Press {
 			m.mode = modeList
@@ -241,6 +246,18 @@ func (m *Model) Mouse(ev Mouse) {
 		m.scroll[v] = min(max(m.scroll[v]+3*ev.Wheel, 0), max(m.listLen()-m.listRows(), 0))
 		// The cursor stays where it is on the list, which may now be off
 		// screen; the next key brings it back, as in an editor.
+		return
+	}
+	if ev.Press && ev.Button == 2 && m.view == ViewFiles {
+		// A right-click is the menu, on the entry under it or, below the
+		// last, on the project.
+		i := m.scroll[ViewFiles] + ev.Y - 2
+		if ev.Y >= 2 && i < len(m.fileRows) {
+			m.cursor[ViewFiles] = i
+			m.openMenu(m.fileRows[i])
+		} else if ev.Y >= 2 {
+			m.openMenu(nil)
+		}
 		return
 	}
 	if !ev.Press || ev.Button != 0 {
