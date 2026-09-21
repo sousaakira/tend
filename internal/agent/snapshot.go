@@ -83,6 +83,10 @@ func (d *Detector) Agent() string {
 	return d.manifest.ID
 }
 
+// Manifest is the rules this detector is using, for anything that has to
+// explain what they did.
+func (d *Detector) Manifest() *detect.Manifest { return d.manifest }
+
 // State returns the last state reported.
 func (d *Detector) State() detect.State { return d.state }
 

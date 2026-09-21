@@ -366,7 +366,8 @@ func runAgent(args []string) error {
 				"  read <target>              what the agent's pane has shown\n"+
 				"  prompt <target> <text>     submit a prompt, optionally waiting for the answer\n"+
 				"  send-keys <target> <key>…  press keys in the agent's pane\n"+
-				"  wait <target>              wait until the agent is idle or blocked\n\n"+
+				"  wait <target>              wait until the agent is idle or blocked\n"+
+				"  explain <target>           why the agent is shown as it is\n\n"+
 				"a target is a pane (\"p_2\", or \"2\") or an agent name when only one pane runs it.\n\n")
 	}
 	if len(args) == 0 {
@@ -470,6 +471,28 @@ func runAgent(args []string) error {
 			"target": fs.Arg(0), "keys": fs.Args()[1:],
 		}, false)
 		return err
+
+	case "explain":
+		fs := flag.NewFlagSet("agent explain", flag.ExitOnError)
+		name := sessionFlag(fs)
+		screen := fs.Bool("screen", false, "include the text detection read")
+		rest = hoistFlags(rest, map[string]bool{"screen": false, "s": true, "session": true})
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
+			return errors.New("name an agent or a pane to explain")
+		}
+		result, err := apiCall(*name, api.MethodAgentExplain, map[string]any{
+			"target": fs.Arg(0), "screen": *screen,
+		}, false)
+		if err != nil {
+			return err
+		}
+		if note := text(result["note"]); note != "" {
+			fmt.Fprintf(os.Stderr, "%s %s\n", tag(), note)
+		}
+		return printJSON(result["explain"])
 
 	case "wait":
 		fs := flag.NewFlagSet("agent wait", flag.ExitOnError)

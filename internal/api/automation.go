@@ -55,6 +55,7 @@ const (
 	MethodAgentSendKeys = "agent.send_keys"
 	MethodAgentWait     = "agent.wait"
 	MethodAgentStart    = "agent.start"
+	MethodAgentExplain  = "agent.explain"
 
 	MethodLayoutExport = "layout.export"
 	MethodLayoutApply  = "layout.apply"
@@ -452,7 +453,8 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		return map[string]any{"type": "agent_list", "agents": out}, nil
 
-	case MethodAgentGet, MethodAgentRead, MethodAgentPrompt, MethodAgentSendKeys, MethodAgentWait:
+	case MethodAgentGet, MethodAgentRead, MethodAgentPrompt, MethodAgentSendKeys,
+		MethodAgentWait, MethodAgentExplain:
 		return a.agentCall(req)
 
 	case MethodAgentStart:
@@ -721,6 +723,9 @@ func (a *API) agentCall(req Request) (any, error) {
 		Until     []string `json:"until"`
 		TimeoutMs uint64   `json:"timeout_ms"`
 		Wait      bool     `json:"wait"`
+		// Screen asks for the text detection read, which is what an
+		// explanation is checked against.
+		Screen bool `json:"screen"`
 	}
 	if err := decode(req.Params, &p); err != nil {
 		return nil, err
@@ -768,6 +773,20 @@ func (a *API) agentCall(req Request) (any, error) {
 
 	case MethodAgentWait:
 		return a.waitForState(target, id, p.Until, p.TimeoutMs, false)
+
+	case MethodAgentExplain:
+		explanation, err := a.srv.Explain(id, p.Screen)
+		if err != nil {
+			// The explanation is still worth having when there is no
+			// manifest: it says which hook answered, or that nothing did.
+			if explanation.Pane == 0 {
+				return nil, paneErr(target, err)
+			}
+			return map[string]any{
+				"type": "agent_explain", "explain": explanation, "note": err.Error(),
+			}, nil
+		}
+		return map[string]any{"type": "agent_explain", "explain": explanation}, nil
 	}
 	return nil, fail("unknown_method", "unknown method %q", req.Method)
 }

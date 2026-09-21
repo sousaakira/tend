@@ -334,3 +334,53 @@ func TestMovingAPaneToAnotherTabDoesNotRestartIt(t *testing.T) {
 		t.Errorf("the tab it moved to has %d panes, want 2", len(panes))
 	}
 }
+
+// TestExplainingWhyAnAgentIsShownAsItIs: "why does it say that?" is the
+// question detection raises most often, and guessing at a screen that has
+// since changed is the alternative.
+func TestExplainingWhyAnAgentIsShownAsItIs(t *testing.T) {
+	h := start(t)
+
+	// A pane that looks like claude waiting for an answer, so a rule fires.
+	made := result(t, call(t, h, MethodPaneSplit, map[string]any{
+		"pane_id": PaneID(h.pane), "agent": "claude",
+		"command": []string{"/bin/sh", "-c", "printf 'Do you want to proceed?\\n  1. Yes\\n'; sleep 30"},
+	}))
+	pane, _ := made["pane"].(map[string]any)
+	id := text(pane["pane_id"])
+
+	deadline := time.Now().Add(5 * time.Second)
+	var explain map[string]any
+	for time.Now().Before(deadline) {
+		res := result(t, call(t, h, MethodAgentExplain, map[string]any{"target": id, "screen": true}))
+		explain, _ = res["explain"].(map[string]any)
+		if text(explain["matched_rule"]) != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if text(explain["matched_rule"]) == "" {
+		t.Fatalf("nothing explains the state: %v", explain)
+	}
+	if text(explain["source"]) != "screen" {
+		t.Errorf("source = %q, want the screen", explain["source"])
+	}
+	rules, _ := explain["evaluated_rules"].([]any)
+	if len(rules) < 2 {
+		t.Errorf("only %d rules were reported; the point is seeing them all", len(rules))
+	}
+	if !strings.Contains(text(explain["screen"]), "Do you want to proceed?") {
+		t.Errorf("the screen detection read was not reported: %q", explain["screen"])
+	}
+
+	// A hook answering for the pane says so, rather than naming a rule that
+	// had nothing to do with it.
+	h.call(t, `{"id":"r","method":"pane.report_agent","params":{"pane_id":"`+id+
+		`","source":"my-hook","agent":"claude","state":"working","seq":1}}`)
+	res := result(t, call(t, h, MethodAgentExplain, map[string]any{"target": id}))
+	explain, _ = res["explain"].(map[string]any)
+	if text(explain["source"]) != "hook:my-hook" {
+		t.Errorf("source = %q, want the hook", explain["source"])
+	}
+}

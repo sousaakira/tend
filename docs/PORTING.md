@@ -228,6 +228,11 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   a file and opens `$EDITOR` on it in a pane of its own — herdr's
   `EditScrollback`. The file is removed by the command that opened it, so
   nothing has to remember it.
+- **Explaining detection** (herdr's `agent explain`): `tend agent explain
+  <target> [-screen]` runs the pane's manifest over its screen now and reports
+  every rule, which matched, and which decided — or which hook is answering
+  instead, when one is. Checked against the real Claude Code: `live_prompt_box`
+  decided "idle", out of sixteen rules.
 - **Agent metadata** (herdr's `terminal/metadata.rs`, `metadata_tokens.rs`):
   `pane.report_metadata` takes what a hook says about how to show a pane — the
   name the agent goes by, values to put beside it like the model or what is
@@ -339,7 +344,7 @@ What a script needs is ported (see "Ported, and checked"). What is left:
 
 - **Focus and scroll** (`pane.focus`, `agent.focus`, `pane.scroll`,
   `pane.current`): deliberately absent, see "Different from herdr on purpose".
-- `pane.neighbor|edges|zoom|process_info`, `agent.explain|rename|view.*`,
+- `pane.neighbor|edges|zoom|process_info`, `agent.rename|view.*`,
   `command.invoke`, and the graphics API.
 - A published schema (`herdr api schema`, `schemars`), which plugins read.
 - herdr: `api/schema*` (9.4k), `cli/agent.rs`, `cli/pane.rs`, `cli/tab.rs`,
