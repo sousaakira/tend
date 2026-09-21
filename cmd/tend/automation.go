@@ -221,6 +221,44 @@ func runNotify(args []string) error {
 	return err
 }
 
+// runTerminal is herdr's `terminal title set|clear`: a script names the window
+// tend runs in — "deploying", "review #412" — over what ui.window_title says,
+// and clearing it goes back to the template.
+func runTerminal(args []string) error {
+	const usage = "usage: tend terminal title set <title>\n       tend terminal title clear"
+	if len(args) < 2 || args[0] != "title" {
+		return errors.New(usage)
+	}
+	fs := flag.NewFlagSet("terminal title", flag.ExitOnError)
+	name := sessionFlag(fs)
+	if err := fs.Parse(hoistFlags(args[2:], map[string]bool{"s": true, "ssh": true})); err != nil {
+		return err
+	}
+	var reply map[string]any
+	var err error
+	switch args[1] {
+	case "set":
+		if fs.NArg() != 1 {
+			return errors.New(usage)
+		}
+		reply, err = apiCall(*name, api.MethodWindowTitleSet, map[string]any{"title": fs.Arg(0)}, false)
+	case "clear":
+		if fs.NArg() != 0 {
+			return errors.New(usage)
+		}
+		reply, err = apiCall(*name, api.MethodWindowTitleClear, nil, false)
+	default:
+		return errors.New(usage)
+	}
+	if err != nil {
+		return err
+	}
+	if reply["reason"] == "no_foreground_client" {
+		fmt.Fprintln(os.Stderr, "tend: nobody is attached; the title is kept for whoever attaches next")
+	}
+	return nil
+}
+
 // runLayout saves a tab's arrangement to a file, or builds one from it.
 func runLayout(args []string) error {
 	usage := func(w io.Writer) {

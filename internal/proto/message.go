@@ -176,13 +176,16 @@ const (
 	// FeatureLifecycle: the server reports what is focused and what was
 	// created, which plugins hook on.
 	FeatureLifecycle = "lifecycle"
+	// FeatureWindowTitle: the snapshot says which machine the server is on
+	// and carries any window title set over the API.
+	FeatureWindowTitle = "window-title"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
 // KnownMethods exists.
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
-	FeatureLifecycle,
+	FeatureLifecycle, FeatureWindowTitle,
 }
 
 // --- session ---------------------------------------------------------------
@@ -323,6 +326,13 @@ type SessionSnapshot struct {
 	Workspaces      []WorkspaceInfo `json:"workspaces"`
 	ActiveWorkspace uint64          `json:"active_workspace,omitempty"`
 	Panes           []PaneInfo      `json:"panes"`
+	// Hostname is the server's machine, which is where the panes are: the
+	// client may be on another one, and {hostname} in a window title means
+	// this one.
+	Hostname string `json:"hostname,omitempty"`
+	// WindowTitle is a title set over the API, which every client writes in
+	// place of its own template until it is cleared.
+	WindowTitle string `json:"window_title,omitempty"`
 }
 
 // --- pane operations -------------------------------------------------------

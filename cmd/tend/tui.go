@@ -73,21 +73,23 @@ func runAttach(args []string) error {
 	}
 
 	t := &tui{
-		config:   cfg,
-		session:  *name,
-		host:     remoteHost,
-		theme:    ui.ThemeFrom(cfg.UI.Theme),
-		painter:  vt.NewPainter(),
-		screens:  make(map[uint64]*vt.Screen),
-		sizes:    make(map[uint64]ui.Rect),
-		wake:     make(chan struct{}, 1),
-		input:    make(chan []byte, 64),
-		lostConn: make(chan struct{}, 1),
-		resync:   make(chan struct{}, 1),
-		notices:  make(map[uint64]paneNotice),
-		graphics: graphicsFor(os.Getenv),
-		toasts:   cfg.Toasts(),
-		notifier: notify.New(),
+		config:  cfg,
+		session: *name,
+		host:    remoteHost,
+		theme:   ui.ThemeFrom(cfg.UI.Theme),
+		// Refused at load when it does not parse, so the error has gone.
+		titleTemplate: mustTitle(cfg.UI.WindowTitle),
+		painter:       vt.NewPainter(),
+		screens:       make(map[uint64]*vt.Screen),
+		sizes:         make(map[uint64]ui.Rect),
+		wake:          make(chan struct{}, 1),
+		input:         make(chan []byte, 64),
+		lostConn:      make(chan struct{}, 1),
+		resync:        make(chan struct{}, 1),
+		notices:       make(map[uint64]paneNotice),
+		graphics:      graphicsFor(os.Getenv),
+		toasts:        cfg.Toasts(),
+		notifier:      notify.New(),
 		sound: &notify.Player{
 			Enabled: cfg.Sound.Enabled,
 			Done:    expandHome(cfg.Sound.Done),
@@ -124,10 +126,18 @@ type tui struct {
 	session string
 	// host is the machine the session is on, or empty for this one. It is
 	// kept so a reconnect goes back to the same place it lost.
-	host    string
-	theme   ui.Theme
-	client  *client.Client
-	painter *vt.Painter
+	host  string
+	theme ui.Theme
+	// titleTemplate is ui.window_title, parsed; nil leaves the outer title
+	// alone. titleText and titleShown are what was last written, and
+	// titlePushed whether the window's own title has been saved to give
+	// back. Only the paint goroutine touches the last three.
+	titleTemplate *config.WindowTitleTemplate
+	titleText     string
+	titleShown    bool
+	titlePushed   bool
+	client        *client.Client
+	painter       *vt.Painter
 
 	mu        sync.Mutex
 	snap      proto.SessionSnapshot
@@ -262,6 +272,7 @@ func (t *tui) run() error {
 		return err
 	}
 	defer restore()
+	defer t.restoreWindowTitle()
 	// Images this client put on the terminal are taken off before it leaves:
 	// they are drawn over the screen, not part of it, and would otherwise sit
 	// on top of whatever the shell does next.
@@ -747,6 +758,7 @@ func (t *tui) paint() error {
 	buf := vt.NewGrid(cols, rows, 0)
 	ui.Draw(buf, frame, t.theme)
 	x, y, visible := ui.CursorPosition(frame, cols, rows)
+	title, titled := t.windowTitleLocked()
 	t.mu.Unlock()
 
 	if repaintAll {
@@ -758,6 +770,7 @@ func (t *tui) paint() error {
 	if _, err := os.Stdout.Write(t.painter.Paint(buf, x, y, visible)); err != nil {
 		return err
 	}
+	t.syncWindowTitle(title, titled)
 	// After the cells, because an image goes over them and the paint would
 	// otherwise cover it.
 	t.syncGraphics(frame)

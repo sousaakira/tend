@@ -304,6 +304,12 @@ type Server struct {
 	// a snapshot identical to it is not written again.
 	lastSaved []byte
 
+	// windowTitle is a title a script set over the API, which replaces the
+	// configured template in every client until it is cleared (herdr's
+	// client.window_title.set). A fact about the session, not about one
+	// client, so it is here and goes out in the snapshot.
+	windowTitle string
+
 	// retick carries a new detection interval to the loop, which cannot read
 	// the configuration under the lock while it is doing a round of work.
 	retick chan time.Duration
@@ -738,6 +744,19 @@ func (s *Server) RenameWorkspace(id session.WorkspaceID, name string) error {
 
 // AdjustSplit moves one edge of a pane within its tab's layout, taking the
 // space from the neighbour across it.
+// SetWindowTitle sets the outer window title every client writes, or with ""
+// goes back to each client's configured template. It reports how many clients
+// are attached to be told, which is herdr's "no foreground client" answer when
+// it is none.
+func (s *Server) SetWindowTitle(title string) int {
+	s.mu.Lock()
+	s.windowTitle = title
+	clients := len(s.conns)
+	s.mu.Unlock()
+	s.publish(Event{Kind: EventSessionChanged})
+	return clients
+}
+
 // Notify passes something to whoever is looking at the session. The server
 // has no screen of its own; every attached client decides what to do with it.
 func (s *Server) Notify(title, body string) {

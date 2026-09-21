@@ -278,3 +278,52 @@ func TestThemeNamesAcceptTheSpellingsHerdrDoes(t *testing.T) {
 		t.Error("a name that is no theme should not resolve")
 	}
 }
+
+// TestWindowTitleTemplates: the template is herdr's syntax, so a line copied
+// from a herdr config means the same thing here, and a mistyped one is
+// reported instead of writing "{worksapce}" into every window bar.
+func TestWindowTitleTemplates(t *testing.T) {
+	tmpl, err := ParseWindowTitle("{hostname}: { workspace } {{a}}")
+	if err != nil || tmpl == nil {
+		t.Fatalf("parse: %v", err)
+	}
+	values := map[WindowTitleToken]string{TitleHostname: "box", TitleWorkspace: "api"}
+	got, ok := tmpl.Render(func(k WindowTitleToken) string { return values[k] })
+	if !ok || got != "box: api {a}" {
+		t.Errorf("rendered %q, want %q", got, "box: api {a}")
+	}
+
+	if tmpl, err := ParseWindowTitle(""); tmpl != nil || err != nil {
+		t.Error("an empty template should mean no title, without an error")
+	}
+	for bad, want := range map[string]string{
+		"{hostname": "unclosed",
+		"a } b":     "unmatched",
+		"{session}": "unknown token '{session}'",
+	} {
+		if _, err := ParseWindowTitle(bad); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("ParseWindowTitle(%q) = %v, want an error about %s", bad, err, want)
+		}
+	}
+	if _, err := LoadFile(writeConfig(t, "[ui]\nwindow_title = \"{worksapce}\"\n")); err == nil {
+		t.Error("a mistyped token should be refused at load")
+	}
+	if c := Defaults(); c.UI.WindowTitle != DefaultWindowTitle {
+		t.Errorf("default window title = %q, want herdr's %q", c.UI.WindowTitle, DefaultWindowTitle)
+	}
+}
+
+// TestWindowTitlesAreSanitisedAndBounded: a pane title is chosen by whatever
+// runs in the pane, and an escape in it would otherwise end the OSC early and
+// write the rest to the terminal as commands.
+func TestWindowTitlesAreSanitisedAndBounded(t *testing.T) {
+	if got, _ := SanitizeWindowTitle("  tend\x1b api\x07\n  "); got != "tend api" {
+		t.Errorf("got %q", got)
+	}
+	if _, ok := SanitizeWindowTitle("\x07\n"); ok {
+		t.Error("a title of nothing but control characters is no title")
+	}
+	if got, _ := SanitizeWindowTitle(strings.Repeat("x", MaxWindowTitle+1)); len([]rune(got)) != MaxWindowTitle {
+		t.Errorf("title of %d characters, want %d", len([]rune(got)), MaxWindowTitle)
+	}
+}

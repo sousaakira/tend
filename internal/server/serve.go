@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -670,11 +671,20 @@ func paneSpec(p proto.PaneSpec) PaneSpec {
 
 // --- server helpers used by connections ------------------------------------
 
+// hostname is the machine the server runs on, looked up once: it does not
+// change under a running process, and a snapshot is taken on every change.
+var hostname = sync.OnceValue(func() string {
+	name, _ := os.Hostname()
+	return name
+})
+
 // snapshot describes the whole session.
 func (s *Server) snapshot() proto.SessionSnapshot {
 	var snap proto.SessionSnapshot
 
+	snap.Hostname = hostname()
 	s.mu.Lock()
+	snap.WindowTitle = s.windowTitle
 	sess := s.session
 	if active := sess.ActiveWorkspace(); active != nil {
 		snap.ActiveWorkspace = uint64(active.ID)

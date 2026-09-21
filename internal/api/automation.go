@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/server"
@@ -61,6 +62,12 @@ const (
 	MethodLayoutApply  = "layout.apply"
 
 	MethodNotificationShow = "notification.show"
+
+	// MethodWindowTitleSet and MethodWindowTitleClear are herdr's: a script
+	// names the outer terminal window, and clearing goes back to the
+	// configured ui.window_title.
+	MethodWindowTitleSet   = "client.window_title.set"
+	MethodWindowTitleClear = "client.window_title.clear"
 
 	MethodEventsWait = "events.wait"
 	// MethodEventsSubscribe is in subscribe.go, where the stream is.
@@ -579,6 +586,34 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		a.srv.Notify(p.Title, p.Body)
 		return ok2(), nil
+
+	case MethodWindowTitleSet, MethodWindowTitleClear:
+		title := ""
+		if req.Method == MethodWindowTitleSet {
+			var p struct {
+				Title string `json:"title"`
+			}
+			if err := decode(req.Params, &p); err != nil {
+				return nil, err
+			}
+			clean, ok := config.SanitizeWindowTitle(p.Title)
+			if !ok {
+				return nil, fail("invalid_params", "window title is empty")
+			}
+			title = clean
+		}
+		clients := a.srv.SetWindowTitle(title)
+		reason := "set"
+		if title == "" {
+			reason = "cleared"
+		}
+		if clients == 0 {
+			// Kept all the same: the next client to attach writes it.
+			reason = "no_foreground_client"
+		}
+		return map[string]any{
+			"type": "client_window_title", "changed": clients > 0, "reason": reason,
+		}, nil
 
 	case MethodEventsWait:
 		var p struct {

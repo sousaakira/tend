@@ -113,6 +113,9 @@ type UI struct {
 	// Grouped lists agents under their tab rather than flat.
 	Grouped bool  `toml:"grouped"`
 	Theme   Theme `toml:"theme"`
+	// WindowTitle is the template for the outer terminal's title; "" leaves
+	// that title alone. See windowtitle.go.
+	WindowTitle string `toml:"window_title"`
 }
 
 // Theme names the colours. Name picks one of the palettes in ThemeNames; each
@@ -142,7 +145,7 @@ func Defaults() Config {
 	return Config{
 		Keys:      Keys{Prefix: "ctrl+b"},
 		Pane:      Pane{Scrollback: 5000},
-		UI:        UI{Mouse: true, Sidebar: true},
+		UI:        UI{Mouse: true, Sidebar: true, WindowTitle: DefaultWindowTitle},
 		Server:    Server{DetectInterval: "150ms", Persist: true},
 		Worktrees: Worktrees{Directory: "~/.tend/worktrees"},
 		Notify:    Notify{Toasts: "tend"},
@@ -228,6 +231,9 @@ func (c Config) validate() error {
 	}
 	if c.Pane.Scrollback < 0 {
 		return fmt.Errorf("pane.scrollback is %d; it cannot be negative", c.Pane.Scrollback)
+	}
+	if _, err := ParseWindowTitle(c.UI.WindowTitle); err != nil {
+		return fmt.Errorf("ui.window_title %q %v", c.UI.WindowTitle, err)
 	}
 	if c.UI.Theme.Name != "" {
 		if _, ok := CanonicalTheme(c.UI.Theme.Name); !ok {
@@ -396,6 +402,13 @@ sidebar = true
 
 # List agents under their tab rather than flat.
 grouped = false
+
+# The title tend writes to the terminal it runs in, which is what window
+# managers show in title, tab and group bars. Tokens are {hostname},
+# {workspace}, {tab}, {pane} and {terminal_title}; {{ and }} are literal
+# braces. {hostname} is the machine the server runs on, even when attaching
+# from another one. Set to "" to leave the outer title alone.
+# window_title = "{hostname}: {workspace}"
 
 [ui.theme]
 # A named theme: catppuccin, catppuccin-latte, terminal, tokyo-night,

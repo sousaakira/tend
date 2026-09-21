@@ -32,6 +32,7 @@ commands:
   agent             drive an agent: read it, prompt it, wait for it
   pane              drive a pane: read it, type into it, wait for it
   notify            tell whoever is watching the session something
+  terminal          set or clear the outer window's title
   layout            save a tab's arrangement, or build it again
   events            follow a session's events as they happen
   api               call the automation socket directly
@@ -104,6 +105,8 @@ func main() {
 		err = runPane(args[1:])
 	case "notify":
 		err = runNotify(args[1:])
+	case "terminal":
+		err = runTerminal(args[1:])
 	case "layout":
 		err = runLayout(args[1:])
 	case "events":

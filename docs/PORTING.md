@@ -183,6 +183,15 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   colours still override it. The settings screen's first row is the theme,
   as in herdr, and each step along it writes and applies, which is the
   preview herdr's list gives.
+- **Outer window title** (herdr's `config/window_title.rs`,
+  `app/window_title.rs`): `[ui] window_title` with herdr's tokens
+  (`{hostname}`, `{workspace}`, `{tab}`, `{pane}`, `{terminal_title}`),
+  escapes and default (`"{hostname}: {workspace}"`; `""` leaves the title
+  alone). `{terminal_title}` drops a leading spinner frame as herdr does.
+  `tend terminal title set|clear` and `client.window_title.set|clear` put a
+  script's title over the template until cleared. herdr renders on the server;
+  tend renders in the client from the snapshot, which carries the server's
+  hostname, so `{hostname}` still names the machine the panes are on.
 - **Rebindable keys** (herdr's `config/keybinds.rs`): `[keys.bind]` maps a
   command to a key — `detach = "q"` — over the defaults, `tend keys` lists
   every command and the key it is on, and the help shows the keys in effect
@@ -297,6 +306,7 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Names | workspace | space (in the UI; `workspace` in code and on the wire) | matches herdr's own UI wording |
 | Claude / JSONC settings | `jsonc_parser` preserves comments and compact layout | `encoding/json`; comments lost and **keys re-sorted alphabetically** on rewrite (content otherwise identical — checked against the owner's real 44 KB `settings.json`: install adds one `SessionStart` entry, a second install adds nothing, uninstall restores it exactly) | avoid a new dependency; invalid JSON is an error, not silently stripped |
 | Default theme | catppuccin | the terminal's own colours when no `name` is set | an unset theme keeps what tend has always looked like; the owner picks a palette in the settings screen or the file |
+| Window title on detach | writes "herdr" | saves the window's title when it first writes one (`CSI 22;0t`) and puts it back on detach (`CSI 23;0t`) | detaching should leave the window as tend found it; a terminal without the title stack keeps tend's last title, which is no worse than herdr's name |
 | Integration assets | `.sh` and `.ps1` | Unix `.sh` / `.js` / `.ts` / Hermes plugin only | Windows PowerShell assets not ported yet; platform code is compile-gated when they are |
 
 ---
@@ -470,8 +480,9 @@ Keys are rebindable (see "Ported, and checked"). Left:
 - **Sidebar rows as tokens** (`config/sidebar.rs`, 729 lines, and
   `ui/sidebar/tokens.rs`): herdr lets the user say what each row shows and in
   what style. tend's rows are fixed.
-- **Tab bar** (`config/tab_bar.rs`) and **window title**
-  (`config/window_title.rs`): what goes in them, as templates.
+- **Tab bar** (`config/tab_bar.rs`): what goes in it, as a template.
+- A title set with `tend terminal title set` is held in the server's memory
+  only, so a `tend handoff` or a restart forgets it.
 - **The rest of the themes**: the palette's backgrounds (`panel_bg`,
   `active_row_bg`, `selection_bg`, surfaces) are carried but not drawn —
   tend's panels mark themselves by reversing, not with a background of their

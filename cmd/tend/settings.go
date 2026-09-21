@@ -31,6 +31,7 @@ func (t *tui) reloadSettings() error {
 	previousPrefix := t.config.Keys.Prefix
 	t.config = cfg
 	t.theme = ui.ThemeFrom(cfg.UI.Theme)
+	t.titleTemplate = mustTitle(cfg.UI.WindowTitle)
 	t.sidebar = cfg.UI.Sidebar
 	t.grouped = cfg.UI.Grouped
 	t.toasts = cfg.Toasts()
