@@ -2297,3 +2297,60 @@ func TestControlCharactersInATitleAreSpaces(t *testing.T) {
 		t.Errorf("the frame's corner is gone: %q", line)
 	}
 }
+
+// twoMachineNav is navSource on this machine and one saved machine with an
+// agent waiting, whose space, tab and pane numbers are the same as here.
+func twoMachineNav() NavSource {
+	here := navSource()
+	return NavSource{Focused: here.Focused, Machines: []NavMachine{
+		{ID: "local", Label: "Local", Shown: true, Workspaces: here.Workspaces},
+		{ID: "m_far", Label: "farbox", Signal: MachineSignal(MachineOnline), Expanded: map[uint64]bool{1: true},
+			Workspaces: []NavWorkspace{{ID: 1, Label: "farspace", Tabs: []NavTab{
+				{ID: 10, Label: "tab 1", Panes: []NavPane{{ID: 1, Label: "claude", Meta: "/srv", State: "blocked"}}},
+			}}}},
+	}}
+}
+
+// TestTheNavigatorListsEveryMachine is herdr's federated navigator: a row for
+// each machine with its spaces beneath, the other machine's rows pointing at
+// it and this one's at nothing but here; a query matching a machine's name
+// keeps everything on it, and a filter finds the agent waiting wherever it
+// is. If it regresses, prefix+g shows one machine of several, or opens this
+// machine's pane 1 for the other's.
+func TestTheNavigatorListsEveryMachine(t *testing.T) {
+	rows := BuildNavigatorRows(twoMachineNav(), "", "", map[uint64]bool{})
+	if got, want := navLabels(rows), "Local .api .web farbox .farspace ..tab 1 ...claude"; got != want {
+		t.Fatalf("rows = %q, want %q", got, want)
+	}
+	if !rows[0].Target.Host || rows[0].Target.Machine != "local" || !rows[3].Target.Host || rows[3].Signal != "●" {
+		t.Errorf("machine rows: %+v / %+v", rows[0], rows[3])
+	}
+	if rows[1].Target.Machine != "" || rows[6].Target != (NavTarget{Workspace: 1, Tab: 10, Pane: 1, Machine: "m_far"}) {
+		t.Errorf("targets: here %+v, there %+v", rows[1].Target, rows[6].Target)
+	}
+
+	if got, want := navLabels(BuildNavigatorRows(twoMachineNav(), "FARBOX", "", map[uint64]bool{})), "farbox .farspace ..tab 1 ...claude"; got != want {
+		t.Errorf("a machine's name: %q, want %q", got, want)
+	}
+	if got, want := navLabels(BuildNavigatorRows(twoMachineNav(), "", "blocked", map[uint64]bool{})), "Local .api ..tab 1 ...claude farbox .farspace ..tab 1 ...claude"; got != want {
+		t.Errorf("blocked: %q, want %q", got, want)
+	}
+
+	n := Navigator{Rows: rows, Selected: rows[0].Target}
+	g := vt.NewGrid(80, 24, 0)
+	drawNavigator(g, n, DefaultTheme())
+	text := strings.Join(gridText(g), "\n")
+	for _, want := range []string{"▾ Local", "▾ farbox", "▸ api", "▾ farspace", "└── ", "●"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q:\n%s", want, text)
+		}
+	}
+	for y, line := range gridText(g) {
+		if x := strings.Index(line, "▾ farspace"); x >= 0 {
+			hit := NavigatorAt(n, 80, 24, len([]rune(line[:x])), y)
+			if !hit.Caret || n.Rows[hit.Row].Label != "farspace" {
+				t.Errorf("a click on farspace's caret: %+v", hit)
+			}
+		}
+	}
+}

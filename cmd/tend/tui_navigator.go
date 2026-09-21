@@ -23,6 +23,8 @@ type navigatorState struct {
 	selected  ui.NavTarget
 	scroll    int
 	expanded  map[uint64]bool
+	// remoteExpanded is the open spaces of machines not shown.
+	remoteExpanded map[string]map[uint64]bool
 }
 
 // navigatorPage is how far ctrl+d and ctrl+u move, herdr's eight rows.
@@ -38,9 +40,18 @@ func (t *tui) navigatorOpen() bool {
 // the pane in view, as herdr's does.
 func (t *tui) openNavigator() {
 	t.mu.Lock()
-	n := &navigatorState{expanded: map[uint64]bool{}}
+	n := &navigatorState{expanded: map[uint64]bool{}, remoteExpanded: map[string]map[uint64]bool{}}
 	for _, w := range t.snap.Workspaces {
 		n.expanded[w.ID] = true
+	}
+	if t.multiMachineLocked() {
+		for _, e := range t.machines.endpoints {
+			open := map[uint64]bool{}
+			for _, w := range e.snap.Workspaces {
+				open[w.ID] = true
+			}
+			n.remoteExpanded[e.id] = open
+		}
 	}
 	t.navigator = n
 	for _, row := range t.navigatorRowsLocked() {
@@ -68,12 +79,39 @@ func (t *tui) closeNavigator() {
 // called by the name the user gave it, then what its agent is called, then
 // its title, then its place, as herdr names them.
 func (t *tui) navigatorSourceLocked() ui.NavSource {
-	panes := make(map[uint64]proto.PaneInfo, len(t.snap.Panes))
-	for _, p := range t.snap.Panes {
+	src := ui.NavSource{Focused: t.focus, Workspaces: navWorkspaces(&t.snap)}
+	if !t.multiMachineLocked() {
+		return src
+	}
+	// herdr's federated navigator: every machine, in the sidebar's order,
+	// with what was last heard of the ones not shown.
+	for _, e := range t.machines.endpoints {
+		m := ui.NavMachine{ID: e.id, Label: e.label, Stale: e.status != ui.MachineOnline}
+		if e.id != localEndpoint {
+			m.Signal = ui.MachineSignal(e.status)
+		}
+		switch {
+		case e.id == t.machines.active:
+			m.Shown, m.Stale, m.Workspaces = true, false, src.Workspaces
+		case e.have:
+			m.Workspaces = navWorkspaces(&e.snap)
+			if t.navigator != nil {
+				m.Expanded = t.navigator.remoteExpanded[e.id]
+			}
+		}
+		src.Machines = append(src.Machines, m)
+	}
+	return src
+}
+
+// navWorkspaces is one session's spaces as the navigator lists them.
+func navWorkspaces(snap *proto.SessionSnapshot) []ui.NavWorkspace {
+	panes := make(map[uint64]proto.PaneInfo, len(snap.Panes))
+	for _, p := range snap.Panes {
 		panes[p.ID] = p
 	}
-	src := ui.NavSource{Focused: t.focus}
-	for _, w := range t.snap.Workspaces {
+	var out []ui.NavWorkspace
+	for _, w := range snap.Workspaces {
 		nw := ui.NavWorkspace{ID: w.ID, Label: orDash(w.Name), Branch: w.Branch}
 		for i, tab := range w.Tabs {
 			label := tab.Name
@@ -89,9 +127,9 @@ func (t *tui) navigatorSourceLocked() ui.NavSource {
 			}
 			nw.Tabs = append(nw.Tabs, nt)
 		}
-		src.Workspaces = append(src.Workspaces, nw)
+		out = append(out, nw)
 	}
-	return src
+	return out
 }
 
 func navigatorPaneLabel(p proto.PaneInfo, index int) string {
@@ -175,6 +213,14 @@ func (t *tui) acceptNavigator() error {
 	target := frame.Rows[frame.SelectedIndex()].Target
 	t.closeNavigator()
 	switch {
+	case target.Host:
+		// herdr's activate_endpoint: the machine, as it was left.
+		return t.switchMachine(target.Machine, 0, 0)
+	case target.Machine != "":
+		if err := t.switchMachine(target.Machine, target.Workspace, target.Pane); err != nil || target.Tab == 0 || target.Pane != 0 {
+			return err
+		}
+		return t.showTab(target.Tab)
 	case target.Pane != 0:
 		return t.jumpToPane(target.Pane)
 	case target.Tab != 0:
@@ -198,10 +244,18 @@ func (t *tui) toggleNavigatorSpace() {
 		return
 	}
 	row := frame.Rows[frame.SelectedIndex()]
-	if row.Target.Pane != 0 || row.Target.Tab != 0 {
+	if !row.IsSpace() {
 		return
 	}
-	n.expanded[row.Target.Workspace] = !n.expanded[row.Target.Workspace]
+	open := n.expanded
+	if row.Target.Machine != "" {
+		open = n.remoteExpanded[row.Target.Machine]
+		if open == nil {
+			open = map[uint64]bool{}
+			n.remoteExpanded[row.Target.Machine] = open
+		}
+	}
+	open[row.Target.Workspace] = !open[row.Target.Workspace]
 	n.scroll = 0
 	t.dirty = true
 }

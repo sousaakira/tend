@@ -430,7 +430,10 @@ top of it is not:
   agent view set by a script orders only the shown machine's agents (herdr
   filters every machine's with it); herdr's notices about a machine itself
   (`endpoint_notices.rs`: unsupported, timed out) — tend shows the state on
-  the machine's row; and the navigator's machine rows. The catalog is read
+  the machine's row. The navigator (prefix+g) is herdr's federated one: a
+  row per machine with its spaces beneath, a query matching a machine's name
+  keeping all of it, and choosing a row on another machine going there. The
+  catalog is read
   again every second while a client runs (herdr's `catalog_reload.rs`):
   machines added, removed, renamed, turned on or off are applied without a
   restart. Different on purpose: the machine being shown is not taken away
@@ -596,7 +599,7 @@ Ported (see "Ported, and checked"). Left:
   `d` detach (herdr `q`), `,` and `.` rename (herdr `shift+t`, `shift+w`),
   `|` and `-` split (herdr `v` and `-`), `a` agents (herdr `b` sidebar).
 
-### 8. Navigation extras — done, except what needs multiple machines
+### 8. Navigation extras — done
 
 Ported (see "Ported, and checked"). Left:
 
@@ -606,10 +609,10 @@ Ported (see "Ported, and checked"). Left:
   (j/k, ctrl+d/u, / to search, b w i d a to filter, space to open a space,
   enter, esc), its tree drawing, and the mouse (hover marks, click goes, a
   click on a space's caret opens it, a click outside closes). tend's own
-  sidebar walk moved from g to w. Left: the machine rows and everything
-  across several servers at once (`aggregate_navigation.rs`), since tend's
-  client attaches to one; and the pane's foreground directory, which tend
-  does not track apart from its directory.
+  sidebar walk moved from g to w. With saved machines it lists every
+  machine, as herdr's `aggregate_navigation.rs` does (see "Saved machines").
+  Left: the pane's foreground directory, which tend does not track apart
+  from its directory.
 - `FocusAgent(index)`: jump to the nth agent. herdr binds it only through
   `[keys.indexed] agents = "<modifier>"` (modifier+1…9, no prefix), which
   tend cannot read: a terminal sends ctrl+digit as the digit, and after the

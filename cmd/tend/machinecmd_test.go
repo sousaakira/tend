@@ -179,4 +179,17 @@ func TestSavedMachinesAreListedAndGoneToFromTheSidebar(t *testing.T) {
 		s := a.sidebarText()
 		return strings.Contains(s, "machines") && strings.Contains(s, "farbox") && strings.Contains(s, "farspace")
 	})
+
+	// The navigator lists every machine, and choosing the other machine's
+	// space from it goes there.
+	a.send(t, "\x02g")
+	a.waitForScreen(t, "the navigator with both machines", func(s string) bool {
+		return strings.Contains(s, "navigate") && strings.Contains(s, "▾ farbox") && strings.Contains(s, "▾ Local")
+	})
+	a.send(t, "/farspace")
+	a.waitForScreen(t, "the search typed", func(s string) bool { return strings.Contains(s, "/ farspace") })
+	a.send(t, "\r")
+	a.waitForScreen(t, "the far machine, from the navigator", func(string) bool {
+		return strings.Contains(a.lines()[len(a.lines())-1], "user@farhost:far")
+	})
 }

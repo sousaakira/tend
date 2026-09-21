@@ -19,9 +19,14 @@ import (
 // rules — what a query matches, what a filter keeps, what is open — are
 // tested without a client, and drawing and hit-testing share one geometry.
 
-// NavTarget is what a row goes to: a space, a tab, or a pane.
+// NavTarget is what a row goes to: a space, a tab, or a pane — or, with
+// saved machines, a machine (Host), herdr's ClientNavigatorTarget::Machine.
+// Machine is empty for the machine shown and names any other, whose numbers
+// are its own.
 type NavTarget struct {
 	Workspace, Tab, Pane uint64
+	Machine              string
+	Host                 bool
 }
 
 // NavSource is the session as the navigator needs it.
@@ -29,6 +34,25 @@ type NavSource struct {
 	Workspaces []NavWorkspace
 	// Focused is the pane the client is on, marked ◆ and selected first.
 	Focused uint64
+	// Machines, when set, is every machine with its spaces, in the
+	// sidebar's order, and Workspaces is not read: the list is herdr's
+	// federated one, a row for each machine and its spaces beneath.
+	Machines []NavMachine
+}
+
+// NavMachine is one machine in the navigator.
+type NavMachine struct {
+	// ID is what a machine row's target carries; the shown machine's own
+	// rows carry an empty Machine.
+	ID, Label string
+	// Signal is its reachability as the sidebar shows it, empty for this one.
+	Signal     string
+	Shown      bool
+	Stale      bool
+	Workspaces []NavWorkspace
+	// Expanded is which of its spaces are open, for a machine not shown;
+	// the shown one's are the expanded map BuildNavigatorRows is given.
+	Expanded map[uint64]bool
 }
 
 // NavWorkspace is a space and its tabs.
@@ -68,6 +92,10 @@ type NavigatorRow struct {
 	Current  bool
 	Expanded bool
 	Target   NavTarget
+	// Stale dims a row whose machine cannot be reached; Signal is drawn
+	// against the edge of a machine's row.
+	Stale  bool
+	Signal string
 }
 
 // Navigator is the popup's state, as the client keeps it and the frame
@@ -100,21 +128,51 @@ func statePriority(state string) int {
 	return 0
 }
 
-// BuildNavigatorRows is herdr's navigator_rows for one machine. Every space
-// is listed; its tabs and panes when it is open, or whenever a query or a
-// filter is on, so what matches is never hidden inside a closed space. A
-// query matches a pane by its name or its directory, a tab by its name, a
-// space by its name or branch; a filter keeps panes in that state, and the
-// tabs and spaces whose most urgent pane is in it. A parent of anything kept
-// is kept, so a match is always shown where it lives.
+// BuildNavigatorRows is herdr's navigator_rows. Every space is listed; its
+// tabs and panes when it is open, or whenever a query or a filter is on, so
+// what matches is never hidden inside a closed space. A query matches a pane
+// by its name or its directory, a tab by its name, a space by its name or
+// branch, and with machines everything on a machine whose name it matches; a
+// filter keeps panes in that state, and the tabs and spaces whose most urgent
+// pane is in it. A parent of anything kept is kept, so a match is always
+// shown where it lives.
 func BuildNavigatorRows(src NavSource, query string, filter NavFilter, expanded map[uint64]bool) []NavigatorRow {
 	q := strings.ToLower(strings.TrimSpace(query))
-	text := func(v string) bool { return q == "" || strings.Contains(strings.ToLower(v), q) }
+	if len(src.Machines) == 0 {
+		return navSpaces(src.Workspaces, "", src.Focused, 0, false, false, q, filter, expanded)
+	}
+	filtering := filter != "" || q != ""
+	var rows []NavigatorRow
+	for _, m := range src.Machines {
+		machineMatches := q != "" && strings.Contains(strings.ToLower(m.Label), q)
+		id, focused, open := m.ID, uint64(0), m.Expanded
+		if m.Shown {
+			id, focused, open = "", src.Focused, expanded
+		}
+		spaces := navSpaces(m.Workspaces, id, focused, 1, machineMatches, m.Stale, q, filter, open)
+		if filtering && !machineMatches && len(spaces) == 0 {
+			continue
+		}
+		rows = append(rows, NavigatorRow{
+			Label: m.Label, Signal: m.Signal, Stale: m.Stale, Expanded: true,
+			Target: NavTarget{Machine: m.ID, Host: true},
+		})
+		rows = append(rows, spaces...)
+	}
+	return rows
+}
+
+// navSpaces is one machine's spaces, their tabs and panes, depth levels in.
+// machineMatches is a query matching the machine's name, which keeps
+// everything on it that the filter keeps.
+func navSpaces(workspaces []NavWorkspace, machine string, focused uint64, depth int, machineMatches, stale bool,
+	q string, filter NavFilter, expanded map[uint64]bool) []NavigatorRow {
+	text := func(v string) bool { return q == "" || machineMatches || strings.Contains(strings.ToLower(v), q) }
 	keep := func(state string) bool { return filter == "" || state == string(filter) }
 	filtering := filter != "" || q != ""
 
 	var rows []NavigatorRow
-	for _, w := range src.Workspaces {
+	for _, w := range workspaces {
 		var children []NavigatorRow
 		wsState := ""
 		for _, tab := range w.Tabs {
@@ -126,9 +184,9 @@ func BuildNavigatorRows(src NavSource, query string, filter NavFilter, expanded 
 				}
 				if !filtering || keep(p.State) && (text(p.Label) || text(p.Meta)) {
 					panes = append(panes, NavigatorRow{
-						Depth: 2, Label: p.Label, Meta: p.Meta, State: p.State,
-						Current: p.ID == src.Focused,
-						Target:  NavTarget{Workspace: w.ID, Tab: tab.ID, Pane: p.ID},
+						Depth: depth + 2, Label: p.Label, Meta: p.Meta, State: p.State, Stale: stale,
+						Current: p.ID == focused,
+						Target:  NavTarget{Workspace: w.ID, Tab: tab.ID, Pane: p.ID, Machine: machine},
 					})
 				}
 			}
@@ -137,8 +195,8 @@ func BuildNavigatorRows(src NavSource, query string, filter NavFilter, expanded 
 			}
 			if !filtering || keep(tabState) && text(tab.Label) || len(panes) > 0 {
 				children = append(children, NavigatorRow{
-					Depth: 1, Label: tab.Label, Meta: strconv.Itoa(len(tab.Panes)) + " panes",
-					Target: NavTarget{Workspace: w.ID, Tab: tab.ID},
+					Depth: depth + 1, Label: tab.Label, Meta: strconv.Itoa(len(tab.Panes)) + " panes", Stale: stale,
+					Target: NavTarget{Workspace: w.ID, Tab: tab.ID, Machine: machine},
 				})
 				children = append(children, panes...)
 			}
@@ -149,14 +207,19 @@ func BuildNavigatorRows(src NavSource, query string, filter NavFilter, expanded 
 		}
 		open := expanded[w.ID]
 		rows = append(rows, NavigatorRow{
-			Depth: 0, Label: w.Label, Meta: w.Branch, Expanded: open,
-			Target: NavTarget{Workspace: w.ID},
+			Depth: depth, Label: w.Label, Meta: w.Branch, Expanded: open, Stale: stale,
+			Target: NavTarget{Workspace: w.ID, Machine: machine},
 		})
 		if open || filtering {
 			rows = append(rows, children...)
 		}
 	}
 	return rows
+}
+
+// IsSpace reports whether a row is a space's, the kind that opens and closes.
+func (r NavigatorRow) IsSpace() bool {
+	return !r.Target.Host && r.Target.Tab == 0 && r.Target.Pane == 0
 }
 
 // SelectedIndex is the row the cursor is on.
@@ -220,7 +283,7 @@ func NavigatorAt(n Navigator, cols, rows, x, y int) NavigatorHit {
 		i := navigatorScroll(n, body.Rows) + y - body.Y
 		if i < len(n.Rows) {
 			hit.Row = i
-			hit.Caret = n.Rows[i].Depth == 0 && x <= body.X+3
+			hit.Caret = n.Rows[i].IsSpace() && x <= body.X+3+2*n.Rows[i].Depth
 		}
 	}
 	return hit
@@ -313,6 +376,7 @@ func drawNavigator(dst *vt.Grid, n Navigator, theme Theme) {
 	selected := n.SelectedIndex()
 	scroll := navigatorScroll(n, body.Rows)
 	following := followingSiblings(n.Rows)
+	federated := len(n.Rows) > 0 && n.Rows[0].Target.Host
 	var ancestors []bool
 	for i, row := range n.Rows {
 		if i >= scroll+body.Rows {
@@ -329,19 +393,28 @@ func drawNavigator(dst *vt.Grid, n Navigator, theme Theme) {
 		style := theme.Menu
 		if i == selected {
 			style = theme.MenuSelected
-		} else if !row.Current && row.Depth > 0 {
+		} else if row.Stale || !row.Current && !row.IsSpace() && !row.Target.Host {
 			style = dim
 		}
 		fill(dst, y, body.X, body.X+body.Cols, style)
 
 		var tree string
-		if row.Depth == 0 {
-			tree = "▸"
+		switch {
+		case row.Target.Host:
+			tree = "▾"
+		case row.IsSpace():
+			tree = strings.Repeat("  ", row.Depth) + "▸"
 			if row.Expanded {
-				tree = "▾"
+				tree = strings.Repeat("  ", row.Depth) + "▾"
 			}
-		} else {
-			for d := 1; d < row.Depth && d < len(ancestors); d++ {
+		default:
+			// Under a machine, the branches start below its spaces, as
+			// herdr's federated tree does.
+			from := 1
+			if federated {
+				tree, from = "    ", 2
+			}
+			for d := from; d < row.Depth && d < len(ancestors); d++ {
 				if ancestors[d] {
 					tree += "│  "
 				} else {
@@ -374,7 +447,15 @@ func drawNavigator(dst *vt.Grid, n Navigator, theme Theme) {
 		room := body.X + body.Cols - x
 		label := truncate(row.Label, room)
 		x = writeString(dst, x, y, label, style, body.X+body.Cols)
-		if row.Meta != "" {
+		if row.Signal != "" {
+			signal := machineSignalStyle(machineStateOf(row.Signal), theme)
+			if i == selected {
+				signal = style
+			} else {
+				signal.BG = theme.Menu.BG
+			}
+			writeString(dst, body.X+body.Cols-runewidth.StringWidth(row.Signal)-1, y, row.Signal, signal, body.X+body.Cols)
+		} else if row.Meta != "" {
 			if space := body.X + body.Cols - x - 2; space > 3 {
 				meta := truncateLeft(row.Meta, space)
 				writeString(dst, body.X+body.Cols-runewidth.StringWidth(meta)-1, y, meta, style, body.X+body.Cols)
@@ -411,4 +492,18 @@ func truncateLeft(text string, cols int) string {
 		runes = runes[1:]
 	}
 	return "…" + string(runes)
+}
+
+// machineStateOf reads a machine's state back from its signal, for its
+// colour.
+func machineStateOf(signal string) string {
+	for _, state := range []string{MachineConnecting, MachineReconnecting, MachineAttention, MachineDisabled} {
+		if strings.HasSuffix(signal, state) {
+			return state
+		}
+	}
+	if signal == MachineSignal(MachineOnline) {
+		return MachineOnline
+	}
+	return ""
 }
