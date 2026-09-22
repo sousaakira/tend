@@ -729,10 +729,12 @@ Ported (see "Ported, and checked"). Left:
 Ported (see "Ported, and checked"). What is left is the owner's, not an
 agent's:
 
-- **Publishing releases.** The repository is private and there are no
-  published builds. Until `[update] manifest` points at a real manifest, the
-  updater says so and stops. Building and signing releases, and where they
-  live, is a decision for the owner.
+- **Publishing releases.** Releases are published on GitHub (v0.1.0,
+  v0.2.0): a tag, `make dist`'s four binaries and a SHA256SUMS, which
+  `site/install.sh` installs from the latest. No update manifest is
+  published with them, so until `[update] manifest` points at one, `tend
+  update` says so and stops; the install script is the way to upgrade.
+  Signing is not done.
 - **"Newer" versus "different".** herdr compares semantic versions; tend's
   version is the git description it was built from, and two of those have no
   order. `tend update` says the published build differs from this one.
