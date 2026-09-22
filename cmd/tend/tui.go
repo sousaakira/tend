@@ -161,6 +161,8 @@ type tui struct {
 	// machines are the saved machines in the sidebar, nil when there are
 	// none (tui_machines.go).
 	machines *machinesState
+	// onboarding is the first-run welcome being up (tui_onboarding.go).
+	onboarding bool
 	// catalogStop ends the catalog's reading, which closes catalogDone.
 	catalogStop, catalogDone chan struct{}
 	rects                    []proto.PaneRect
@@ -367,6 +369,7 @@ func (t *tui) run() error {
 		return err
 	}
 	t.loadMachines()
+	t.startOnboarding()
 
 	stopResize := t.watchResize()
 	defer stopResize()
@@ -1188,6 +1191,10 @@ func (t *tui) handleInput(data []byte) error {
 	// not reach a pane as though typed.
 	if data = t.takeHostReports(data); len(data) == 0 {
 		return nil
+	}
+	// The welcome is over everything and takes every key, as herdr's does.
+	if t.onboardingUp() {
+		return t.onboardingInput(data)
 	}
 	forward, commands, mice := t.keys.FeedAll(data)
 	if len(forward) > 0 {

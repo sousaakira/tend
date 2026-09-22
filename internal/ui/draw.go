@@ -626,13 +626,53 @@ func drawTabBarStatus(dst *vt.Grid, f Frame, theme Theme, y int) {
 // cut off. Cutting it drops the entries at the end, which for a key list is
 // the half nobody has memorised yet.
 func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
-	if len(lines) == 0 {
+	layout, ok := overlayLayout(lines, dst.Cols(), dst.Rows())
+	if !ok {
 		return
+	}
+	box := layout.box
+
+	// Fill first: an overlay that lets the pane behind it show through is
+	// unreadable, whatever it says.
+	for y := box.Y; y < box.Y+box.Rows; y++ {
+		row := dst.Line(y)
+		if row == nil {
+			continue
+		}
+		for x := box.X; x < box.X+box.Cols; x++ {
+			row.SetCell(x, vt.Cell{R: ' ', Style: theme.Overlay, Width: 1})
+		}
+	}
+	drawBox(dst, box, theme.OverlayTitle)
+
+	limit := box.X + box.Cols - 2
+	writeString(dst, box.X+3, box.Y+1, truncate(lines[0], box.Cols-6), theme.OverlayTitle, limit)
+	for _, place := range layout.lines {
+		writeString(dst, place.x, place.y, truncate(lines[place.index+1], limit-place.x), theme.Overlay, limit)
+	}
+}
+
+// overlayPlaced is where one line of an overlay's body is drawn.
+type overlayPlaced struct {
+	index, x, y int
+}
+
+type overlayGeometry struct {
+	box   Rect
+	lines []overlayPlaced
+}
+
+// overlayLayout is where the panel and each line of its body go: centred, in
+// two columns when one would not fit the height. Drawing and OverlayLineAt
+// both read it, so a click lands on the line drawn under it.
+func overlayLayout(lines []string, cols, rows int) (overlayGeometry, bool) {
+	if len(lines) == 0 {
+		return overlayGeometry{}, false
 	}
 	title, body := lines[0], lines[1:]
 
 	columns := [][]string{body}
-	if len(lines)+4 > dst.Rows() && len(body) > 1 {
+	if len(lines)+4 > rows && len(body) > 1 {
 		half := (len(body) + 1) / 2
 		columns = [][]string{body[:half], body[half:]}
 	}
@@ -654,41 +694,42 @@ func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
 	}
 	width = max(width, inner)
 
-	box := Rect{Cols: min(width+6, dst.Cols()), Rows: min(height+5, dst.Rows())}
-	box.X = (dst.Cols() - box.Cols) / 2
-	box.Y = (dst.Rows() - box.Rows) / 2
+	box := Rect{Cols: min(width+6, cols), Rows: min(height+5, rows)}
+	box.X = (cols - box.Cols) / 2
+	box.Y = (rows - box.Rows) / 2
 
-	// Fill first: an overlay that lets the pane behind it show through is
-	// unreadable, whatever it says.
-	for y := box.Y; y < box.Y+box.Rows; y++ {
-		row := dst.Line(y)
-		if row == nil {
-			continue
-		}
-		for x := box.X; x < box.X+box.Cols; x++ {
-			row.SetCell(x, vt.Cell{R: ' ', Style: theme.Overlay, Width: 1})
-		}
-	}
-	drawBox(dst, box, theme.OverlayTitle)
-
-	limit := box.X + box.Cols - 2
-	writeString(dst, box.X+3, box.Y+1, truncate(title, box.Cols-6), theme.OverlayTitle, limit)
-
-	x := box.X + 3
+	g := overlayGeometry{box: box}
+	x, index := box.X+3, 0
 	for _, col := range columns {
 		colWidth := 0
 		for _, line := range col {
 			colWidth = max(colWidth, runewidth.StringWidth(line))
 		}
-		for i, line := range col {
+		for i := range col {
 			y := box.Y + 3 + i
-			if y >= box.Y+box.Rows-1 {
-				break
+			if y < box.Y+box.Rows-1 {
+				g.lines = append(g.lines, overlayPlaced{index: index + i, x: x, y: y})
 			}
-			writeString(dst, x, y, truncate(line, limit-x), theme.Overlay, limit)
 		}
+		index += len(col)
 		x += colWidth + gap
 	}
+	return g, true
+}
+
+// OverlayLineAt is the index into an overlay's body (the lines after its
+// title) of the line drawn at a point, or -1.
+func OverlayLineAt(lines []string, cols, rows, x, y int) int {
+	layout, ok := overlayLayout(lines, cols, rows)
+	if !ok {
+		return -1
+	}
+	for _, place := range layout.lines {
+		if y == place.y && x >= place.x && x < place.x+runewidth.StringWidth(lines[place.index+1]) {
+			return place.index
+		}
+	}
+	return -1
 }
 
 // CursorPosition returns where the terminal's cursor belongs: inside the

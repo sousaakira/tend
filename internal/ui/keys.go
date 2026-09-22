@@ -664,6 +664,22 @@ func (in *Input) disarm() {
 // HelpLines renders the bindings for the help overlay.
 func HelpLines() []string { return HelpLinesFor(nil) }
 
+// KeyFor is the key a command is on after the prefix: a rebinding's, or
+// else its default.
+func KeyFor(bindings map[string]Command, cmd Command) string {
+	if bindings != nil {
+		if bound := keysFor(bindings, cmd); bound != "" {
+			return bound
+		}
+	}
+	for _, k := range Keys {
+		if k.Command == cmd {
+			return k.Key
+		}
+	}
+	return ""
+}
+
 // HelpLinesFor renders the help for a particular set of bindings, so a user
 // who rebound a key is shown the key they have rather than the default.
 func HelpLinesFor(bindings map[string]Command) []string {

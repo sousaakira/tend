@@ -644,9 +644,16 @@ Ported (see "Ported, and checked"). Left, and deliberately:
 
 Ported (see "Ported, and checked"). Left:
 
-- **Onboarding** (`ui/onboarding.rs`) and release notes
-  (`ui/release_notes.rs`): what herdr shows on a first run and after an
-  update. tend has no updater yet (item 14), and nothing to announce.
+- **Onboarding** is ported (`ui/onboarding.rs`, `render_onboarding_overlay`,
+  `complete_onboarding`): while `onboarding` is missing or true, a client
+  opens on herdr's welcome (its words, tend's name, this client's prefix and
+  help keys), which takes every key and goes on with enter, → or l, or a
+  click on continue; that writes `onboarding = false` before every table
+  (herdr's `upsert_top_level_bool`) and opens the settings screen at the
+  first integration row. `TEND_TEST_SKIP_ONBOARDING` turns it off for the
+  tests, as herdr's `HERDR_TEST_*` variables do. Left: release notes
+  (`ui/release_notes.rs`) and product announcements, which need something
+  published to announce (item 14).
 - **Integrations in the screen** are rows after the settings, one per agent
   on this machine, that install, update or remove its hooks; not offered to
   a client attached over ssh, whose machine is not the agents'. herdr's

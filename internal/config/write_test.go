@@ -84,3 +84,34 @@ func TestAnEditThatWouldBreakTheFileIsRefused(t *testing.T) {
 		t.Errorf("after the edit: %+v, %v", cfg.UI, err)
 	}
 }
+
+// TestTopLevelKeysGoBeforeEveryTable is herdr's upsert_top_level_bool: a key
+// already there is replaced where it is, one that is not goes first, a key of
+// the same name inside a table and a commented-out line are left alone, and
+// the result reads back. If it regresses, finishing the welcome writes
+// `onboarding` into [keys], where it is an unknown setting and tend refuses
+// the file.
+func TestTopLevelKeysGoBeforeEveryTable(t *testing.T) {
+	cases := map[string]string{
+		"": "onboarding = false\n",
+		"onboarding = true\n[keys]\nprefix = \"ctrl+b\"\n": "onboarding = false\n[keys]\nprefix = \"ctrl+b\"\n",
+		"# onboarding = true\n[keys]\n":                    "onboarding = false\n# onboarding = true\n[keys]\n",
+		"[keys]\nonboarding = true\n":                      "onboarding = false\n[keys]\nonboarding = true\n",
+	}
+	for in, want := range cases {
+		if got := UpsertTopLevel(in, "onboarding", "false"); got != want {
+			t.Errorf("UpsertTopLevel(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	cfg, err := parse(UpsertTopLevel(Example, "onboarding", "false"), "example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ShowOnboarding() {
+		t.Error("onboarding = false should turn the welcome off")
+	}
+	if !Defaults().ShowOnboarding() {
+		t.Error("with the key missing, the welcome shows")
+	}
+}

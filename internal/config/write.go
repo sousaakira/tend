@@ -50,6 +50,49 @@ func Set(section, key, value string) error {
 	return writeFile(path, updated)
 }
 
+// SetTopLevel writes a key outside every table, as Set writes one inside
+// one: herdr's upsert_top_level_bool, for `onboarding`.
+func SetTopLevel(key, value string) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		content = []byte(Example)
+	}
+	updated := UpsertTopLevel(string(content), key, value)
+	if _, err := parse(updated, path); err != nil {
+		return fmt.Errorf("config: refusing to write %s: %w", key, err)
+	}
+	return writeFile(path, updated)
+}
+
+// UpsertTopLevel returns content with key set to value before the first
+// table: in place when it is already there, otherwise as the first line.
+// A commented-out line is not the key, and is left as it is.
+func UpsertTopLevel(content, key, value string) string {
+	replacement := key + " = " + value
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			break
+		}
+		if strings.HasPrefix(trimmed, key+" ") || strings.HasPrefix(trimmed, key+"=") {
+			lines[i] = replacement
+			return strings.Join(lines, "\n") + "\n"
+		}
+	}
+	if strings.TrimSpace(content) == "" {
+		return replacement + "\n"
+	}
+	return replacement + "\n" + strings.TrimRight(content, "\n") + "\n"
+}
+
 // Upsert returns content with section.key set to value, leaving the rest of
 // the file — comments, order, spacing — as it was.
 func Upsert(content, section, key, value string) string {

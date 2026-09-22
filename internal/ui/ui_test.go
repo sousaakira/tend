@@ -2354,3 +2354,29 @@ func TestTheNavigatorListsEveryMachine(t *testing.T) {
 		}
 	}
 }
+
+// TestAClickFindsTheOverlayLineDrawnUnderIt: the hit-test reads the layout
+// the panel is drawn with, so a click on a line is that line — the welcome's
+// continue button is found this way. If it regresses, clicking the button
+// does nothing, or clicking beside it goes on.
+func TestAClickFindsTheOverlayLineDrawnUnderIt(t *testing.T) {
+	lines := []string{"title", "first", "", "[ go on ]"}
+	g := vt.NewGrid(60, 20, 0)
+	drawOverlay(g, lines, DefaultTheme())
+	for y, line := range gridText(g) {
+		if x := strings.Index(line, "[ go on ]"); x >= 0 {
+			col := len([]rune(line[:x]))
+			if got := OverlayLineAt(lines, 60, 20, col+2, y); got != 2 {
+				t.Errorf("a click on the button = %d, want 2", got)
+			}
+			if got := OverlayLineAt(lines, 60, 20, col+2, y-2); got != 0 {
+				t.Errorf("a click on the first line = %d, want 0", got)
+			}
+			if got := OverlayLineAt(lines, 60, 20, 0, y); got != -1 {
+				t.Errorf("a click outside = %d, want -1", got)
+			}
+			return
+		}
+	}
+	t.Fatal("the button was not drawn")
+}

@@ -20,15 +20,18 @@ import (
 
 // Config is everything tend can be told.
 type Config struct {
-	Keys      Keys      `toml:"keys"`
-	Pane      Pane      `toml:"pane"`
-	UI        UI        `toml:"ui"`
-	Server    Server    `toml:"server"`
-	Worktrees Worktrees `toml:"worktrees"`
-	Notify    Notify    `toml:"notify"`
-	Update    Update    `toml:"update"`
-	Sound     Sound     `toml:"sound"`
-	Files     Files     `toml:"files"`
+	// Onboarding is herdr's first-run welcome: shown while it is missing or
+	// true, and written false once it has been through.
+	Onboarding *bool     `toml:"onboarding"`
+	Keys       Keys      `toml:"keys"`
+	Pane       Pane      `toml:"pane"`
+	UI         UI        `toml:"ui"`
+	Server     Server    `toml:"server"`
+	Worktrees  Worktrees `toml:"worktrees"`
+	Notify     Notify    `toml:"notify"`
+	Update     Update    `toml:"update"`
+	Sound      Sound     `toml:"sound"`
+	Files      Files     `toml:"files"`
 }
 
 // Files configures the files panel (prefix+f). The panel runs on the
@@ -566,9 +569,18 @@ func ParseColor(value string) (Color, bool) {
 	return Color{Index: uint8(n)}, true
 }
 
+// ShowOnboarding is herdr's should_show_onboarding.
+func (c Config) ShowOnboarding() bool {
+	return c.Onboarding == nil || *c.Onboarding
+}
+
 // Example is a commented settings file, written by "tend config --init" so
 // that the options are discoverable without a manual.
 const Example = `# tend settings. Every value here is the default; delete what you do not change.
+
+# Show the first-run welcome on startup. Missing also shows it; it is set
+# false once it has been through.
+# onboarding = true
 
 [keys]
 # The key that arms a command. "ctrl+<letter>", or "none" to disable it.
