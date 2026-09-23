@@ -71,10 +71,10 @@ func TestAFolderOfRepositoriesListsEachOnesChanges(t *testing.T) {
 	// The tree marks the repositories' changes where they are.
 	keys(m, "1")
 	text = screen(m, 44, 16)
-	if !strings.Contains(text, "▸ api") || !strings.HasSuffix(lineWith(text, "▸ api"), "•") {
+	if !strings.Contains(text, "▸ api") || !strings.HasSuffix(lineWith(text, "▸ api"), "●") {
 		t.Errorf("api holds a change:\n%s", text)
 	}
-	if strings.HasSuffix(lineWith(text, "▸ notes"), "•") {
+	if strings.HasSuffix(lineWith(text, "▸ notes"), "●") {
 		t.Errorf("notes is in no repository:\n%s", text)
 	}
 	if !strings.Contains(text, "/api") && !strings.Contains(text, filepath.Base(folder)) {

@@ -202,6 +202,24 @@ const doubleClick = 400 * time.Millisecond
 
 // Mouse handles a click or a turn of the wheel.
 func (m *Model) Mouse(ev Mouse) {
+	// Under the activity bar, the panel is where it always was, two rows
+	// lower: a press on the bar is the bar's, and anything else is moved
+	// up to the rows the rest of this reads.
+	if m.bar {
+		if ev.Wheel == 0 && m.barClick(ev) {
+			return
+		}
+		if ev.Wheel == 0 && m.gitFooter >= 0 && ev.Y == m.gitFooter {
+			if ev.Press && ev.Button == 0 && m.mode == modeList {
+				m.gitFooterClick(ev.X)
+			}
+			return
+		}
+		if ev.Wheel == 0 && ev.Y == barRows+1 {
+			return // the project's name, where the git bar would be
+		}
+		ev.Y = max(ev.Y-barRows, 0)
+	}
 	switch m.mode {
 	case modeViewer:
 		if ev.Wheel != 0 {
@@ -234,6 +252,9 @@ func (m *Model) Mouse(ev Mouse) {
 		return
 	case modeHistory:
 		m.historyMouse(ev)
+		return
+	case modeSettings:
+		m.settingsMouse(ev)
 		return
 	case modePrompt:
 		return

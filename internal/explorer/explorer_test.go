@@ -183,7 +183,7 @@ func TestTheTreeShowsTheProjectWithGitsNews(t *testing.T) {
 	if strings.Index(text, "▸ src") > strings.Index(text, "kept.txt") {
 		t.Errorf("directories come first:\n%s", text)
 	}
-	if !strings.HasSuffix(find("brandnew.md"), "U") || !strings.HasSuffix(find("▸ src"), "•") {
+	if !strings.HasSuffix(find("brandnew.md"), "U") || !strings.HasSuffix(find("▸ src"), "●") {
 		t.Errorf("letters:\n%s", text)
 	}
 	if strings.HasSuffix(find("kept.txt"), "M") {

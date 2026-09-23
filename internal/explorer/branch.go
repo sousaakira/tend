@@ -62,6 +62,49 @@ func (m *Model) drawGitBar(g *vt.Grid) {
 	}
 }
 
+// gitFooterLayout is where herdr-sidebar's git footer puts its two buttons
+// (`branch_ui.rs`, draw_git_footer): " ⎇ branch " from the left edge, then
+// the sync glyph with how far behind and ahead the upstream is, or the
+// glyph alone without one. branch and sync are [from, to) columns.
+func (m *Model) gitFooterLayout() (branch, sync barZone, branchText, syncText string) {
+	icon := "⎇"
+	if m.settings.Icons == IconsNerd {
+		icon = "\ue725" // nf-dev-git_branch
+	}
+	branchText = " " + icon + " " + m.status.Branch + " "
+	syncText = "⟳"
+	if m.jobRunning {
+		syncText = "…"
+	}
+	if m.status.Upstream != "" {
+		syncText += " " + strconv.Itoa(m.status.Behind) + "↓ " + strconv.Itoa(m.status.Ahead) + "↑"
+	}
+	bw := min(runewidth.StringWidth(branchText), max(m.cols-runewidth.StringWidth(syncText), 0))
+	branch = barZone{0, bw}
+	sync = barZone{bw, min(bw+runewidth.StringWidth(syncText), m.cols)}
+	return branch, sync, branchText, syncText
+}
+
+// drawGitFooter paints the branch and sync buttons on row y, dimmed as
+// herdr-sidebar's idle buttons are.
+func (m *Model) drawGitFooter(g *vt.Grid, y int) {
+	branch, sync, branchText, syncText := m.gitFooterLayout()
+	put(g, branch.from, y, truncate(branchText, branch.to-branch.from), styleDim, branch.to)
+	put(g, sync.from, y, syncText, styleDim, m.cols)
+}
+
+// gitFooterClick answers a press on the git footer: the branch opens the
+// branch picker, the sync syncs, as the git bar's do.
+func (m *Model) gitFooterClick(x int) {
+	branch, sync, _, _ := m.gitFooterLayout()
+	switch {
+	case x >= branch.from && x < branch.to:
+		m.openBranches()
+	case x >= sync.from && x < sync.to:
+		m.startSync()
+	}
+}
+
 func (m *Model) projectName() string {
 	name := m.tree.Root
 	if i := strings.LastIndex(name, "/"); i >= 0 {

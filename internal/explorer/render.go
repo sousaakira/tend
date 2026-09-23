@@ -14,10 +14,12 @@ import (
 // whatever theme the terminal and tend already have instead of bringing a
 // palette of its own into the middle of them.
 var (
-	styleNormal  = vt.Style{}
-	styleDim     = vt.Style{Attrs: vt.AttrDim}
-	styleBold    = vt.Style{Attrs: vt.AttrBold}
-	styleSel     = vt.Style{Attrs: vt.AttrReverse}
+	styleNormal = vt.Style{}
+	styleDim    = vt.Style{Attrs: vt.AttrDim}
+	styleBold   = vt.Style{Attrs: vt.AttrBold}
+	// styleSel is herdr-sidebar's selection: its DarkGray under the text,
+	// in bold, rather than the text reversed.
+	styleSel     = vt.Style{BG: vt.IndexedColor(8), Attrs: vt.AttrBold}
 	styleAccent  = vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold}
 	styleTabOn   = vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold | vt.AttrUnderline}
 	styleErr     = vt.Style{FG: vt.IndexedColor(1)}
@@ -26,6 +28,9 @@ var (
 	styleRed     = vt.Style{FG: vt.IndexedColor(1)}
 	styleCyan    = vt.Style{FG: vt.IndexedColor(6)}
 	styleMagenta = vt.Style{FG: vt.IndexedColor(5), Attrs: vt.AttrBold}
+	// styleProject is the project's name over the tree, herdr-sidebar's
+	// header_accent: LightBlue, bold.
+	styleProject = vt.Style{FG: vt.IndexedColor(12), Attrs: vt.AttrBold}
 )
 
 // letterStyle is the colour of a git letter, as source-control views colour
@@ -51,6 +56,45 @@ func letterStyle(letter byte) vt.Style {
 // while something is being typed.
 func (m *Model) Draw(g *vt.Grid) (cx, cy int, visible bool) {
 	m.Resize(g.Cols(), g.Rows())
+	m.bar = m.barActive()
+	if !m.bar {
+		return m.drawBody(g)
+	}
+	// herdr-sidebar's layout: the activity bar, the project's name, the
+	// list, and the branch and sync on the bottom line. The activity bar
+	// takes the header's row and two more, and the git line one at the
+	// bottom; what is between is drawn as it always was, into a grid that
+	// much shorter, and copied in. Its second row, which is the git bar
+	// when there is no activity bar, is where the name goes.
+	cols, rows := g.Cols(), g.Rows()-barRows
+	m.gitFooter = -1
+	if m.status != nil && m.status.Branch != "" {
+		rows--
+		m.gitFooter = g.Rows() - 1
+	}
+	if m.body == nil || m.body.Cols() != cols || m.body.Rows() != rows {
+		m.body = vt.NewGrid(cols, rows, 0)
+	}
+	cx, cy, visible = m.drawBody(m.body)
+	g.Clear(styleNormal)
+	for y := 2; y < rows; y++ {
+		from, to := m.body.Line(y), g.Line(y+barRows)
+		for x := 0; x < cols; x++ {
+			to.SetCell(x, from.Cell(x))
+		}
+	}
+	m.drawActivityBar(g)
+	put(g, 1, barRows+1, truncate(strings.ToUpper(m.projectName()), cols-2), styleProject, cols)
+	if m.gitFooter >= 0 {
+		m.drawGitFooter(g, m.gitFooter)
+	}
+	m.Resize(cols, rows)
+	return cx, cy + barRows, visible
+}
+
+// drawBody is the panel without the activity bar, into g.
+func (m *Model) drawBody(g *vt.Grid) (cx, cy int, visible bool) {
+	m.Resize(g.Cols(), g.Rows())
 	g.Clear(styleNormal)
 	m.clamp()
 	if m.cols < 4 || m.rows < 4 {
@@ -70,6 +114,9 @@ func (m *Model) Draw(g *vt.Grid) (cx, cy int, visible bool) {
 		return 0, 0, false
 	case modeHistory:
 		m.drawHistory(g)
+		return 0, 0, false
+	case modeSettings:
+		m.drawSettings(g)
 		return 0, 0, false
 	}
 
@@ -94,8 +141,18 @@ func (m *Model) Draw(g *vt.Grid) (cx, cy int, visible bool) {
 // headerNames are the views as the header names them, in order.
 var headerNames = [3]string{"files", "search", "changes"}
 
+// viewStyles are the colour each view's icon takes on the activity bar
+// while it is the one shown: the tree in the blue of its folders, search
+// in magenta, changes in the yellow of a changed file's letter.
+var viewStyles = [3]vt.Style{
+	{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
+	{FG: vt.IndexedColor(5), Attrs: vt.AttrBold},
+	{FG: vt.IndexedColor(3), Attrs: vt.AttrBold},
+}
+
 // headerViewAt is the view whose name is at column x of the header: each
 // name runs to the divider after it, so a click between two lands on one.
+// With icons on, the activity bar is in the header's place (activity.go).
 func headerViewAt(x int) View {
 	at := 1
 	for i, name := range headerNames[:2] {
@@ -106,6 +163,21 @@ func headerViewAt(x int) View {
 		at += 2
 	}
 	return ViewChanges
+}
+
+// changeCount is every repository's changes, which is what the changes view
+// lists, as the header shows it: "" when there are none.
+func (m *Model) changeCount() string {
+	total := 0
+	for _, r := range m.repos {
+		if r.status != nil {
+			total += len(r.status.Changes)
+		}
+	}
+	if total == 0 {
+		return ""
+	}
+	return strconv.Itoa(total)
 }
 
 func (m *Model) drawHeader(g *vt.Grid) {
@@ -120,15 +192,8 @@ func (m *Model) drawHeader(g *vt.Grid) {
 		}
 		x = put(g, x, 0, name, style, m.cols)
 	}
-	// Every repository's changes, which is what the changes view lists.
-	total := 0
-	for _, r := range m.repos {
-		if r.status != nil {
-			total += len(r.status.Changes)
-		}
-	}
-	if total > 0 {
-		put(g, x+1, 0, strconv.Itoa(total), styleYellow, m.cols)
+	if count := m.changeCount(); count != "" {
+		put(g, x+1, 0, count, styleYellow, m.cols)
 	}
 
 	// The second line says where this is: the project, the branch and how
@@ -149,60 +214,65 @@ func (m *Model) drawFiles(g *vt.Grid) {
 		}
 		n := m.fileRows[at]
 		y := 2 + i
-		base := styleNormal
-		if n.Dir {
-			base = styleBold
-		}
-		if n.Ignored {
-			base = styleDim
-		}
+		m.drawFileRow(g, y, n, at == m.cursor[v])
+	}
+}
 
-		letter := m.statusFor(n)
-		nameStyle := base
-		if letter != 0 && !n.Ignored {
-			nameStyle = letterStyle(letter)
-			if n.Dir {
-				nameStyle.Attrs |= vt.AttrBold
-			}
-		}
-
-		selected := at == m.cursor[v]
+// drawFileRow is one entry of the tree, as herdr-sidebar's row_line draws
+// it: the indent, the chevron dimmed, the icon in its colour, the name in
+// the text's own colour whether folder or file — the chevron and the icon
+// tell them apart — or in its git letter's, and the letter against the
+// right with two cells after it (a folder's is a dot). The selection is a
+// background under all of that rather than a reversal of it, so the icon
+// and the letter keep their colours on the selected row.
+func (m *Model) drawFileRow(g *vt.Grid, y int, n *Node, selected bool) {
+	sel := func(s vt.Style) vt.Style {
 		if selected {
-			fill(g, y, 0, m.cols, styleSel)
-			nameStyle = styleSel
-			base = styleSel
+			s.BG = styleSel.BG
+			s.Attrs |= styleSel.Attrs
 		}
+		return s
+	}
+	if selected {
+		fill(g, y, 0, m.cols, styleSel)
+	}
+	letter := m.statusFor(n)
+	nameStyle := styleNormal
+	switch {
+	case n.Ignored:
+		nameStyle = styleDim
+	case letter != 0:
+		nameStyle = letterStyle(letter)
+	}
 
-		x := 1 + 2*n.Depth
-		marker := "  "
+	x := 2 * n.Depth
+	marker := "  "
+	if n.Dir {
+		marker = "▸ "
+		if n.Expanded {
+			marker = "▾ "
+		}
+	}
+	x = put(g, x, y, marker, sel(styleDim), m.cols)
+	if icon, style := iconFor(n, m.settings.Icons); icon != "" {
+		x = put(g, x, y, icon, sel(style), m.cols-3)
+	}
+	name := n.Name
+	if n.Link {
+		name += " →"
+	}
+	// The name yields to the letter and the two cells after it.
+	limit := m.cols - 4
+	if letter == 0 || n.Ignored {
+		limit = m.cols
+	}
+	put(g, x, y, truncate(name, limit-x), sel(nameStyle), limit)
+	if letter != 0 && !n.Ignored {
+		shown := string(letter)
 		if n.Dir {
-			marker = "▸ "
-			if n.Expanded {
-				marker = "▾ "
-			}
+			shown = "●"
 		}
-		x = put(g, x, y, marker, pick(selected, styleSel, styleDim), m.cols)
-		if icon := iconFor(n, m.settings.Icons); icon != "" {
-			iconStyle := styleNormal
-			if n.Dir {
-				iconStyle = vt.Style{FG: vt.IndexedColor(4)}
-			}
-			x = put(g, x, y, icon, pick(selected, styleSel, iconStyle), m.cols-3)
-		}
-		name := n.Name
-		if n.Link {
-			name += " →"
-		}
-		// The letter is kept in the last column; the name is cut before it.
-		limit := m.cols - 3
-		put(g, x, y, truncate(name, limit-x), nameStyle, limit)
-		if letter != 0 {
-			shown := string(letter)
-			if n.Dir {
-				shown = "•"
-			}
-			put(g, m.cols-2, y, shown, pick(selected, styleSel, letterStyle(letter)), m.cols)
-		}
+		put(g, m.cols-3, y, shown, sel(vt.Style{FG: letterStyle(letter).FG, Attrs: vt.AttrBold}), m.cols)
 	}
 }
 
@@ -302,6 +372,7 @@ var helpLines = []string{
 	"  P       sync: pull, push (or ⟳)",
 	"  /       find a file by name",
 	"  r       refresh",
+	"  ,       settings (or the gear)",
 	"  q       close the panel",
 }
 
@@ -361,6 +432,12 @@ func (m *Model) drawFooter(g *vt.Grid) (int, int, bool) {
 	}
 	if m.mode == modeHelp {
 		hint = "any key closes this"
+	} else if m.bar && m.view == ViewFiles {
+		// herdr-sidebar's line over its git footer, against the right, in
+		// its DarkGray.
+		hint = "m / right-click for menus"
+		put(g, max(m.cols-1-len(hint), 1), y, truncate(hint, m.cols-2), vt.Style{FG: vt.IndexedColor(8)}, m.cols)
+		return 0, 0, false
 	}
 	put(g, 1, y, truncate(hint, m.cols-2), styleDim, m.cols)
 	return 0, 0, false

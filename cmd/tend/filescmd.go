@@ -58,9 +58,18 @@ func runFiles(args []string) error {
 	settings := func() explorer.Settings {
 		cfg, err := config.LoadLenient()
 		settingsErr = err
-		return explorer.Settings{Icons: cfg.Files.Icons, Hidden: cfg.Files.Hidden, Follow: cfg.FilesFollow() && !*still}
+		dock := "right"
+		if cfg.FilesOnLeft() {
+			dock = "left"
+		}
+		return explorer.Settings{
+			Icons: cfg.Files.Icons, Hidden: cfg.Files.Hidden, Follow: cfg.FilesFollow() && !*still,
+			Dock: dock, Width: cfg.FilesWidth(),
+		}
 	}
 	m.Configure(settings())
+	// The gear's settings write the same [files] the settings screen does.
+	m.SetSettingsWriter(func(key, value string) error { return config.Set("files", key, value) })
 	if settingsErr != nil {
 		m.Warn("settings: " + settingsErr.Error())
 	}

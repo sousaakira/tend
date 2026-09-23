@@ -78,8 +78,9 @@ are looking at.
 right of the tab (or the left, with `dock = "left"`); again goes to it, and once more puts it away. It runs on the
 machine the session is on, so over `--remote` it shows the server's project,
 and it follows the pane beside it to whatever project that pane moves to
-(`tend files -still` stays put). `1` `2` `3` switch its views; `?` lists the
-keys.
+(`tend files -still` stays put). `1` `2` `3` switch its views, or with
+`icons` set, a click on their icons on the bar at the top, whose gear (or `,`)
+opens the panel's settings; `?` lists the keys.
 
 - **files** — the project as a tree, with git's letter beside each changed
   file. Enter opens a file in `$EDITOR` in a tab of its own; space, or a

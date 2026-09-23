@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/sousaakira/tend/internal/vt"
 )
 
 // View is which list is shown.
@@ -44,6 +46,7 @@ const (
 	modeMenu
 	modePrompt
 	modeHistory
+	modeSettings
 )
 
 // Opener opens a file for editing somewhere other than here: in tend, an
@@ -103,6 +106,17 @@ type Model struct {
 	settings      Settings
 	configured    bool
 	watchSettings func() (Settings, bool)
+	// writeSetting writes one of [files] for the gear's settings.
+	writeSetting   func(key, value string) error
+	settingsCursor int
+	// body is what the panel under the activity bar is drawn into, kept
+	// from one frame to the next; bar is whether the last frame had the
+	// bar, which is what a click lands on.
+	body *vt.Grid
+	bar  bool
+	// gitFooter is the row the branch and sync are on under the activity
+	// bar, or -1 when there is none.
+	gitFooter int
 
 	menu   contextMenu
 	prompt prompt
@@ -154,7 +168,7 @@ type changeRow struct {
 // one: the project, not whichever of its directories the pane was in.
 func New(dir string, opener Opener) *Model {
 	root, repos := reposFor(dir)
-	m := &Model{tree: NewTree(root), opener: opener, now: time.Now, active: -1}
+	m := &Model{tree: NewTree(root), opener: opener, now: time.Now, active: -1, gitFooter: -1}
 	for _, g := range repos {
 		m.repos = append(m.repos, repoState{git: g})
 	}
@@ -169,6 +183,10 @@ type Settings struct {
 	Icons  string
 	Hidden bool
 	Follow bool
+	// Dock and Width are how the panel opens, shown on the gear's
+	// settings; an open panel does not act on them.
+	Dock  string
+	Width int
 }
 
 // Configure applies settings. Only what changed since the last is applied,
@@ -414,6 +432,8 @@ func (m *Model) Key(k Key) {
 		m.menuKey(k)
 	case modeHistory:
 		m.historyKey(k)
+	case modeSettings:
+		m.settingsKey(k)
 	case modePrompt:
 		m.promptKey(k)
 	default:
@@ -463,6 +483,9 @@ func (m *Model) listKey(k Key, pending string) {
 		m.openHistory(histCommits, "")
 	case "P":
 		m.startSync()
+	case ",":
+		// herdr-sidebar's s, which here stages: the gear's settings.
+		m.openSettings()
 	case "?":
 		m.mode = modeHelp
 	case "q", "ctrl+c":
