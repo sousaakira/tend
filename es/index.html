@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-locale="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,17 +9,53 @@
   <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
   <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
   <link rel="alternate" hreflang="ja" href="https://sousaakira.github.io/tend/ja/">
+  <link rel="alternate" hreflang="zh-CN" href="https://sousaakira.github.io/tend/zh/">
+  <link rel="alternate" hreflang="zh" href="https://sousaakira.github.io/tend/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://sousaakira.github.io/tend/">
   <link rel="stylesheet" href="../site.css">
+  <script>(function(){
+  if (location.protocol === 'file:') return;
+  var KEY = 'tend-lang';
+  var ok = {en:1, pt:1, es:1, ja:1, zh:1};
+  var path = location.pathname;
+  var cur = 'en';
+  var m = path.match(/\/(pt|es|ja|zh)(?:\/index\.html|\/)?$/);
+  if (m) cur = m[1];
+  var stored = null;
+  try { stored = localStorage.getItem(KEY); } catch (e) {}
+  function fromBrowser() {
+    var list = navigator.languages || [navigator.language || navigator.userLanguage || ''];
+    for (var i = 0; i < list.length; i++) {
+      var c = String(list[i] || '').toLowerCase();
+      if (c.indexOf('pt') === 0) return 'pt';
+      if (c.indexOf('es') === 0) return 'es';
+      if (c.indexOf('ja') === 0) return 'ja';
+      if (c.indexOf('zh') === 0) return 'zh';
+    }
+    return 'en';
+  }
+  var want = (stored && ok[stored]) ? stored : fromBrowser();
+  if (want !== cur && (stored || cur === 'en')) {
+    var root = path.replace(/index\.html$/, '');
+    root = root.replace(/\/(pt|es|ja|zh)\/?$/, '/');
+    if (root.slice(-1) !== '/') root += '/';
+    location.replace(want === 'en' ? root : root + want + '/');
+    return;
+  }
+  if (!stored) {
+    try { localStorage.setItem(KEY, cur); } catch (e) {}
+  }
+})();</script>
 </head>
 <body>
   <header class="bar">
     <a class="mark" href="#top">tend</a>
     <nav>
+      <a href="#install">instalar</a>
       <a href="#session">sesión</a>
       <a href="#keys">teclas</a>
-      <a href="#install">instalar</a>
       <a href="https://github.com/sousaakira/tend">código</a>
-      <span class="langs"><a href="../pt/">pt</a> · <a href="../">en</a> · <a href="./" aria-current="page">es</a> · <a href="../ja/">ja</a></span>
+      <span class="langs"><a href="../pt/" data-lang="pt">pt</a> · <a href="../" data-lang="en">en</a> · <a href="./" data-lang="es" aria-current="page">es</a> · <a href="../ja/" data-lang="ja">ja</a> · <a href="../zh/" data-lang="zh">zh</a></span>
     </nav>
   </header>
 
@@ -27,6 +63,40 @@
     <section class="lead">
       <h1>tend</h1>
       <p class="deck">Un runtime de terminal para agentes de código. El servidor sigue cuando te vas. Cada panel queda marcado como working, blocked o idle.</p>
+    </section>
+
+    <section id="install"
+      data-copy="copiar"
+      data-copied="copiado"
+      data-detected-linux="detectado Linux"
+      data-detected-macos="detectado macOS"
+      data-detected-windows="detectado Windows"
+      data-download="Descargar">
+      <h2>Instalar <span class="os-detected" id="os-detected" hidden></span></h2>
+      <div class="os-tabs" role="tablist" aria-label="Sistema operativo">
+        <button type="button" role="tab" id="tab-linux" data-os="linux" aria-selected="true" aria-controls="panel-unix">Linux</button>
+        <button type="button" role="tab" id="tab-darwin" data-os="darwin" aria-selected="false" aria-controls="panel-unix">macOS</button>
+        <button type="button" role="tab" id="tab-windows" data-os="windows" aria-selected="false" aria-controls="panel-windows">Windows</button>
+      </div>
+      <div id="panel-unix" class="install-panel" role="tabpanel" data-panel="unix">
+        <div class="cmd-wrap">
+          <pre class="cmd" id="install-cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
+          <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="copiar" data-done="copiado">copiar</button>
+        </div>
+        <p class="install-dl">
+          <a id="bin-link" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-amd64">Descargar tend-linux-amd64</a>
+          <span class="sep">·</span>
+          <a id="bin-alt" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-arm64">arm64</a>
+          <span class="sep">·</span>
+          <a href="https://github.com/sousaakira/tend/releases/latest">todas las builds</a>
+        </p>
+        <p>Deja el binario en <code>~/.local/bin</code> (o <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>). Prefiere un release para esta máquina; si no, clona y compila con Go.</p>
+        <p class="note">Desde un checkout: <code>make install</code>.</p>
+      </div>
+      <div id="panel-windows" class="install-panel" role="tabpanel" data-panel="windows" hidden>
+        <p>tend es solo Linux y macOS. No hay binario para Windows.</p>
+        <p>En Windows, ejecuta el instalador Linux en WSL, o clona y <code>make install</code> en una máquina Unix.</p>
+      </div>
     </section>
 
     <section id="session" class="stage" aria-label="Una sesión de tend">
@@ -59,6 +129,11 @@ stop them.</pre>
         </div>
       </div>
       <p class="status"><span>work · main · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+    </section>
+
+    <section class="usage">
+      <p>Sin argumentos, tend abre una sesión y arranca un servidor si no hay uno. <code>tend new -- claude</code> abre un panel. <code>tend ls</code> lista lo que corre. <code>-s NAME</code> abre otra sesión junto a la primera.</p>
+      <p>Escrito en Go. Un binario. Sin cgo.</p>
     </section>
 
     <section class="facts">
@@ -97,18 +172,6 @@ stop them.</pre>
           <tr><th><kbd>d</kbd></th><td>desconectar, dejando todo en marcha</td></tr>
         </tbody>
       </table>
-    </section>
-
-    <section id="install">
-      <h2>Instalar</h2>
-      <div class="cmd-wrap">
-        <pre class="cmd" id="install-cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
-        <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="copiar" data-done="copiado">copiar</button>
-      </div>
-      <p>Deja el binario en <code>~/.local/bin</code> (o <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>). Prefiere un release para esta máquina; si no, clona y compila con Go.</p>
-      <p class="note">Desde un checkout: <code>make install</code>.</p>
-      <p>Sin argumentos, tend abre una sesión y arranca un servidor si no hay uno. <code>tend new -- claude</code> abre un panel. <code>tend ls</code> lista lo que corre. <code>-s NAME</code> abre otra sesión junto a la primera.</p>
-      <p>Escrito en Go. Un binario. Sin cgo.</p>
     </section>
   </main>
 

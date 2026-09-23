@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the tend site in en, pt-BR, es and ja."""
+"""Generate the tend site in en, pt-BR, es, ja and zh-CN."""
 
 from pathlib import Path
 
@@ -17,6 +17,7 @@ LANGS = {
             "pt": "pt/",
             "es": "es/",
             "ja": "ja/",
+            "zh": "zh/",
         },
         "title": "tend — terminal runtime for coding agents",
         "description": "tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.",
@@ -24,6 +25,17 @@ LANGS = {
         "nav_keys": "keys",
         "nav_install": "install",
         "nav_source": "source",
+        "os_tabs_label": "Operating system",
+        "os_linux": "Linux",
+        "os_macos": "macOS",
+        "os_windows": "Windows",
+        "detected_linux": "detected Linux",
+        "detected_macos": "detected macOS",
+        "detected_windows": "detected Windows",
+        "download_prefix": "Download",
+        "all_builds": "all builds",
+        "windows_p1": "tend is Linux and macOS only. There is no Windows binary.",
+        "windows_p2": "On Windows, run the Linux installer inside WSL, or clone and <code>make install</code> on a Unix machine.",
         "deck": "A terminal runtime for coding agents. The server stays up when you leave. Each pane is marked working, blocked, or idle.",
         "stage_label": "A tend session",
         "facts_h": "What stays when you detach",
@@ -63,6 +75,7 @@ LANGS = {
             "pt": "./",
             "es": "../es/",
             "ja": "../ja/",
+            "zh": "../zh/",
         },
         "title": "tend — runtime de terminal para agentes de código",
         "description": "O tend mantém os terminais dos agentes rodando depois que você sai, e marca cada painel como working, blocked ou idle.",
@@ -70,6 +83,17 @@ LANGS = {
         "nav_keys": "teclas",
         "nav_install": "instalar",
         "nav_source": "código",
+        "os_tabs_label": "Sistema operacional",
+        "os_linux": "Linux",
+        "os_macos": "macOS",
+        "os_windows": "Windows",
+        "detected_linux": "detectado Linux",
+        "detected_macos": "detectado macOS",
+        "detected_windows": "detectado Windows",
+        "download_prefix": "Baixar",
+        "all_builds": "todos os builds",
+        "windows_p1": "O tend é só Linux e macOS. Não há binário para Windows.",
+        "windows_p2": "No Windows, rode o instalador Linux no WSL, ou clone e <code>make install</code> numa máquina Unix.",
         "deck": "Um runtime de terminal para agentes de código. O servidor continua quando você sai. Cada painel fica marcado como working, blocked ou idle.",
         "stage_label": "Uma sessão do tend",
         "facts_h": "O que fica quando você desconecta",
@@ -109,6 +133,7 @@ LANGS = {
             "pt": "../pt/",
             "es": "./",
             "ja": "../ja/",
+            "zh": "../zh/",
         },
         "title": "tend — runtime de terminal para agentes de código",
         "description": "tend mantiene los terminales de los agentes tras desconectarte, y marca cada panel como working, blocked o idle.",
@@ -116,6 +141,17 @@ LANGS = {
         "nav_keys": "teclas",
         "nav_install": "instalar",
         "nav_source": "código",
+        "os_tabs_label": "Sistema operativo",
+        "os_linux": "Linux",
+        "os_macos": "macOS",
+        "os_windows": "Windows",
+        "detected_linux": "detectado Linux",
+        "detected_macos": "detectado macOS",
+        "detected_windows": "detectado Windows",
+        "download_prefix": "Descargar",
+        "all_builds": "todas las builds",
+        "windows_p1": "tend es solo Linux y macOS. No hay binario para Windows.",
+        "windows_p2": "En Windows, ejecuta el instalador Linux en WSL, o clona y <code>make install</code> en una máquina Unix.",
         "deck": "Un runtime de terminal para agentes de código. El servidor sigue cuando te vas. Cada panel queda marcado como working, blocked o idle.",
         "stage_label": "Una sesión de tend",
         "facts_h": "Qué queda al desconectarte",
@@ -155,6 +191,7 @@ LANGS = {
             "pt": "../pt/",
             "es": "../es/",
             "ja": "./",
+            "zh": "../zh/",
         },
         "title": "tend — コーディングエージェント向けターミナルランタイム",
         "description": "tend はデタッチ後もエージェントのターミナルを動かし続け、各ペインを working / blocked / idle と表示します。",
@@ -162,6 +199,17 @@ LANGS = {
         "nav_keys": "キー",
         "nav_install": "インストール",
         "nav_source": "ソース",
+        "os_tabs_label": "OS",
+        "os_linux": "Linux",
+        "os_macos": "macOS",
+        "os_windows": "Windows",
+        "detected_linux": "Linux を検出",
+        "detected_macos": "macOS を検出",
+        "detected_windows": "Windows を検出",
+        "download_prefix": "ダウンロード",
+        "all_builds": "すべてのビルド",
+        "windows_p1": "tend は Linux と macOS のみです。Windows 用のバイナリはありません。",
+        "windows_p2": "Windows では WSL 上で Linux 用インストーラを使うか、Unix でクローンして <code>make install</code> してください。",
         "deck": "コーディングエージェント向けのターミナルランタイム。離れてもサーバーは動き続け、各ペインは working・blocked・idle と示されます。",
         "stage_label": "tend のセッション",
         "facts_h": "デタッチしても残るもの",
@@ -193,7 +241,108 @@ LANGS = {
         "install_p3": "Go 製。単一バイナリ。cgo なし。",
         "footer": "Apache-2.0。独立した Go 実装。詳細はリポジトリの NOTICE を参照。",
     },
+    "zh": {
+        "html_lang": "zh-CN",
+        "dir": "zh",
+        "href": {
+            "en": "../",
+            "pt": "../pt/",
+            "es": "../es/",
+            "ja": "../ja/",
+            "zh": "./",
+        },
+        "title": "tend — 面向编程智能体的终端运行时",
+        "description": "tend 在你离开后仍保持智能体终端运行，并为每个窗格标出 working、blocked 或 idle。",
+        "nav_session": "会话",
+        "nav_keys": "快捷键",
+        "nav_install": "安装",
+        "nav_source": "源码",
+        "os_tabs_label": "操作系统",
+        "os_linux": "Linux",
+        "os_macos": "macOS",
+        "os_windows": "Windows",
+        "detected_linux": "已检测 Linux",
+        "detected_macos": "已检测 macOS",
+        "detected_windows": "已检测 Windows",
+        "download_prefix": "下载",
+        "all_builds": "全部构建",
+        "windows_p1": "tend 仅支持 Linux 和 macOS。没有 Windows 二进制文件。",
+        "windows_p2": "在 Windows 上，请在 WSL 中运行 Linux 安装命令，或在 Unix 机器上克隆后执行 <code>make install</code>。",
+        "deck": "面向编程智能体的终端运行时。你离开后服务器仍在运行。每个窗格标为 working、blocked 或 idle。",
+        "stage_label": "一个 tend 会话",
+        "facts_h": "断开后仍会留下的",
+        "fact1_t": "程序",
+        "fact1_d": "会话是后台服务器。<kbd>ctrl</kbd><kbd>b</kbd> 再按 <kbd>d</kbd> 后智能体继续运行。再次打开 tend 会回到同样的窗格。",
+        "fact2_t": "状态",
+        "fact2_d": "窗格是 working、blocked 或 idle。标记来自屏幕上的内容 — 转圈、权限提示、等待中的 shell — 不是根据进程名猜测。",
+        "fact3_t": "布局",
+        "fact3_d": "space 容纳标签。标签容纳窗格。左右或上下分割，放大一个窗格，滚动历史，跳到停下来的智能体。",
+        "keys_h": "前缀是 ctrl+b",
+        "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> 列出会话内的全部快捷键。",
+        "k_split": "左右、上下分割",
+        "k_focus": "移动焦点",
+        "k_resize": "调整大小",
+        "k_zoom": "将窗格放大到窗口",
+        "k_scroll": "回看历史",
+        "k_close": "关闭窗格",
+        "k_tabs": "标签：新建、下一个、上一个、按数字",
+        "k_spaces": "space：新建、上一个、下一个",
+        "k_agents": "显示全部智能体（分组）",
+        "k_jump": "选一个并跳转",
+        "k_detach": "断开，保持一切运行",
+        "install_h": "安装",
+        "copy": "复制",
+        "copied": "已复制",
+        "install_p1": "将二进制放到 <code>~/.local/bin</code>（或 <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>）。优先使用适合此机器的发布包；否则用 Go 克隆并编译。",
+        "install_note": "从源码目录：<code>make install</code>。",
+        "install_p2": "不带参数时，tend 打开会话，若没有服务器则启动一个。<code>tend new -- claude</code> 打开窗格。<code>tend ls</code> 列出正在运行的。<code>-s NAME</code> 在旁边再开一个会话。",
+        "install_p3": "用 Go 写成。单一二进制。无 cgo。",
+        "footer": "Apache-2.0。独立的 Go 实现；详见仓库中的 NOTICE。",
+    },
 }
+
+
+# Runs in <head> so a first visit is redirected before the English page paints.
+# A stored choice wins over the browser; a shared /pt/ link is left alone until
+# the visitor picks a language themselves.
+LANG_JS = """
+(function(){
+  if (location.protocol === 'file:') return;
+  var KEY = 'tend-lang';
+  var ok = {en:1, pt:1, es:1, ja:1, zh:1};
+  var path = location.pathname;
+  var cur = 'en';
+  var m = path.match(/\\/(pt|es|ja|zh)(?:\\/index\\.html|\\/)?$/);
+  if (m) cur = m[1];
+  var stored = null;
+  try { stored = localStorage.getItem(KEY); } catch (e) {}
+  function fromBrowser() {
+    var list = navigator.languages || [navigator.language || navigator.userLanguage || ''];
+    for (var i = 0; i < list.length; i++) {
+      var c = String(list[i] || '').toLowerCase();
+      if (c.indexOf('pt') === 0) return 'pt';
+      if (c.indexOf('es') === 0) return 'es';
+      if (c.indexOf('ja') === 0) return 'ja';
+      if (c.indexOf('zh') === 0) return 'zh';
+    }
+    return 'en';
+  }
+  var want = (stored && ok[stored]) ? stored : fromBrowser();
+  if (want !== cur && (stored || cur === 'en')) {
+    var root = path.replace(/index\\.html$/, '');
+    root = root.replace(/\\/(pt|es|ja|zh)\\/?$/, '/');
+    if (root.slice(-1) !== '/') root += '/';
+    location.replace(want === 'en' ? root : root + want + '/');
+    return;
+  }
+  if (!stored) {
+    try { localStorage.setItem(KEY, cur); } catch (e) {}
+  }
+})();
+""".strip()
+
+BIN_LINUX = "https://github.com/sousaakira/tend/releases/latest/download/tend-linux-amd64"
+RELEASES = "https://github.com/sousaakira/tend/releases/latest"
 
 
 def page(code: str, t: dict) -> str:
@@ -203,7 +352,7 @@ def page(code: str, t: dict) -> str:
 
     def lang_link(key: str, label: str) -> str:
         current = ' aria-current="page"' if key == code else ""
-        return f'<a href="{h[key]}"{current}>{label}</a>'
+        return f'<a href="{h[key]}" data-lang="{key}"{current}>{label}</a>'
 
     langs = " · ".join(
         [
@@ -211,11 +360,12 @@ def page(code: str, t: dict) -> str:
             lang_link("en", "en"),
             lang_link("es", "es"),
             lang_link("ja", "ja"),
+            lang_link("zh", "zh"),
         ]
     )
 
     return f"""<!DOCTYPE html>
-<html lang="{t["html_lang"]}">
+<html lang="{t["html_lang"]}" data-locale="{code}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -225,15 +375,19 @@ def page(code: str, t: dict) -> str:
   <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
   <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
   <link rel="alternate" hreflang="ja" href="https://sousaakira.github.io/tend/ja/">
+  <link rel="alternate" hreflang="zh-CN" href="https://sousaakira.github.io/tend/zh/">
+  <link rel="alternate" hreflang="zh" href="https://sousaakira.github.io/tend/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://sousaakira.github.io/tend/">
   <link rel="stylesheet" href="{css}">
+  <script>{LANG_JS}</script>
 </head>
 <body>
   <header class="bar">
     <a class="mark" href="#top">tend</a>
     <nav>
+      <a href="#install">{t["nav_install"]}</a>
       <a href="#session">{t["nav_session"]}</a>
       <a href="#keys">{t["nav_keys"]}</a>
-      <a href="#install">{t["nav_install"]}</a>
       <a href="https://github.com/sousaakira/tend">{t["nav_source"]}</a>
       <span class="langs">{langs}</span>
     </nav>
@@ -243,6 +397,40 @@ def page(code: str, t: dict) -> str:
     <section class="lead">
       <h1>tend</h1>
       <p class="deck">{t["deck"]}</p>
+    </section>
+
+    <section id="install"
+      data-copy="{t["copy"]}"
+      data-copied="{t["copied"]}"
+      data-detected-linux="{t["detected_linux"]}"
+      data-detected-macos="{t["detected_macos"]}"
+      data-detected-windows="{t["detected_windows"]}"
+      data-download="{t["download_prefix"]}">
+      <h2>{t["install_h"]} <span class="os-detected" id="os-detected" hidden></span></h2>
+      <div class="os-tabs" role="tablist" aria-label="{t["os_tabs_label"]}">
+        <button type="button" role="tab" id="tab-linux" data-os="linux" aria-selected="true" aria-controls="panel-unix">{t["os_linux"]}</button>
+        <button type="button" role="tab" id="tab-darwin" data-os="darwin" aria-selected="false" aria-controls="panel-unix">{t["os_macos"]}</button>
+        <button type="button" role="tab" id="tab-windows" data-os="windows" aria-selected="false" aria-controls="panel-windows">{t["os_windows"]}</button>
+      </div>
+      <div id="panel-unix" class="install-panel" role="tabpanel" data-panel="unix">
+        <div class="cmd-wrap">
+          <pre class="cmd" id="install-cmd">{INSTALL}</pre>
+          <button type="button" class="copy" data-copy="{INSTALL}" data-label="{t["copy"]}" data-done="{t["copied"]}">{t["copy"]}</button>
+        </div>
+        <p class="install-dl">
+          <a id="bin-link" href="{BIN_LINUX}">{t["download_prefix"]} tend-linux-amd64</a>
+          <span class="sep">·</span>
+          <a id="bin-alt" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-arm64">arm64</a>
+          <span class="sep">·</span>
+          <a href="{RELEASES}">{t["all_builds"]}</a>
+        </p>
+        <p>{t["install_p1"]}</p>
+        <p class="note">{t["install_note"]}</p>
+      </div>
+      <div id="panel-windows" class="install-panel" role="tabpanel" data-panel="windows" hidden>
+        <p>{t["windows_p1"]}</p>
+        <p>{t["windows_p2"]}</p>
+      </div>
     </section>
 
     <section id="session" class="stage" aria-label="{t["stage_label"]}">
@@ -275,6 +463,11 @@ stop them.</pre>
         </div>
       </div>
       <p class="status"><span>work · main · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+    </section>
+
+    <section class="usage">
+      <p>{t["install_p2"]}</p>
+      <p>{t["install_p3"]}</p>
     </section>
 
     <section class="facts">
@@ -314,18 +507,6 @@ stop them.</pre>
         </tbody>
       </table>
     </section>
-
-    <section id="install">
-      <h2>{t["install_h"]}</h2>
-      <div class="cmd-wrap">
-        <pre class="cmd" id="install-cmd">{INSTALL}</pre>
-        <button type="button" class="copy" data-copy="{INSTALL}" data-label="{t["copy"]}" data-done="{t["copied"]}">{t["copy"]}</button>
-      </div>
-      <p>{t["install_p1"]}</p>
-      <p class="note">{t["install_note"]}</p>
-      <p>{t["install_p2"]}</p>
-      <p>{t["install_p3"]}</p>
-    </section>
   </main>
 
   <footer>
@@ -340,6 +521,8 @@ stop them.</pre>
 def main() -> None:
     for code, t in LANGS.items():
         html = page(code, t)
+        if html.index('id="install"') > html.index('id="session"'):
+            raise SystemExit("install section must sit above the session mock")
         if t["dir"] == ".":
             path = ROOT / "index.html"
         else:
