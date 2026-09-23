@@ -28,8 +28,9 @@ type SessionOpener struct {
 
 	opened map[string]string
 	seq    atomic.Uint64
-	// preview is the pane showing previews, reused for the next one.
-	preview string
+	// preview is the pane showing previews, reused for the next one, and
+	// previewTab the tab it is the whole of.
+	preview, previewTab string
 }
 
 // callTimeout bounds one call: a session that does not answer should not
@@ -182,44 +183,45 @@ func (o *SessionOpener) Siblings() ([]Sibling, error) {
 	return out, nil
 }
 
-// Preview shows a file read-only in the preview pane beside the main one,
-// with line (from one) in view: the pane already showing a preview is
-// pointed at this file, and one is opened, splitting the widest other pane
-// of the tab, when there is none. The panel keeps the focus, so browsing
-// with the keys goes on.
+// Preview shows a file read-only in a tab of its own, with line (from one)
+// in view, and goes to that tab: the tab already showing a preview is
+// pointed at this file and renamed after it, and one is opened when there
+// is none. It is one tab, reused, so looking through files does not stack a
+// tab per file; enter, or o in the preview, opens the editor in a tab that
+// stays.
+//
+// This is herdr-sidebar's default placement. tend first split a pane
+// beside the main one instead, so the panel stayed in view, but that took
+// columns from the terminal being worked in; the owner asked for the tab.
 func (o *SessionOpener) Preview(path string, line int, dir string) error {
 	if o.Socket == "" || o.Pane == "" {
 		return errors.New("nowhere to preview: not running in a tend pane")
 	}
+	name := filepath.Base(path)
 	if o.preview != "" {
 		if _, err := o.call("pane.send_text", map[string]any{
 			"pane_id": o.preview, "text": RetargetSequence(path, line),
 		}); err == nil {
-			return nil
+			if o.previewTab != "" {
+				_, _ = o.call("tab.rename", map[string]any{"tab_id": o.previewTab, "name": name})
+			}
+			_, err = o.call("pane.focus", map[string]any{"pane_id": o.preview})
+			return err
 		}
-		o.preview = "" // closed since
+		o.preview, o.previewTab = "", "" // closed since
 	}
 	layout, err := o.call("pane.layout", map[string]any{"pane_id": o.Pane})
 	if err != nil {
 		return err
 	}
 	inner, _ := layout["layout"].(map[string]any)
-	panes, _ := inner["panes"].([]any)
-	target, widest := "", -1.0
-	for _, raw := range panes {
-		p, _ := raw.(map[string]any)
-		id, _ := p["pane_id"].(string)
-		rect, _ := p["rect"].(map[string]any)
-		w, _ := rect["width"].(float64)
-		if id != o.Pane && w > widest {
-			target, widest = id, w
-		}
+	ws, _ := inner["workspace_id"].(string)
+	if ws == "" {
+		return errors.New("cannot tell which space this panel is in")
 	}
-	if target == "" {
-		target = o.Pane
-	}
-	res, err := o.call("pane.split", map[string]any{
-		"pane_id": target, "direction": "right",
+	created, err := o.call("tab.create", map[string]any{
+		"workspace_id": ws,
+		"name":         name,
 		"command": []string{"/bin/sh", "-c", `exec "${TEND_BIN_PATH:-tend}" view -line "$2" "$1"`,
 			"tend-view", path, strconv.Itoa(line)},
 		// In the project, so the panel following its siblings does not
@@ -230,12 +232,15 @@ func (o *SessionOpener) Preview(path string, line int, dir string) error {
 	if err != nil {
 		return err
 	}
-	pane, _ := res["pane"].(map[string]any)
-	o.preview, _ = pane["pane_id"].(string)
-	// Named, so its frame says what it is rather than "sh".
-	_, _ = o.call("pane.rename", map[string]any{"pane_id": o.preview, "label": "preview"})
-	// The split took the focus on the server; the panel asks for it back,
-	// since browsing goes on from there.
-	_, _ = o.call("pane.focus", map[string]any{"pane_id": o.Pane})
-	return nil
+	tab, _ := created["tab"].(map[string]any)
+	o.previewTab, _ = tab["tab_id"].(string)
+	root, _ := created["root_pane"].(map[string]any)
+	o.preview, _ = root["pane_id"].(string)
+	if o.preview == "" {
+		return nil
+	}
+	// A new tab is not shown by itself: each client decides what it looks
+	// at. Asking for focus is how the one being used goes to it.
+	_, err = o.call("pane.focus", map[string]any{"pane_id": o.preview})
+	return err
 }

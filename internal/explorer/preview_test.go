@@ -125,11 +125,12 @@ func TestThePreviewShowsTheLineRetargetsAndFollowsEdits(t *testing.T) {
 	}
 }
 
-// TestThePanelKeepsOnePreviewPane: the first preview splits the widest other
-// pane to the right, runs tend view there in the project and gives the
-// focus back to the panel; the next is sent to that pane rather than
-// opening another. If it regresses, every file looked at stacks a pane.
-func TestThePanelKeepsOnePreviewPane(t *testing.T) {
+// TestThePanelKeepsOnePreviewTab: the first preview opens a tab named after
+// the file in the panel's space, runs tend view there in the project and
+// goes to it; the next is sent to that tab, renamed after the new file,
+// rather than opening another. If it regresses, the preview squeezes the
+// terminal being worked in, or every file looked at stacks a tab.
+func TestThePanelKeepsOnePreviewTab(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "api.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
@@ -154,13 +155,12 @@ func TestThePanelKeepsOnePreviewPane(t *testing.T) {
 			var result any = map[string]any{}
 			switch c.Method {
 			case "pane.layout":
-				result = map[string]any{"layout": map[string]any{"panes": []any{
-					map[string]any{"pane_id": "p_1", "rect": map[string]any{"width": 32}},
-					map[string]any{"pane_id": "p_2", "rect": map[string]any{"width": 90}},
-					map[string]any{"pane_id": "p_3", "rect": map[string]any{"width": 40}},
-				}}}
-			case "pane.split":
-				result = map[string]any{"pane": map[string]any{"pane_id": "p_8"}}
+				result = map[string]any{"layout": map[string]any{"workspace_id": "w_1"}}
+			case "tab.create":
+				result = map[string]any{
+					"tab":       map[string]any{"tab_id": "t_4"},
+					"root_pane": map[string]any{"pane_id": "p_8"},
+				}
 			}
 			reply, _ := json.Marshal(map[string]any{"id": "x", "result": result})
 			_, _ = conn.Write(append(reply, '\n'))
@@ -180,28 +180,31 @@ func TestThePanelKeepsOnePreviewPane(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := drain()
-	if len(got) != 4 || got[1].Method != "pane.split" || got[2].Method != "pane.rename" || got[3].Method != "pane.focus" {
+	if len(got) != 3 || got[0].Method != "pane.layout" || got[1].Method != "tab.create" || got[2].Method != "pane.focus" {
 		t.Fatalf("calls = %+v", got)
 	}
-	if got[2].Params["label"] != "preview" || got[2].Params["pane_id"] != "p_8" {
-		t.Errorf("rename = %+v", got[2].Params)
-	}
-	split := got[1].Params
-	cmd, _ := split["command"].([]any)
-	if split["pane_id"] != "p_2" || split["direction"] != "right" || split["close_on_exit"] != true || split["dir"] != "/work" ||
+	created := got[1].Params
+	cmd, _ := created["command"].([]any)
+	if created["workspace_id"] != "w_1" || created["name"] != "a.go" || created["close_on_exit"] != true || created["dir"] != "/work" ||
 		len(cmd) != 6 || !strings.Contains(cmd[2].(string), "view -line") || cmd[4] != "/work/a.go" || cmd[5] != "12" {
-		t.Errorf("split = %+v", split)
+		t.Errorf("tab.create = %+v", created)
 	}
-	if got[3].Params["pane_id"] != "p_1" {
-		t.Errorf("the focus goes back to the panel: %+v", got[2].Params)
+	if got[2].Params["pane_id"] != "p_8" {
+		t.Errorf("the preview's tab is gone to: %+v", got[2].Params)
 	}
 
 	if err := o.Preview("/work/b.go", 0, "/work"); err != nil {
 		t.Fatal(err)
 	}
 	got = drain()
-	if len(got) != 1 || got[0].Method != "pane.send_text" || got[0].Params["pane_id"] != "p_8" ||
+	if len(got) != 3 || got[0].Method != "pane.send_text" || got[0].Params["pane_id"] != "p_8" ||
 		got[0].Params["text"] != RetargetSequence("/work/b.go", 0) {
-		t.Errorf("the second preview reuses the pane: %+v", got)
+		t.Fatalf("the second preview reuses the tab: %+v", got)
+	}
+	if got[1].Method != "tab.rename" || got[1].Params["tab_id"] != "t_4" || got[1].Params["name"] != "b.go" {
+		t.Errorf("the tab is renamed after the file: %+v", got[1])
+	}
+	if got[2].Method != "pane.focus" || got[2].Params["pane_id"] != "p_8" {
+		t.Errorf("and gone to: %+v", got[2])
 	}
 }

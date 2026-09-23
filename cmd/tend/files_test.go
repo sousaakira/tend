@@ -269,12 +269,14 @@ func TestThePanelFollowsThePaneBesideItToAnotherProject(t *testing.T) {
 	a.waitForScreen(t, "the panel to follow", func(s string) bool { return strings.Contains(s, "only-in-second.txt") })
 }
 
-// TestThePanelPreviewsBesideTheMainPaneAndReusesIt: space on a file shows
-// it read-only in a pane beside the shell, with its line numbers, and the
-// panel keeps the keys; space on another file shows that one in the same
-// pane. If it regresses, looking at a file hides the panel, or every file
-// looked at leaves a pane behind.
-func TestThePanelPreviewsBesideTheMainPaneAndReusesIt(t *testing.T) {
+// TestThePanelPreviewsInATabAndReusesIt: space on a file shows it read-only
+// in a tab of its own named after it, with its line numbers, and goes
+// there; back on the panel's tab, the panel has the keys again, as it was
+// left with them, and space on another file shows that one in the same tab,
+// renamed. If it regresses, looking at a file squeezes the terminal being
+// worked in, every file looked at leaves a tab behind, or going back hands
+// the panel's keys to the shell beside it.
+func TestThePanelPreviewsInATabAndReusesIt(t *testing.T) {
 	project := gitProject(t)
 	runtimeDir, err := os.MkdirTemp("", "tf")
 	if err != nil {
@@ -305,20 +307,21 @@ func TestThePanelPreviewsBesideTheMainPaneAndReusesIt(t *testing.T) {
 
 	// The tree is src/, brandnew.md, kept.txt: the last row.
 	a.send(t, "G ")
-	a.waitForScreen(t, "the preview of kept.txt", func(s string) bool {
-		return strings.Contains(s, "kept.txt "+project) || strings.Contains(s, "│ kept.txt")
+	// The tab bar is the first line: "tab 1  kept.txt  +".
+	tabs := func(s string) string { return strings.SplitN(s, "\n", 2)[0] }
+	a.waitForScreen(t, "the preview of kept.txt, in its own tab", func(s string) bool {
+		return strings.Contains(s, "1 one") && strings.Contains(tabs(s), "kept.txt") && !strings.Contains(s, "brandnew.md")
 	})
-	a.waitForScreen(t, "its first line", func(s string) bool { return strings.Contains(s, "1 one") })
-	panes := strings.Count(a.lines()[1], "┌")
 
+	// Back to the panel's tab, and the file above.
+	a.send(t, "\x021")
+	a.waitForScreen(t, "the panel again", func(s string) bool { return strings.Contains(s, "brandnew.md") })
 	a.send(t, "k ")
-	a.waitForScreen(t, "brandnew.md in the same pane", func(s string) bool {
+	a.waitForScreen(t, "brandnew.md in the same tab, renamed", func(s string) bool {
 		// Markdown, so rendered: "# new" reads as the heading NEW.
-		return strings.Contains(s, "NEW") && !strings.Contains(s, "1 one")
+		return strings.Contains(s, "NEW") && !strings.Contains(s, "1 one") &&
+			strings.Contains(tabs(s), "brandnew.md") && !strings.Contains(tabs(s), "kept.txt")
 	})
-	if got := strings.Count(a.lines()[1], "┌"); got != panes {
-		t.Errorf("%d panes after the second preview, %d after the first", got, panes)
-	}
 }
 
 // TestTheFilesPanelDocksOnTheLeftWhenSetTo: dock = "left" in [files]

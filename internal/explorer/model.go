@@ -53,14 +53,14 @@ type Opener interface {
 	Open(path string, line int) error
 }
 
-// Previewer shows a file read-only beside the main pane (tend's preview
-// pane). An opener that is not one leaves previews to the panel itself.
+// Previewer shows a file read-only in a tab of its own (tend's preview
+// tab). An opener that is not one leaves previews to the panel itself.
 type Previewer interface {
 	Preview(path string, line int, dir string) error
 }
 
-// preview shows a file in the preview pane, or in the panel when there is
-// no preview pane to be had.
+// preview shows a file in the preview tab, or in the panel when there is
+// no preview tab to be had.
 func (m *Model) preview(title, path string, line int) {
 	if pv, ok := m.opener.(Previewer); ok && m.opener != nil {
 		if err := pv.Preview(path, line, m.tree.Root); err == nil {

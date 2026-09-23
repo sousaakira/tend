@@ -309,8 +309,10 @@ func (m *Model) Mouse(ev Mouse) {
 			m.open(m.tree.Path(n), 0)
 			m.lastClick = time.Time{}
 		default:
-			// One click previews, as herdr-sidebar's does; the second
-			// opens it for editing.
+			// One click previews, as herdr-sidebar's does. The preview
+			// is a tab of its own and takes the screen, so a second click
+			// lands there rather than here: o in the preview, or enter
+			// on the panel, is how a file is opened for editing.
 			if _, ok := m.opener.(Previewer); ok {
 				m.preview(n.Rel, m.tree.Path(n), 0)
 			}
