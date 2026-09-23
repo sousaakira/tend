@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-locale="pt">
+<html lang="zh-CN" data-locale="zh">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tend — runtime de terminal para agentes de código</title>
-  <meta name="description" content="O tend mantém os terminais dos agentes rodando depois que você sai, e marca cada painel como working, blocked ou idle.">
+  <title>tend — 面向编程智能体的终端运行时</title>
+  <meta name="description" content="tend 在你离开后仍保持智能体终端运行，并为每个窗格标出 working、blocked 或 idle。">
   <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
   <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
   <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
@@ -51,29 +51,29 @@
   <header class="bar">
     <a class="mark" href="#top">tend</a>
     <nav>
-      <a href="#install">instalar</a>
-      <a href="#session">sessão</a>
-      <a href="#keys">teclas</a>
-      <a href="https://github.com/sousaakira/tend">código</a>
-      <span class="langs"><a href="./" data-lang="pt" aria-current="page">pt</a> · <a href="../" data-lang="en">en</a> · <a href="../es/" data-lang="es">es</a> · <a href="../ja/" data-lang="ja">ja</a> · <a href="../zh/" data-lang="zh">zh</a></span>
+      <a href="#install">安装</a>
+      <a href="#session">会话</a>
+      <a href="#keys">快捷键</a>
+      <a href="https://github.com/sousaakira/tend">源码</a>
+      <span class="langs"><a href="../pt/" data-lang="pt">pt</a> · <a href="../" data-lang="en">en</a> · <a href="../es/" data-lang="es">es</a> · <a href="../ja/" data-lang="ja">ja</a> · <a href="./" data-lang="zh" aria-current="page">zh</a></span>
     </nav>
   </header>
 
   <main id="top">
     <section class="lead">
       <h1>tend</h1>
-      <p class="deck">Um runtime de terminal para agentes de código. O servidor continua quando você sai. Cada painel fica marcado como working, blocked ou idle.</p>
+      <p class="deck">面向编程智能体的终端运行时。你离开后服务器仍在运行。每个窗格标为 working、blocked 或 idle。</p>
     </section>
 
     <section id="install"
-      data-copy="copiar"
-      data-copied="copiado"
-      data-detected-linux="detectado Linux"
-      data-detected-macos="detectado macOS"
-      data-detected-windows="detectado Windows"
-      data-download="Baixar">
-      <h2>Instalar <span class="os-detected" id="os-detected" hidden></span></h2>
-      <div class="os-tabs" role="tablist" aria-label="Sistema operacional">
+      data-copy="复制"
+      data-copied="已复制"
+      data-detected-linux="已检测 Linux"
+      data-detected-macos="已检测 macOS"
+      data-detected-windows="已检测 Windows"
+      data-download="下载">
+      <h2>安装 <span class="os-detected" id="os-detected" hidden></span></h2>
+      <div class="os-tabs" role="tablist" aria-label="操作系统">
         <button type="button" role="tab" id="tab-linux" data-os="linux" aria-selected="true" aria-controls="panel-unix">Linux</button>
         <button type="button" role="tab" id="tab-darwin" data-os="darwin" aria-selected="false" aria-controls="panel-unix">macOS</button>
         <button type="button" role="tab" id="tab-windows" data-os="windows" aria-selected="false" aria-controls="panel-windows">Windows</button>
@@ -81,25 +81,25 @@
       <div id="panel-unix" class="install-panel" role="tabpanel" data-panel="unix">
         <div class="cmd-wrap">
           <pre class="cmd" id="install-cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
-          <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="copiar" data-done="copiado">copiar</button>
+          <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="复制" data-done="已复制">复制</button>
         </div>
         <p class="install-dl">
-          <a id="bin-link" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-amd64">Baixar tend-linux-amd64</a>
+          <a id="bin-link" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-amd64">下载 tend-linux-amd64</a>
           <span class="sep">·</span>
           <a id="bin-alt" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-arm64">arm64</a>
           <span class="sep">·</span>
-          <a href="https://github.com/sousaakira/tend/releases/latest">todos os builds</a>
+          <a href="https://github.com/sousaakira/tend/releases/latest">全部构建</a>
         </p>
-        <p>Coloca o binário em <code>~/.local/bin</code> (ou <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>). Prefere um release para esta máquina; senão clona e compila com Go.</p>
-        <p class="note">A partir de um checkout: <code>make install</code>.</p>
+        <p>将二进制放到 <code>~/.local/bin</code>（或 <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>）。优先使用适合此机器的发布包；否则用 Go 克隆并编译。</p>
+        <p class="note">从源码目录：<code>make install</code>。</p>
       </div>
       <div id="panel-windows" class="install-panel" role="tabpanel" data-panel="windows" hidden>
-        <p>O tend é só Linux e macOS. Não há binário para Windows.</p>
-        <p>No Windows, rode o instalador Linux no WSL, ou clone e <code>make install</code> numa máquina Unix.</p>
+        <p>tend 仅支持 Linux 和 macOS。没有 Windows 二进制文件。</p>
+        <p>在 Windows 上，请在 WSL 中运行 Linux 安装命令，或在 Unix 机器上克隆后执行 <code>make install</code>。</p>
       </div>
     </section>
 
-    <section id="session" class="stage" aria-label="Uma sessão do tend">
+    <section id="session" class="stage" aria-label="一个 tend 会话">
       <div class="frame">
         <aside class="side">
           <p class="side-h">spaces</p>
@@ -132,51 +132,51 @@ stop them.</pre>
     </section>
 
     <section class="usage">
-      <p>Sem argumentos, o tend abre uma sessão e sobe um servidor se ainda não houver. <code>tend new -- claude</code> abre um painel. <code>tend ls</code> lista o que está rodando. <code>-s NAME</code> roda outra sessão ao lado da primeira.</p>
-      <p>Escrito em Go. Um binário. Sem cgo.</p>
+      <p>不带参数时，tend 打开会话，若没有服务器则启动一个。<code>tend new -- claude</code> 打开窗格。<code>tend ls</code> 列出正在运行的。<code>-s NAME</code> 在旁边再开一个会话。</p>
+      <p>用 Go 写成。单一二进制。无 cgo。</p>
     </section>
 
     <section class="facts">
-      <h2>O que fica quando você desconecta</h2>
+      <h2>断开后仍会留下的</h2>
       <dl>
         <div>
-          <dt>Os programas</dt>
-          <dd>Uma sessão é um servidor em segundo plano. <kbd>ctrl</kbd><kbd>b</kbd> e depois <kbd>d</kbd> deixa os agentes rodando. Abrir o tend de novo volta aos mesmos painéis.</dd>
+          <dt>程序</dt>
+          <dd>会话是后台服务器。<kbd>ctrl</kbd><kbd>b</kbd> 再按 <kbd>d</kbd> 后智能体继续运行。再次打开 tend 会回到同样的窗格。</dd>
         </div>
         <div>
-          <dt>O estado</dt>
-          <dd>Um painel está working, blocked ou idle. A marca é o que a tela mostra — um spinner, um pedido de permissão, um shell à espera — não um chute pelo nome do processo.</dd>
+          <dt>状态</dt>
+          <dd>窗格是 working、blocked 或 idle。标记来自屏幕上的内容 — 转圈、权限提示、等待中的 shell — 不是根据进程名猜测。</dd>
         </div>
         <div>
-          <dt>O layout</dt>
-          <dd>Um space guarda abas. Uma aba guarda painéis. Divida ao lado ou abaixo, amplie um painel, role o histórico, salte para o agente que parou.</dd>
+          <dt>布局</dt>
+          <dd>space 容纳标签。标签容纳窗格。左右或上下分割，放大一个窗格，滚动历史，跳到停下来的智能体。</dd>
         </div>
       </dl>
     </section>
 
     <section id="keys">
-      <h2>O prefixo é ctrl+b</h2>
-      <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas as teclas dentro da sessão.</p>
+      <h2>前缀是 ctrl+b</h2>
+      <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> 列出会话内的全部快捷键。</p>
       <table>
         <tbody>
-          <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>dividir ao lado, abaixo</td></tr>
-          <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>mover o foco</td></tr>
-          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>redimensionar</td></tr>
-          <tr><th><kbd>z</kbd></th><td>ampliar um painel na janela</td></tr>
-          <tr><th><kbd>[</kbd></th><td>voltar no histórico</td></tr>
-          <tr><th><kbd>x</kbd></th><td>fechar um painel</td></tr>
-          <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>abas: nova, seguinte, anterior, por número</td></tr>
-          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>spaces: novo, anterior, seguinte</td></tr>
-          <tr><th><kbd>a</kbd></th><td>mostrar todos os agentes, agrupados</td></tr>
-          <tr><th><kbd>g</kbd></th><td>escolher um e ir até ele</td></tr>
-          <tr><th><kbd>d</kbd></th><td>desconectar, deixando tudo rodando</td></tr>
+          <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>左右、上下分割</td></tr>
+          <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>移动焦点</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>调整大小</td></tr>
+          <tr><th><kbd>z</kbd></th><td>将窗格放大到窗口</td></tr>
+          <tr><th><kbd>[</kbd></th><td>回看历史</td></tr>
+          <tr><th><kbd>x</kbd></th><td>关闭窗格</td></tr>
+          <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>标签：新建、下一个、上一个、按数字</td></tr>
+          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>space：新建、上一个、下一个</td></tr>
+          <tr><th><kbd>a</kbd></th><td>显示全部智能体（分组）</td></tr>
+          <tr><th><kbd>g</kbd></th><td>选一个并跳转</td></tr>
+          <tr><th><kbd>d</kbd></th><td>断开，保持一切运行</td></tr>
         </tbody>
       </table>
     </section>
   </main>
 
   <footer>
-    <p>Apache-2.0. Implementação independente em Go; veja NOTICE no repositório.</p>
+    <p>Apache-2.0。独立的 Go 实现；详见仓库中的 NOTICE。</p>
   </footer>
   <script src="../site.js" defer></script>
 </body>
