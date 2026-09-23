@@ -686,6 +686,7 @@ func (t *tui) switchMachine(id string, workspace, pane uint64) error {
 	t.offline = false
 	t.screens = make(map[uint64]*vt.Screen)
 	t.sizes = make(map[uint64]ui.Rect)
+	t.tabFocus = nil
 	t.workspace, t.tab, t.focus, t.zoom = workspace, 0, 0, false
 	t.dirty = true
 	t.mu.Unlock()

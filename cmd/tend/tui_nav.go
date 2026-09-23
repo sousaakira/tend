@@ -132,6 +132,7 @@ func (t *tui) switchWorkspace(forward bool) error {
 	t.workspace = t.snap.Workspaces[idx].ID
 	// The tab and pane belong to the workspace being left, so they are
 	// dropped and resolved afresh against the one being entered.
+	t.rememberFocusLocked()
 	t.tab, t.focus, t.zoom = 0, 0, false
 	t.mu.Unlock()
 
@@ -209,6 +210,7 @@ func (t *tui) newWorkspaceIn(group string) error {
 		return err
 	}
 	t.mu.Lock()
+	t.rememberFocusLocked()
 	t.workspace, t.tab, t.focus, t.zoom = ws, 0, 0, false
 	t.mu.Unlock()
 	return t.refresh()
@@ -248,6 +250,7 @@ func (t *tui) selectTab(n int) error {
 		t.mu.Unlock()
 		return nil
 	}
+	t.rememberFocusLocked()
 	t.tab = tabs[n-1].ID
 	t.focus, t.zoom = 0, false
 	t.mu.Unlock()
@@ -318,6 +321,7 @@ func (t *tui) jumpToPane(pane uint64) error {
 		return nil
 	}
 	same := t.workspace == ws && t.tab == tab
+	t.rememberFocusLocked()
 	t.workspace, t.tab, t.focus = ws, tab, pane
 	if !same {
 		t.zoom = false
@@ -347,6 +351,7 @@ func (t *tui) showTab(tab uint64) error {
 		t.mu.Unlock()
 		return nil
 	}
+	t.rememberFocusLocked()
 	t.workspace, t.tab, t.focus, t.zoom = ws, tab, 0, false
 	t.mu.Unlock()
 	return t.refresh()
@@ -359,6 +364,7 @@ func (t *tui) showWorkspace(ws uint64) error {
 		t.mu.Unlock()
 		return nil
 	}
+	t.rememberFocusLocked()
 	t.workspace, t.tab, t.focus, t.zoom = ws, 0, 0, false
 	t.mu.Unlock()
 	return t.refresh()
@@ -379,6 +385,7 @@ func (t *tui) newTabHere() error {
 		return err
 	}
 	t.mu.Lock()
+	t.rememberFocusLocked()
 	t.tab, t.focus, t.zoom = tab, 0, false
 	t.mu.Unlock()
 	return t.refresh()

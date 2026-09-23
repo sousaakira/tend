@@ -171,6 +171,9 @@ type tui struct {
 	focus                    uint64
 	tab                      uint64
 	workspace                uint64
+	// tabFocus is the pane each tab was left on, so going back to a tab
+	// goes back to that pane. Client state: what one person was looking at.
+	tabFocus map[uint64]uint64
 
 	sidebar    bool
 	grouped    bool
@@ -458,6 +461,7 @@ func (t *tui) reconnect() error {
 			// side may be different ones with the same numbers.
 			t.screens = make(map[uint64]*vt.Screen)
 			t.sizes = make(map[uint64]ui.Rect)
+			t.tabFocus = nil
 			t.tab, t.focus, t.zoom = 0, 0, false
 			t.mu.Unlock()
 
@@ -559,7 +563,15 @@ func (t *tui) refresh() error {
 	}
 	if t.popupRect == nil && !paneInLayout(layout.Panes, t.focus) &&
 		!t.returnFromTransientLocked(func(id uint64) bool { return paneInLayout(layout.Panes, id) }) {
-		t.focus = firstPane(layout.Panes)
+		// A tab gone back to has the pane it was left on, as herdr's
+		// keeps its focus in each tab's layout. Without it, the files
+		// panel's preview tab sent the user back to the first pane of
+		// the tab they came from, and the panel's keys to a shell.
+		if last := t.tabFocus[tab]; last != 0 && paneInLayout(layout.Panes, last) {
+			t.focus = last
+		} else {
+			t.focus = firstPane(layout.Panes)
+		}
 		// The pane being zoomed into is gone, so the zoom goes with it.
 		t.zoom = false
 	}
@@ -771,6 +783,18 @@ func (t *tui) Event(ev proto.Event) {
 		t.askResync()
 	}
 	t.markDirty()
+}
+
+// rememberFocusLocked keeps the focused pane of the tab shown, for when it is
+// shown again. Called with t.mu held, before the view moves to another tab.
+func (t *tui) rememberFocusLocked() {
+	if t.tab == 0 || t.focus == 0 {
+		return
+	}
+	if t.tabFocus == nil {
+		t.tabFocus = make(map[uint64]uint64)
+	}
+	t.tabFocus[t.tab] = t.focus
 }
 
 // requestRepaint asks the drawing goroutine to throw away what it thinks is on
@@ -1733,6 +1757,7 @@ func (t *tui) switchTab(forward bool, current uint64) {
 	} else {
 		idx = (idx - 1 + len(tabs)) % len(tabs)
 	}
+	t.rememberFocusLocked()
 	t.tab = tabs[idx].ID
 	t.focus, t.zoom = 0, false
 }
