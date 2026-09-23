@@ -17,12 +17,56 @@
   if (location.protocol === 'file:') return;
   var KEY = 'tend-lang';
   var ok = {en:1, pt:1, es:1, ja:1, zh:1};
+
+  function siteRoot() {
+    var p = location.pathname.replace(/index\.html$/, '');
+    p = p.replace(/\/(pt|es|ja|zh)\/?$/, '/');
+    if (p.slice(-1) !== '/') p += '/';
+    return p;
+  }
+
+  function save(lang) {
+    if (!ok[lang]) return;
+    try { localStorage.setItem(KEY, lang); } catch (e) {}
+    try {
+      document.cookie = KEY + '=' + lang + '; path=' + siteRoot() + '; max-age=31536000; SameSite=Lax';
+    } catch (e) {}
+  }
+
+  function read() {
+    try {
+      var v = localStorage.getItem(KEY);
+      if (v && ok[v]) return v;
+    } catch (e) {}
+    try {
+      var parts = document.cookie.split(';');
+      for (var i = 0; i < parts.length; i++) {
+        var s = parts[i].replace(/^\s+/, '').split('=');
+        if (s[0] === KEY && ok[s[1]]) return s[1];
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  document.addEventListener('click', function (ev) {
+    var el = ev.target;
+    while (el && el !== document) {
+      if (el.getAttribute && el.getAttribute('data-lang') && el.className !== undefined) {
+        var wrap = el.parentNode;
+        if (wrap && wrap.className && (' ' + wrap.className + ' ').indexOf(' langs ') !== -1) {
+          save(el.getAttribute('data-lang'));
+          return;
+        }
+      }
+      el = el.parentNode;
+    }
+  }, true);
+
   var path = location.pathname;
   var cur = 'en';
   var m = path.match(/\/(pt|es|ja|zh)(?:\/index\.html|\/)?$/);
   if (m) cur = m[1];
-  var stored = null;
-  try { stored = localStorage.getItem(KEY); } catch (e) {}
+  var stored = read();
   function fromBrowser() {
     var list = navigator.languages || [navigator.language || navigator.userLanguage || ''];
     for (var i = 0; i < list.length; i++) {
@@ -34,16 +78,9 @@
     }
     return 'en';
   }
-  var want = (stored && ok[stored]) ? stored : fromBrowser();
+  var want = stored || fromBrowser();
   if (want !== cur && (stored || cur === 'en')) {
-    var root = path.replace(/index\.html$/, '');
-    root = root.replace(/\/(pt|es|ja|zh)\/?$/, '/');
-    if (root.slice(-1) !== '/') root += '/';
-    location.replace(want === 'en' ? root : root + want + '/');
-    return;
-  }
-  if (!stored) {
-    try { localStorage.setItem(KEY, cur); } catch (e) {}
+    location.replace(want === 'en' ? siteRoot() : siteRoot() + want + '/');
   }
 })();</script>
 </head>
@@ -55,7 +92,7 @@
       <a href="#session">会话</a>
       <a href="#keys">快捷键</a>
       <a href="https://github.com/sousaakira/tend">源码</a>
-      <span class="langs"><a href="../pt/" data-lang="pt">pt</a> · <a href="../" data-lang="en">en</a> · <a href="../es/" data-lang="es">es</a> · <a href="../ja/" data-lang="ja">ja</a> · <a href="./" data-lang="zh" aria-current="page">zh</a></span>
+      <span class="langs"><a href="../pt/" data-lang="pt" onclick="try{localStorage.setItem('tend-lang','pt')}catch(e){}">pt</a> · <a href="../" data-lang="en" onclick="try{localStorage.setItem('tend-lang','en')}catch(e){}">en</a> · <a href="../es/" data-lang="es" onclick="try{localStorage.setItem('tend-lang','es')}catch(e){}">es</a> · <a href="../ja/" data-lang="ja" onclick="try{localStorage.setItem('tend-lang','ja')}catch(e){}">ja</a> · <a href="./" data-lang="zh" aria-current="page" onclick="try{localStorage.setItem('tend-lang','zh')}catch(e){}">zh</a></span>
     </nav>
   </header>
 
