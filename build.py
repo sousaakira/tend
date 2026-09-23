@@ -303,19 +303,64 @@ LANGS = {
 
 
 # Runs in <head> so a first visit is redirected before the English page paints.
-# A stored choice wins over the browser; a shared /pt/ link is left alone until
-# the visitor picks a language themselves.
+# The browser language is used only until the visitor picks one. That pick is
+# written on the click itself (not in the deferred site.js), so a later load
+# cannot bounce them back to the detected locale.
 LANG_JS = """
 (function(){
   if (location.protocol === 'file:') return;
   var KEY = 'tend-lang';
   var ok = {en:1, pt:1, es:1, ja:1, zh:1};
+
+  function siteRoot() {
+    var p = location.pathname.replace(/index\\.html$/, '');
+    p = p.replace(/\\/(pt|es|ja|zh)\\/?$/, '/');
+    if (p.slice(-1) !== '/') p += '/';
+    return p;
+  }
+
+  function save(lang) {
+    if (!ok[lang]) return;
+    try { localStorage.setItem(KEY, lang); } catch (e) {}
+    try {
+      document.cookie = KEY + '=' + lang + '; path=' + siteRoot() + '; max-age=31536000; SameSite=Lax';
+    } catch (e) {}
+  }
+
+  function read() {
+    try {
+      var v = localStorage.getItem(KEY);
+      if (v && ok[v]) return v;
+    } catch (e) {}
+    try {
+      var parts = document.cookie.split(';');
+      for (var i = 0; i < parts.length; i++) {
+        var s = parts[i].replace(/^\\s+/, '').split('=');
+        if (s[0] === KEY && ok[s[1]]) return s[1];
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  document.addEventListener('click', function (ev) {
+    var el = ev.target;
+    while (el && el !== document) {
+      if (el.getAttribute && el.getAttribute('data-lang') && el.className !== undefined) {
+        var wrap = el.parentNode;
+        if (wrap && wrap.className && (' ' + wrap.className + ' ').indexOf(' langs ') !== -1) {
+          save(el.getAttribute('data-lang'));
+          return;
+        }
+      }
+      el = el.parentNode;
+    }
+  }, true);
+
   var path = location.pathname;
   var cur = 'en';
   var m = path.match(/\\/(pt|es|ja|zh)(?:\\/index\\.html|\\/)?$/);
   if (m) cur = m[1];
-  var stored = null;
-  try { stored = localStorage.getItem(KEY); } catch (e) {}
+  var stored = read();
   function fromBrowser() {
     var list = navigator.languages || [navigator.language || navigator.userLanguage || ''];
     for (var i = 0; i < list.length; i++) {
@@ -327,16 +372,9 @@ LANG_JS = """
     }
     return 'en';
   }
-  var want = (stored && ok[stored]) ? stored : fromBrowser();
+  var want = stored || fromBrowser();
   if (want !== cur && (stored || cur === 'en')) {
-    var root = path.replace(/index\\.html$/, '');
-    root = root.replace(/\\/(pt|es|ja|zh)\\/?$/, '/');
-    if (root.slice(-1) !== '/') root += '/';
-    location.replace(want === 'en' ? root : root + want + '/');
-    return;
-  }
-  if (!stored) {
-    try { localStorage.setItem(KEY, cur); } catch (e) {}
+    location.replace(want === 'en' ? siteRoot() : siteRoot() + want + '/');
   }
 })();
 """.strip()
@@ -352,7 +390,11 @@ def page(code: str, t: dict) -> str:
 
     def lang_link(key: str, label: str) -> str:
         current = ' aria-current="page"' if key == code else ""
-        return f'<a href="{h[key]}" data-lang="{key}"{current}>{label}</a>'
+        # Inline save so a language click is remembered even if site.js never runs.
+        return (
+            f'<a href="{h[key]}" data-lang="{key}"{current} '
+            f"onclick=\"try{{localStorage.setItem('tend-lang','{key}')}}catch(e){{}}\">{label}</a>"
+        )
 
     langs = " · ".join(
         [

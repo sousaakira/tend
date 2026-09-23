@@ -1,23 +1,8 @@
 (function () {
   var RELEASE = "https://github.com/sousaakira/tend/releases/latest/download/";
-  var LANG_KEY = "tend-lang";
 
-  rememberLanguageClicks();
   bindCopy();
   bindInstall();
-
-  function rememberLanguageClicks() {
-    var links = document.querySelectorAll(".langs a[data-lang]");
-    for (var i = 0; i < links.length; i++) {
-      links[i].addEventListener("click", function () {
-        var lang = this.getAttribute("data-lang");
-        if (!lang) return;
-        try {
-          localStorage.setItem(LANG_KEY, lang);
-        } catch (e) {}
-      });
-    }
-  }
 
   function bindCopy() {
     var buttons = document.querySelectorAll(".copy[data-copy]");
