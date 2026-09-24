@@ -62,6 +62,11 @@ const (
 	// the server's machine — where panes, and so agents, run — with how to
 	// install the ones that are not there (internal/agents).
 	MethodAgentsCatalog = "agents.catalog"
+	// MethodAgentSessions lists the conversations agents keep on the
+	// server's machine, and MethodAgentSessionsDelete deletes some
+	// (internal/agentsessions): tend's own sessions list.
+	MethodAgentSessions       = "agent_sessions.list"
+	MethodAgentSessionsDelete = "agent_sessions.delete"
 	// The context buffer (internal/capture): what tools captured — a page's
 	// URL, an element picked in it, text, a file — kept by the server, which
 	// is between every tool and every agent, until it is sent to one.
@@ -170,6 +175,8 @@ var KnownMethods = []string{
 	MethodReleaseNotes,
 	MethodReleaseNotesDismiss,
 	MethodAgentsCatalog,
+	MethodAgentSessions,
+	MethodAgentSessionsDelete,
 	MethodContextAdd,
 	MethodContextList,
 	MethodContextRemove,
@@ -249,6 +256,13 @@ const (
 	// FeatureUpdate: the server checks for releases, says so with
 	// EventUpdateReady, and the snapshot carries what it found.
 	FeatureUpdate = "update"
+	// FeatureContextArrived: browser.context takes several items and a
+	// message at once, and the server says they came with
+	// EventContextArrived, which opens the client's context panel.
+	FeatureContextArrived = "context-arrived"
+	// FeatureFollowCwd: a pane spec's DirOf is honoured, and a split with
+	// no directory starts where the pane split is working.
+	FeatureFollowCwd = "follow-cwd"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
@@ -257,7 +271,7 @@ var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
 	FeatureFocusRequest, FeatureAgentView, FeatureServerShell, FeaturePopup, FeatureUpdate,
-	FeatureDockUnless, FeatureContext,
+	FeatureDockUnless, FeatureContext, FeatureContextArrived, FeatureFollowCwd,
 }
 
 // --- session ---------------------------------------------------------------
@@ -514,6 +528,44 @@ type AgentStatus struct {
 	Missing        string `json:"missing,omitempty"`
 }
 
+// AgentSessionInfo is one conversation as agent_sessions.list finds it.
+type AgentSessionInfo struct {
+	Agent string `json:"agent"`
+	ID    string `json:"id"`
+	Title string `json:"title,omitempty"`
+	Dir   string `json:"dir,omitempty"`
+	// Modified is when it was last written, in Unix seconds.
+	Modified int64 `json:"modified"`
+	Size     int64 `json:"size"`
+	Prompts  int   `json:"prompts"`
+	// Pane is the pane it is open in now, zero when none is: a
+	// conversation open in a pane is not deleted.
+	Pane uint64 `json:"pane,omitempty"`
+	// Unreachable says why the directory it was held in cannot be started
+	// in — gone, or not open to the user the server runs as — and is empty
+	// when it can. An agent finds a conversation by that directory, so one
+	// that cannot be entered cannot be resumed from here.
+	Unreachable string `json:"unreachable,omitempty"`
+}
+
+// AgentSessionsResult is agent_sessions.list's answer, the last written
+// first.
+type AgentSessionsResult struct {
+	Sessions []AgentSessionInfo `json:"sessions"`
+}
+
+// AgentSessionsDeleteParams names the conversations to delete.
+type AgentSessionsDeleteParams struct {
+	IDs []string `json:"ids"`
+}
+
+// AgentSessionsDeleteResult says what was deleted, and why the rest were
+// not.
+type AgentSessionsDeleteResult struct {
+	Deleted []string          `json:"deleted"`
+	Kept    map[string]string `json:"kept,omitempty"`
+}
+
 // AgentsCatalogResult is agents.catalog's answer.
 type AgentsCatalogResult struct {
 	Agents []AgentStatus `json:"agents"`
@@ -539,11 +591,16 @@ type StatusSegment struct {
 type PaneSpec struct {
 	Command []string `json:"command"`
 	Dir     string   `json:"dir,omitempty"`
-	Env     []string `json:"env,omitempty"`
-	Agent   string   `json:"agent,omitempty"`
-	Title   string   `json:"title,omitempty"`
-	Cols    int      `json:"cols,omitempty"`
-	Rows    int      `json:"rows,omitempty"`
+	// DirOf, with no Dir, starts the pane where that pane is working now
+	// (herdr's [terminal] new_cwd = "follow"): a new tab opened from an
+	// agent's opens in its project. A server without FeatureFollowCwd
+	// ignores it and starts the pane in its own directory.
+	DirOf uint64   `json:"dir_of,omitempty"`
+	Env   []string `json:"env,omitempty"`
+	Agent string   `json:"agent,omitempty"`
+	Title string   `json:"title,omitempty"`
+	Cols  int      `json:"cols,omitempty"`
+	Rows  int      `json:"rows,omitempty"`
 }
 
 // WorkspaceNewParams creates a workspace.
@@ -879,6 +936,10 @@ const (
 	// EventContextChanged says the context buffer changed. It carries
 	// nothing: a client that shows the buffer reads it again.
 	EventContextChanged = "context-changed"
+	// EventContextArrived says a tool handed the context something to look
+	// at: Title is which ("browser"), Body how many items. A client shows
+	// the context panel for it.
+	EventContextArrived = "context-arrived"
 )
 
 // Event is something that happened, sent unsolicited.

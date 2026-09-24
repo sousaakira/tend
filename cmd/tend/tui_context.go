@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sousaakira/tend/internal/capture"
+	"github.com/sousaakira/tend/internal/notify"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
 )
@@ -226,6 +227,8 @@ func (t *tui) contextInput(data []byte) error {
 			err = t.contextButton(ui.ContextCopy)
 		case "s", "\r", "\n":
 			err = t.contextButton(ui.ContextSend)
+		case "S":
+			err = t.contextButton(ui.ContextSendAll)
 		case "x", "d":
 			err = t.contextButton(ui.ContextRemove)
 		case "X":
@@ -278,12 +281,18 @@ func (t *tui) contextButton(b ui.ContextButton) error {
 	case ui.ContextCopy:
 		t.copyToClipboard(capture.Format([]proto.ContextItem{item}), "copied the context")
 		return nil
-	case ui.ContextSend:
+	case ui.ContextSend, ui.ContextSendAll:
 		if target == 0 {
 			t.setContextMessage("no pane to send to in this tab")
 			return nil
 		}
-		if err := t.client.ContextSend(target, []uint64{item.ID}); err != nil {
+		ids := []uint64{item.ID}
+		if b == ui.ContextSendAll {
+			// Oldest first, as they were captured: the browser's message
+			// leads the elements it came with.
+			ids = nil
+		}
+		if err := t.client.ContextSend(target, ids); err != nil {
 			t.setContextMessage("could not send it: " + err.Error())
 			return nil
 		}
@@ -323,4 +332,29 @@ func (t *tui) setContextMessage(msg string) {
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
+}
+
+// contextArrived is EventContextArrived: a tool — the browser — handed the
+// context something. The panel is where it is looked over and sent on, so
+// it opens, unless something else is up and has the keys, when a notice
+// says where it is instead.
+func (t *tui) contextArrived(ev proto.Event) {
+	what := "from the " + ev.Title
+	if n := ev.Body; n != "" {
+		what = n + " " + what
+	}
+	t.mu.Lock()
+	busy := t.notes != nil || t.agentMgr != nil || t.sessions != nil || t.menu != nil || t.settings != nil ||
+		t.prompt != promptNone || t.navigator != nil || t.onboarding
+	open := t.contextView != nil
+	t.mu.Unlock()
+	switch {
+	case open:
+		t.contextChanged()
+	case busy:
+		t.raise(ui.ToastCustom, "context", what+" — prefix+C to look it over", 0, notify.SoundNone)
+	default:
+		_ = t.openContext()
+		t.setMessage(what+" in the context — s sends one, S all of it", false)
+	}
 }

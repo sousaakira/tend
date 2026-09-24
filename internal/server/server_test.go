@@ -734,3 +734,62 @@ func TestKeepsAnExplicitAgentWhileItWorks(t *testing.T) {
 		t.Errorf("agent = %q, want it kept as claude", st.Agent)
 	}
 }
+
+// TestANewTabOpensWhereThePaneItCameFromIsWorking: a tab opened from a
+// pane, and a split of one, start in the directory that pane's program is
+// in now — here one it moved to after it started — as herdr's follow_cwd
+// does. If it regresses, a new tab next to an agent working in a project
+// opens in whatever directory tend was first started from.
+func TestANewTabOpensWhereThePaneItCameFromIsWorking(t *testing.T) {
+	s := newServer(t)
+	project, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws, err := s.NewWorkspace("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, pane, err := s.NewTab(ws, "shell", shell("cd '"+project+"' && exec sleep 60"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the pane in the project", func() bool {
+		s.mu.Lock()
+		rt := s.runtimes[pane]
+		s.mu.Unlock()
+		return rt != nil && rt.pty.Cwd() == project
+	})
+
+	cwdOf := func(id session.PaneID) func() bool {
+		return func() bool {
+			c, err := s.PaneContext(id)
+			return err == nil && c.Cwd == project
+		}
+	}
+	_, opened, err := s.NewTab(ws, "next", PaneSpec{Command: []string{"/bin/sh", "-c", "exec sleep 60"}, DirOf: pane})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the new tab in the project", cwdOf(opened))
+
+	split, err := s.SplitPane(pane, session.Columns, shell("exec sleep 60"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the split in the project", cwdOf(split))
+
+	// A directory given is kept: following is for when none is.
+	elsewhere, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, named, err := s.NewTab(ws, "named", PaneSpec{Command: []string{"/bin/sh", "-c", "exec sleep 60"}, Dir: elsewhere, DirOf: pane})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the given directory", func() bool {
+		c, err := s.PaneContext(named)
+		return err == nil && c.Cwd == elsewhere
+	})
+}

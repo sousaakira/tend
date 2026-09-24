@@ -15,10 +15,11 @@ import (
 // toolLabels are the names a tool goes by, which its hover and its focus
 // show on the status line in place of a tooltip, which a terminal has not.
 var toolLabels = map[string]string{
-	ui.ToolFiles:   "Files — the files panel (prefix+f)",
-	ui.ToolAgents:  "Agents — find and install agents (prefix+A)",
-	ui.ToolBrowser: "Browser — open a page (prefix+B)",
-	ui.ToolContext: "Context — captured, to send to an agent (prefix+C)",
+	ui.ToolFiles:    "Files — the files panel (prefix+f)",
+	ui.ToolAgents:   "Agents — find and install agents (prefix+A)",
+	ui.ToolSessions: "Sessions — find, resume and delete agent sessions (prefix+S)",
+	ui.ToolBrowser:  "Browser — open a page (prefix+B)",
+	ui.ToolContext:  "Context — captured, to send to an agent (prefix+C)",
 }
 
 // toolReady is whether a tool does anything yet.
@@ -69,6 +70,8 @@ func (t *tui) runTool(id string) error {
 		return t.toggleFiles()
 	case ui.ToolAgents:
 		return t.openAgentManager()
+	case ui.ToolSessions:
+		return t.openSessions()
 	case ui.ToolContext:
 		return t.openContext()
 	case ui.ToolBrowser:

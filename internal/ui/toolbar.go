@@ -16,10 +16,11 @@ const ToolbarRows = 2
 
 // The tools, by the name a configuration and a key binding use.
 const (
-	ToolFiles   = "files"
-	ToolAgents  = "agents"
-	ToolBrowser = "browser"
-	ToolContext = "context"
+	ToolFiles    = "files"
+	ToolAgents   = "agents"
+	ToolSessions = "sessions"
+	ToolBrowser  = "browser"
+	ToolContext  = "context"
 )
 
 // ToolbarItem is one tool as a frame shows it.
@@ -37,10 +38,11 @@ type ToolbarItem struct {
 // robot, globe and clipboard with a Nerd Font, their emoji otherwise, and a
 // letter with neither — a glyph the font lacks is a box.
 var toolIcons = map[string][3]string{
-	ToolFiles:   {"\uf07b", "📁", "F"},
-	ToolAgents:  {"\uee0d", "🤖", "A"},
-	ToolBrowser: {"\uf0ac", "🌐", "B"},
-	ToolContext: {"\uf0ea", "📋", "C"},
+	ToolFiles:    {"\uf07b", "📁", "F"},
+	ToolAgents:   {"\uee0d", "🤖", "A"},
+	ToolSessions: {"\uf1da", "🕘", "S"},
+	ToolBrowser:  {"\uf0ac", "🌐", "B"},
+	ToolContext:  {"\uf0ea", "📋", "C"},
 }
 
 // ToolIcon is a tool's glyph in an icon theme ("nerd", "emoji", else none).

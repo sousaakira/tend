@@ -66,6 +66,8 @@ var Methods = []string{
 	proto.MethodReleaseNotes,
 	proto.MethodReleaseNotesDismiss,
 	proto.MethodAgentsCatalog,
+	proto.MethodAgentSessions,
+	proto.MethodAgentSessionsDelete,
 	proto.MethodContextAdd,
 	proto.MethodContextList,
 	proto.MethodContextRemove,
@@ -286,6 +288,10 @@ func (c *clientConn) forward(ev Event) error {
 		out.Body = ev.Body
 	case EventContextChanged:
 		out.Kind = proto.EventContextChanged
+	case EventContextArrived:
+		out.Kind = proto.EventContextArrived
+		out.Title = ev.Title
+		out.Body = ev.Body
 	default:
 		// An event kind this build does not map is dropped rather than sent
 		// half-formed, so a client never sees a message it cannot interpret.
@@ -566,6 +572,16 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		// it looks through the PATH and asks each agent its version.
 		return c.srv.AgentsCatalog(), nil
 
+	case proto.MethodAgentSessions:
+		return c.srv.AgentSessions()
+
+	case proto.MethodAgentSessionsDelete:
+		var p proto.AgentSessionsDeleteParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.DeleteAgentSessions(p.IDs), nil
+
 	case proto.MethodContextAdd:
 		var p proto.ContextItem
 		if err := decodeParams(req.Params, &p); err != nil {
@@ -788,6 +804,7 @@ func paneSpec(p proto.PaneSpec) PaneSpec {
 	return PaneSpec{
 		Command: p.Command,
 		Dir:     p.Dir,
+		DirOf:   session.PaneID(p.DirOf),
 		Env:     p.Env,
 		Title:   p.Title,
 		Agent:   p.Agent,

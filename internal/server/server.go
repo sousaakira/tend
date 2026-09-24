@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/sousaakira/tend/internal/agent"
+	"github.com/sousaakira/tend/internal/agentsessions"
 	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/pty"
@@ -248,8 +249,11 @@ type Config struct {
 type PaneSpec struct {
 	Command []string
 	Dir     string
-	Env     []string
-	Title   string
+	// DirOf, with no Dir, is the pane whose working directory the new one
+	// starts in; see followDir.
+	DirOf session.PaneID
+	Env   []string
+	Title string
 	// Named marks a title the user gave rather than one a program reported.
 	Named bool
 
@@ -308,6 +312,11 @@ type Server struct {
 	cfg     Config
 	catalog *detect.Catalog
 	events  *eventHub
+
+	// sessionsOnce makes claudeSessions, the conversations Claude Code
+	// keeps on this machine, read when the sessions list first asks.
+	sessionsOnce   sync.Once
+	claudeSessions *agentsessions.Claude
 
 	mu       sync.Mutex
 	session  *session.Session
@@ -559,6 +568,7 @@ func (s *Server) NewWorkspaceIn(name, dir string) (session.WorkspaceID, error) {
 // means no caller can ever observe a pane record without the runtime that
 // backs it.
 func (s *Server) NewTab(ws session.WorkspaceID, name string, spec PaneSpec) (session.TabID, session.PaneID, error) {
+	s.followDir(&spec, spec.DirOf)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -579,8 +589,32 @@ func (s *Server) NewTab(ws session.WorkspaceID, name string, spec PaneSpec) (ses
 	return tab.ID, pane.ID, nil
 }
 
+// followDir fills in a spec with no directory from the pane it follows:
+// herdr's follow policy, the foreground program's directory, else the
+// shell's, else nothing and the pane starts in the server's. It takes the
+// lock only to find the pane: reading /proc is I/O, and is done after.
+func (s *Server) followDir(spec *PaneSpec, from session.PaneID) {
+	if spec.Dir != "" || from == 0 {
+		return
+	}
+	s.mu.Lock()
+	rt := s.runtimes[from]
+	s.mu.Unlock()
+	if rt != nil {
+		spec.Dir = rt.pty.FollowCwd()
+	}
+}
+
 // SplitPane divides a pane and starts a process in the new half.
 func (s *Server) SplitPane(target session.PaneID, dir session.Direction, spec PaneSpec) (session.PaneID, error) {
+	// herdr's split starts where the pane split is working, as its
+	// launch_cwd_for_pane does; before this it started in the server's own
+	// directory, wherever `tend` was first run.
+	from := spec.DirOf
+	if from == 0 {
+		from = target
+	}
+	s.followDir(&spec, from)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -727,6 +761,10 @@ func (s *Server) workspaceOfTabLocked(id session.TabID) session.WorkspaceID {
 }
 
 // features is what this server says it provides beyond its methods.
+// Features is what features() says in the handshake, for the automation
+// socket's browser.attach to say too.
+func (s *Server) Features() []string { return s.features() }
+
 func (s *Server) features() []string {
 	if s.cfg.OmitFeatures {
 		return nil

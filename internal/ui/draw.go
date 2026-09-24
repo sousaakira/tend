@@ -420,6 +420,8 @@ type Frame struct {
 	ReleaseNotes *ReleaseNotesView
 	// AgentManager is the agent manager, when it is up (agentmanager.go).
 	AgentManager *AgentManagerView
+	// Sessions is the sessions list, when it is up (sessions.go).
+	Sessions *SessionsView
 	// Context is the context panel, when it is up (contextpanel.go).
 	Context *ContextView
 	// UpdateReady puts herdr's "update ready" at the right of the status
@@ -615,6 +617,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.AgentManager != nil {
 		drawAgentManager(dst, f.AgentManager, theme)
+	}
+	if f.Sessions != nil {
+		drawSessions(dst, f.Sessions, theme)
 	}
 	if f.Context != nil {
 		drawContextPanel(dst, f.Context, theme)

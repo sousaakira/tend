@@ -4,8 +4,9 @@
 // it and asks for a note on it; picking goes on until Esc or Done, so several
 // can be taken in a row. Each element taken is numbered on the page. A
 // floating chat button holds them all with their notes: each can be edited,
-// sent to the agent on its own or removed, and all of them copied or sent at
-// once. Sent means typed into the agent's pane in tend, not submitted.
+// sent to tend on its own or removed, and all of them copied or sent at once.
+// Sent means put in tend's context, whose panel opens in tend for them to be
+// looked over and handed to an agent.
 //
 // Everything drawn lives in a shadow root, so the page's styles do not reach
 // it and its styles do not reach the page. What was taken is kept by the
@@ -101,7 +102,7 @@
     <div class="row" style="margin-top:0"><span class="title grow">tend · <span class="n">0</span> elements</span>
       <button data-act="pick">Pick more</button></div>
     <textarea class="message" placeholder="Message for the agent — goes first when you copy or send all…"></textarea>
-    <div class="row"><button data-act="copy">Copy all</button><button class="primary" data-act="sendall">Send all to agent</button>
+    <div class="row"><button data-act="copy">Copy all</button><button class="primary" data-act="sendall">Send all to tend</button>
       <span class="grow"></span><button class="danger" data-act="clear">Clear</button></div>
   </div>
   <div class="list"></div>
@@ -257,7 +258,7 @@
         <div class="text"></div>
         <textarea placeholder="Note for the agent…"></textarea>
         <div class="row"><span class="hint grow"></span>
-          <button data-act="remove" class="danger">Remove</button><button data-act="send" class="primary">Send</button></div>`;
+          <button data-act="remove" class="danger">Remove</button><button data-act="send" class="primary">Send to tend</button></div>`;
       row.querySelector(".num").textContent = String(i + 1);
       row.querySelector(".num").classList.toggle("sent", it.sent);
       row.querySelector(".sel").textContent = it.selector;
@@ -338,12 +339,12 @@
     say(`copied ${items.length} element${items.length === 1 ? "" : "s"} with their notes${message.trim() ? " and your message" : ""}`);
   }
 
-  // send hands items to the agent; all of them go with the message, one
-  // sent on its own goes without it.
+  // send puts items in tend's context; all of them go with the message, one
+  // sent on its own without it.
   function send(list, withMessage) {
     commit();
     if (!list.length) return say("nothing to send", true);
-    say("sending to the agent…");
+    say("sending to tend…");
     chrome.runtime
       .sendMessage({ type: "tend-send", items: list, message: withMessage ? message : "" })
       .catch(() => say("tend is not reachable", true));
@@ -496,7 +497,7 @@
         for (const it of items) if (msg.ids.includes(it.id)) it.sent = true;
         save();
         render();
-        say(`sent to the agent in tend — read it over there and press Enter`);
+        say(`in tend's context — look it over in tend and send it to the agent`);
       } else {
         say("tend: " + msg.error, true);
       }

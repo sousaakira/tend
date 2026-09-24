@@ -243,7 +243,7 @@ type Toolbar struct {
 }
 
 // ToolbarTools are the tools a toolbar can hold, in their default order.
-var ToolbarTools = []string{"files", "agents", "browser", "context"}
+var ToolbarTools = []string{"files", "agents", "sessions", "browser", "context"}
 
 // ToolbarItems is the tools the sidebar shows, none when it is off.
 func (c Config) ToolbarItems() []string {
@@ -770,7 +770,7 @@ grouped = false
 # agents, browser and context. items picks which, in order.
 # [ui.toolbar]
 # enabled = true
-# items = ["files", "agents", "browser", "context"]
+# items = ["files", "agents", "sessions", "browser", "context"]
 
 [ui.theme]
 # A named theme: catppuccin, catppuccin-latte, terminal, tokyo-night,
@@ -839,7 +839,8 @@ channel = "stable"
 version_check = true
 
 [sound]
-# Make a sound as well. With no file named, this is the terminal bell.
+# Make a sound as well. With no file named, this is the desktop's sound theme
+# (complete, message-new-instant), else the terminal bell; "bell" is the bell.
 enabled = false
 # done = "~/sounds/done.wav"
 # request = "~/sounds/request.wav"

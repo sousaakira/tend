@@ -499,6 +499,19 @@ func (c *Client) PaneGraphics(pane uint64) (proto.PaneGraphicsResult, error) {
 }
 
 // ReloadConfig makes the server re-read the settings file.
+// AgentSessions lists the conversations agents keep on the server's
+// machine, the last written first.
+func (c *Client) AgentSessions() (proto.AgentSessionsResult, error) {
+	var out proto.AgentSessionsResult
+	return out, c.Call(proto.MethodAgentSessions, nil, &out)
+}
+
+// DeleteAgentSessions deletes conversations; one open in a pane is kept.
+func (c *Client) DeleteAgentSessions(ids []string) (proto.AgentSessionsDeleteResult, error) {
+	var out proto.AgentSessionsDeleteResult
+	return out, c.Call(proto.MethodAgentSessionsDelete, proto.AgentSessionsDeleteParams{IDs: ids}, &out)
+}
+
 // AgentsCatalog lists the agent CLIs the server's machine has, and how to
 // install the ones it has not.
 func (c *Client) AgentsCatalog() (proto.AgentsCatalogResult, error) {

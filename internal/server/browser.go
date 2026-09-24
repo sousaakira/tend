@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -138,11 +139,46 @@ func webURL(u string) bool {
 // BrowserCapture takes what a browser picked into the context buffer, as
 // the browser's.
 func (s *Server) BrowserCapture(it proto.ContextItem) (proto.ContextItem, error) {
-	it.Source = "browser"
-	if it.Kind == "" {
-		it.Kind = "element"
+	kept, err := s.BrowserCaptureAll([]proto.ContextItem{it}, "")
+	if err != nil {
+		return proto.ContextItem{}, err
 	}
-	return s.AddContext(it)
+	return kept[0], nil
+}
+
+// BrowserCaptureAll takes what a browser picked into the context buffer —
+// several elements with their notes, and the message the user wrote for them
+// all, kept first as text — and tells the clients it has arrived, so the one
+// the user is at shows it: the context panel is where it is looked over and
+// sent on. An item unfit for the buffer stops the lot before any is kept.
+func (s *Server) BrowserCaptureAll(items []proto.ContextItem, message string) ([]proto.ContextItem, error) {
+	var all []proto.ContextItem
+	if message = strings.TrimSpace(message); message != "" {
+		all = append(all, proto.ContextItem{Kind: capture.KindText, Text: message})
+	}
+	all = append(all, items...)
+	if len(all) == 0 {
+		return nil, errors.New("browser: nothing to capture")
+	}
+	for i := range all {
+		all[i].Source = "browser"
+		if all[i].Kind == "" {
+			all[i].Kind = capture.KindElement
+		}
+		if err := capture.Check(all[i]); err != nil {
+			return nil, fmt.Errorf("item %d: %w", i+1, err)
+		}
+	}
+	kept := make([]proto.ContextItem, 0, len(all))
+	for _, it := range all {
+		k, err := s.AddContext(it)
+		if err != nil {
+			return kept, err
+		}
+		kept = append(kept, k)
+	}
+	s.publish(Event{Kind: EventContextArrived, Title: "browser", Body: strconv.Itoa(len(kept))})
+	return kept, nil
 }
 
 // BrowserSendToAgent captures items and types them, together and led by the

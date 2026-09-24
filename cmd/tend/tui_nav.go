@@ -380,9 +380,13 @@ func (t *tui) newTabHere() error {
 	}
 	t.mu.Lock()
 	name := t.nextName("tab", len(t.tabsLocked()))
+	// The tab opens where the pane being looked at is working — the
+	// agent's project, not wherever tend was first started — as herdr's
+	// does by default.
+	from := t.focus
 	t.mu.Unlock()
 
-	tab, _, err := t.client.NewTab(ws, name, proto.PaneSpec{Command: t.paneShell()})
+	tab, _, err := t.client.NewTab(ws, name, proto.PaneSpec{Command: t.paneShell(), DirOf: from})
 	if err != nil {
 		return err
 	}

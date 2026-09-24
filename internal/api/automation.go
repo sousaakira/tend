@@ -1023,7 +1023,12 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			return nil, err
 		}
 		pend.stream = func(conn net.Conn) error { return a.followBrowser(conn, p.Name) }
-		return map[string]any{"type": "browser_attached"}, nil
+		// What the server can do goes with it, as it does in a client's
+		// handshake: the bridge is started by the browser from whatever
+		// tend is installed, and a server not yet handed over to it would
+		// otherwise take the extension's items and quietly do the wrong
+		// thing with them.
+		return map[string]any{"type": "browser_attached", "features": a.srv.Features()}, nil
 
 	case MethodBrowserStatus:
 		return map[string]any{"type": "browser_status", "browsers": a.srv.Browsers()}, nil
@@ -1061,11 +1066,22 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		item := captureItem(p)
 		if req.Method == MethodBrowserContext {
-			kept, err := a.srv.BrowserCapture(item)
+			var items []proto.ContextItem
+			if len(p.Items) > 0 {
+				for _, it := range p.Items {
+					items = append(items, captureItem(it))
+				}
+			} else if p.Selector != "" || p.Tag != "" || p.Text != "" || p.URL != "" {
+				items = append(items, item)
+			}
+			kept, err := a.srv.BrowserCaptureAll(items, p.Message)
 			if err != nil {
 				return nil, fail("invalid_context", "%s", err.Error())
 			}
-			return map[string]any{"type": "context_item", "item": kept}, nil
+			if len(kept) == 1 {
+				return map[string]any{"type": "context_item", "item": kept[0], "items": kept}, nil
+			}
+			return map[string]any{"type": "context_items", "items": kept}, nil
 		}
 		var pane session.PaneID
 		if p.PaneID != "" {

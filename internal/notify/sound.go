@@ -1,7 +1,10 @@
 package notify
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -11,8 +14,12 @@ import (
 //
 // herdr bundles two mp3s and shells out to a player. tend does not carry audio
 // files — it has no bundled assets and would need a reason to start — so a
-// sound here is a file the user names, and the terminal's bell when they name
-// none. The bell is not much, and it is the one thing every terminal has.
+// sound here is a file the user names, else the desktop's own sound theme
+// (freedesktop's complete and message-new-instant, macOS's Glass and Ping),
+// else the terminal's bell. The theme came second when the bell turned out
+// to be silence: GNOME Terminal, the owner's, rings it as the desktop's
+// alert sound, which is off unless somebody turned it on, so a finished
+// agent made no sound at all. "bell" names the bell, for who wants it.
 
 // Sound names what happened, since the two deserve different sounds.
 type Sound uint8
@@ -33,6 +40,7 @@ var players = []struct {
 	args []string
 }{
 	{"paplay", nil},
+	{"pw-play", nil},
 	{"aplay", []string{"-q"}},
 	{"afplay", nil},
 	{"ffplay", []string{"-nodisp", "-autoexit", "-loglevel", "quiet"}},
@@ -70,6 +78,9 @@ func (p *Player) Play(sound Sound) {
 		path = p.Request
 	}
 	if path == "" {
+		path = themeSound(sound)
+	}
+	if path == "" || path == "bell" {
 		if p.Bell != nil {
 			p.Bell()
 		}
@@ -84,9 +95,10 @@ func (p *Player) Play(sound Sound) {
 			}
 		}
 	})
-	if p.tool == "" {
-		// Nothing to play it with. The bell is better than silence, and says
-		// the same thing.
+	if p.tool == "" || (filepath.Base(p.tool) == "aplay" && !strings.HasSuffix(path, ".wav")) {
+		// Nothing to play it with — aplay reads only wav, and the theme's
+		// are ogg. The bell is better than silence, and says the same
+		// thing.
 		if p.Bell != nil {
 			p.Bell()
 		}
@@ -102,4 +114,45 @@ func (p *Player) Play(sound Sound) {
 		defer timer.Stop()
 		_ = cmd.Wait()
 	}()
+}
+
+// themeNames are the desktop sound theme's names for each sound, the first
+// found played: freedesktop's (every Linux desktop's, in
+// /usr/share/sounds/freedesktop/stereo), then macOS's system sounds.
+var themeNames = map[Sound][]string{
+	SoundDone:    {"freedesktop/stereo/complete", "freedesktop/stereo/message", "/System/Library/Sounds/Glass"},
+	SoundRequest: {"freedesktop/stereo/message-new-instant", "freedesktop/stereo/dialog-question", "freedesktop/stereo/bell", "/System/Library/Sounds/Ping"},
+}
+
+// themeSound is the theme's file for a sound, or "" when there is none.
+func themeSound(sound Sound) string {
+	var dirs []string
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(home, ".local", "share", "sounds"))
+	}
+	data := os.Getenv("XDG_DATA_DIRS")
+	if data == "" {
+		data = "/usr/local/share:/usr/share"
+	}
+	for _, d := range filepath.SplitList(data) {
+		dirs = append(dirs, filepath.Join(d, "sounds"))
+	}
+	for _, name := range themeNames[sound] {
+		candidates := []string{}
+		if filepath.IsAbs(name) {
+			candidates = append(candidates, name+".aiff")
+		} else {
+			for _, d := range dirs {
+				for _, ext := range []string{".oga", ".ogg", ".wav"} {
+					candidates = append(candidates, filepath.Join(d, name+ext))
+				}
+			}
+		}
+		for _, c := range candidates {
+			if info, err := os.Stat(c); err == nil && !info.IsDir() {
+				return c
+			}
+		}
+	}
+	return ""
 }

@@ -260,7 +260,11 @@ type tui struct {
 	notes *ui.ReleaseNotesView
 	// agentMgr is the agent manager while it is up, and agentStatus the
 	// list it shows, in the same order (tui_agents.go).
-	agentMgr    *ui.AgentManagerView
+	agentMgr *ui.AgentManagerView
+	// sessions is the sessions list while it is up, and sessionList what
+	// the server last said, which its search filters.
+	sessions    *ui.SessionsView
+	sessionList []proto.AgentSessionInfo
 	agentStatus []proto.AgentStatus
 	// contextView is the context panel while it is up, and contextItems the
 	// items it lists, in its order (tui_context.go).
@@ -806,6 +810,8 @@ func (t *tui) Event(ev proto.Event) {
 		t.updateAnnounced(ev)
 	case proto.EventContextChanged:
 		t.contextChanged()
+	case proto.EventContextArrived:
+		t.contextArrived(ev)
 	case proto.EventNotify:
 		// Somebody asked for the user to be told: a script, a hook, a plugin.
 		// It goes out the same ways an agent's own state does.
@@ -1088,6 +1094,7 @@ func (t *tui) buildFrame() ui.Frame {
 
 		ReleaseNotes: t.notes,
 		AgentManager: t.agentMgr,
+		Sessions:     t.sessions,
 		Context:      t.contextView,
 		UpdateReady:  t.updateReadyLocked() != "",
 		Navigator:    t.navigatorFrameLocked(),
@@ -1281,6 +1288,9 @@ func (t *tui) handleInput(data []byte) error {
 	}
 	if t.agentManagerUp() {
 		return t.agentManagerInput(data)
+	}
+	if t.sessionsUp() {
+		return t.sessionsInput(data)
 	}
 	if t.contextUp() {
 		return t.contextInput(data)
@@ -1482,6 +1492,8 @@ func (t *tui) command(action ui.Action) error {
 
 	case ui.CommandAgentManager:
 		return t.openAgentManager()
+	case ui.CommandSessions:
+		return t.openSessions()
 
 	case ui.CommandContext:
 		return t.openContext()

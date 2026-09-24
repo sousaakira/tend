@@ -10,11 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/sousaakira/tend/internal/api"
 	"github.com/sousaakira/tend/internal/browserext"
+	"github.com/sousaakira/tend/internal/proto"
 )
 
 // The browser tend opens and the bridge its extension talks through
@@ -117,6 +119,12 @@ func readNative(r io.Reader) ([]byte, error) {
 	return raw, err
 }
 
+// staleServerForBrowser is what the extension shows when the session's
+// server is older than the tend that wrote it.
+func staleServerForBrowser(session string) string {
+	return "tend's server is older than this browser's extension — run `" + handoffCommand(session) + "`, then send again"
+}
+
 // runBrowserBridge is `tend browser bridge`, the native messaging host.
 func runBrowserBridge() error {
 	return bridge(os.Stdin, os.Stdout, os.Getenv(browserSessionEnv), os.Getenv(browserRemoteEnv))
@@ -150,6 +158,13 @@ func bridge(in io.Reader, out io.Writer, session, remote string) error {
 		_ = w.write(map[string]any{"type": "error", "message": strings.TrimSpace(first)})
 		return errors.New("attach: " + strings.TrimSpace(first))
 	}
+	var attached struct {
+		Result struct {
+			Features []string `json:"features"`
+		} `json:"result"`
+	}
+	_ = json.Unmarshal([]byte(first), &attached)
+	current := slices.Contains(attached.Result.Features, proto.FeatureContextArrived)
 
 	// The session's commands, out to the extension as they come. When the
 	// session goes, so does the bridge; the extension starts another.
@@ -190,6 +205,11 @@ func bridge(in io.Reader, out io.Writer, session, remote string) error {
 			reply := map[string]any{"type": "reply", "id": msg.ID}
 			if !bridgeMethods[msg.Method] {
 				reply["error"] = map[string]any{"message": msg.Method + " is not the browser's to ask"}
+			} else if !current && msg.Method == api.MethodBrowserContext {
+				// A server from before the extension's items and message
+				// reads them as one empty element, and opens no panel: the
+				// owner pressed Send and nothing happened. Said instead.
+				reply["error"] = map[string]any{"message": staleServerForBrowser(session)}
 			} else if result, err := apiCall(session, msg.Method, msg.Params, false); err != nil {
 				reply["error"] = map[string]any{"message": err.Error()}
 			} else {

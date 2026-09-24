@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/sousaakira/tend/internal/pty"
+	"github.com/sousaakira/tend/internal/transport"
 	"github.com/sousaakira/tend/internal/vt"
 )
 
@@ -129,6 +131,75 @@ func TestTheBridgeCarriesTheExtensionsWay(t *testing.T) {
 	}
 }
 
+// TestTheBridgeSaysWhenTheServerIsOlderThanTheExtension: a server from
+// before browser.context took items and a message — here a stand-in that
+// attaches the browser as one did, with no features — gets none of the
+// extension's sends; the extension is told to hand the server over instead.
+// If it regresses, pressing Send in the browser after an update and before a
+// handoff does nothing, and says nothing, as it did on the owner's machine.
+func TestTheBridgeSaysWhenTheServerIsOlderThanTheExtension(t *testing.T) {
+	t.Setenv("TEND_RUNTIME_DIR", t.TempDir())
+	path, err := transport.APISocketPath("older")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	reached := make(chan string, 4)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				line, _ := bufio.NewReader(conn).ReadString('\n')
+				reached <- line
+				if strings.Contains(line, "browser.attach") {
+					_, _ = conn.Write([]byte(`{"id":"bridge","result":{"type":"browser_attached"}}` + "\n"))
+					_, _ = io.Copy(io.Discard, conn)
+				}
+			}()
+		}
+	}()
+
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	go func() { _ = bridge(inR, outW, "older", "") }()
+	t.Cleanup(func() { _ = inW.Close() })
+	if got := <-reached; !strings.Contains(got, "browser.attach") {
+		t.Fatalf("first request: %q", got)
+	}
+	_, _ = inW.Write(nativeFrame(map[string]any{"id": "1", "method": "browser.context",
+		"params": map[string]any{"message": "fix these", "items": []any{map[string]any{"selector": "h1"}}}}))
+	raw, err := readNative(outR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reply struct {
+		ID    string `json:"id"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(raw, &reply)
+	if reply.ID != "1" || !strings.Contains(reply.Error.Message, "tend handoff -s older") {
+		t.Errorf("reply: %s", raw)
+	}
+	select {
+	case got := <-reached:
+		t.Errorf("the send reached the older server: %q", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 // TestChromiumComesUpWithTheExtensionWorking: the browser tend opens, a real
 // Chromium (headless here), has the extension loaded, which starts the
 // bridge and attaches, and follows the session's open to a page. Skipped
@@ -191,4 +262,37 @@ func freePort(t *testing.T) string {
 	defer ln.Close()
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	return port
+}
+
+// TestTheContextPanelOpensForWhatTheBrowserSends: what a browser sends to
+// tend — here over the socket, as the extension's bridge does — opens the
+// context panel in the client by itself, where S sends it all to the pane
+// this tab works with. If it regresses, "Send all to tend" in the browser
+// leaves nothing to see in tend.
+func TestTheContextPanelOpensForWhatTheBrowserSends(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, []string{"attach", "-s", "arrive"}, pty.Options{Size: pty.Size{Cols: 110, Rows: 34}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(110, 34, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "arrive") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	out := tendOutput(t, bin, env, "api", "-s", "arrive", "browser.context",
+		`{"message":"fix these on mobile","items":[{"url":"https://example.com/","selector":"#save","note":"should be green"},{"url":"https://example.com/","selector":"h1","note":"too big"}]}`)
+	if !strings.Contains(out, "context_items") {
+		t.Fatalf("browser.context: %s", out)
+	}
+	a.waitForScreen(t, "the context panel, opened by itself", func(s string) bool {
+		return strings.Contains(s, "CONTEXT") && strings.Contains(s, "[text] fix these on mobile") && strings.Contains(s, "#save")
+	})
+	a.send(t, "S")
+	a.waitForScreen(t, "all of it typed into the pane", func(s string) bool {
+		return !strings.Contains(s, "CONTEXT") && strings.Contains(s, "note: should be green") && strings.Contains(s, "selector: h1")
+	})
 }

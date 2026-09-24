@@ -114,3 +114,31 @@ func TestPickedElementsGoTogetherAndCannotAct(t *testing.T) {
 		})
 	}
 }
+
+// TestWhatABrowserSendsLandsInTheContext: a browser's elements, with their
+// notes and the user's message for them all, go into the context — the
+// message first, as text — and the clients are told they arrived, for the
+// context panel to show them. If it regresses, "send to tend" in the
+// browser seems to do nothing.
+func TestWhatABrowserSendsLandsInTheContext(t *testing.T) {
+	s := newServer(t)
+	sub := s.Subscribe(16)
+	defer sub.Close()
+	kept, err := s.BrowserCaptureAll([]proto.ContextItem{
+		{URL: "https://example.com/", Selector: "#save", Note: "green"},
+		{URL: "https://example.com/", Selector: "h1", Note: "smaller"},
+	}, "fix these on mobile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 3 || kept[0].Kind != "text" || kept[0].Text != "fix these on mobile" || kept[1].Selector != "#save" || kept[2].Source != "browser" {
+		t.Errorf("kept: %+v", kept)
+	}
+	ev := waitForEvent(t, sub, func(e Event) bool { return e.Kind == EventContextArrived })
+	if ev.Title != "browser" || ev.Body != "3" {
+		t.Errorf("arrived: %+v", ev)
+	}
+	if _, err := s.BrowserCaptureAll(nil, "  "); err == nil {
+		t.Error("nothing is refused")
+	}
+}

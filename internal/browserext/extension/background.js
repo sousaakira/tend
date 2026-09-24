@@ -131,7 +131,9 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       const id = String(++seq);
       pending.set(id, { tabId, ids: msg.items.map((it) => it.id) });
       const items = msg.items.map(({ id, sent, ...it }) => it);
-      p.postMessage({ id, method: "browser.send_to_agent", params: { items, message: msg.message || "" } });
+      // Into tend's context, where the user looks them over and sends them on
+      // to an agent from the context panel, which opens for them.
+      p.postMessage({ id, method: "browser.context", params: { items, message: msg.message || "" } });
       return;
     }
   }

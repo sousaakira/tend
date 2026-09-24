@@ -24,7 +24,7 @@ func TestTheContextPanelShowsAnItemsParts(t *testing.T) {
 	Draw(g, Frame{Context: v}, DefaultTheme())
 	text := strings.Join(gridText(g), "\n")
 	for _, want := range []string{"CONTEXT", "[element] button#save", "[file] /p/main.go", "URL", "https://example.com/dashboard",
-		"SELECTED ELEMENT", "TEXT", "Salvar", "types it into 1 claude", "[ Copy ]", "[ Send to Agent ]", "[ Close ]"} {
+		"SELECTED ELEMENT", "TEXT", "Salvar", "types it into 1 claude", "[ Copy ]", "[ Send ]", "[ Send all ]", "[ Close ]"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q:\n%s", want, text)
 		}

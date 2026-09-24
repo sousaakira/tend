@@ -93,6 +93,10 @@ const (
 	// CommandAgentManager opens the agent manager: the agent CLIs tend knows
 	// of, found or not, and a way to install each (tend's own, prefix+A).
 	CommandAgentManager
+	// CommandSessions opens the sessions list: the conversations agents
+	// keep on this machine, to find, resume and delete (tend's own,
+	// prefix+S).
+	CommandSessions
 	// CommandContext opens the context panel: what tools captured, to copy
 	// or send to an agent (tend's own, prefix+C).
 	CommandContext
@@ -202,6 +206,8 @@ func (c Command) String() string {
 		return "navigator"
 	case CommandAgentManager:
 		return "agent-manager"
+	case CommandSessions:
+		return "sessions"
 	case CommandContext:
 		return "context"
 	case CommandBrowser:
@@ -245,6 +251,7 @@ var Keys = []struct {
 	{"( )", CommandNextSpace, "switch space"},
 	{"a", CommandToggleAgents, "show agents"},
 	{"A", CommandAgentManager, "agent manager: find, install"},
+	{"S", CommandSessions, "agent sessions: find, resume, delete"},
 	{"C", CommandContext, "context: captured, to send to an agent"},
 	{"B", CommandBrowser, "open a page in the browser"},
 	{"g", CommandNavigator, "find a space, tab or pane"},
@@ -334,6 +341,7 @@ func DefaultBindings() map[string]Command {
 		"(":         CommandPrevSpace,
 		"a":         CommandToggleAgents,
 		"A":         CommandAgentManager,
+		"S":         CommandSessions,
 		"C":         CommandContext,
 		"B":         CommandBrowser,
 		"g":         CommandNavigator, "w": CommandNavigate,

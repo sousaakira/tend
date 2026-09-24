@@ -81,13 +81,17 @@ you have seen it and said yes. Context (or `ctrl+b C`) is what
 tools have captured for the agents — a page, an element picked in one, text,
 a file: put things there with `tend context add`, with "Add to context" on a
 file in the files panel, or from any tool over the automation socket
-(`context.add`); then copy one, or send it to the agent this tab works with,
-where it is typed in for you to read over and send. Browser (or `ctrl+b B`) opens a page in tend's
+(`context.add`); then copy one, or send it — or all of it, `S` — to the
+agent this tab works with, where it is typed in for you to read over and send. Sessions (or `ctrl+b S`) lists the
+conversations your agents keep on this machine (Claude Code's so far): type to
+search them, enter to resume one in a new tab where it was held, and mark old
+ones to delete them. Browser (or `ctrl+b B`) opens a page in tend's
 browser: Chromium (or Edge) in a profile of the session's own, with tend's
 extension already in it. Its icon, or Alt+Shift+T, lets you pick elements on
 the page — outlined as you point, numbered as you take them — and write a
 note on each; a chat button in the corner holds them all, to copy at once or
-send to the agent one by one or together, typed in for you to read over. Nothing to install; your own browser is left alone
+send to tend one by one or together, with a message over them all; the
+context panel opens with them, to look over and send on to the agent. Nothing to install; your own browser is left alone
 (`docs/BROWSER.md`). `ctrl+b w` walks them too, and `[ui.toolbar] enabled =
 false` takes the row away.
 

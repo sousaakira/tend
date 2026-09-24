@@ -29,12 +29,16 @@ profile are not touched.
   it; a click takes it and opens a note on it (Enter saves, Shift+Enter a new
   line, Esc skips), and picking goes on, so several are taken in a row, each
   numbered on the page. Esc, or Done picking, stops. A floating chat button
-  holds them all: each with its note, editable there, sent to the agent on
-  its own or removed. Over them is a message box, for what is wanted of all
-  of them together; Copy all copies the message and them, in the text tend
-  hands an agent, and Send all to agent sends them together, as one message
-  led by it. A note still being written when either is pressed goes with
-  it. What is taken
+  holds them all: each with its note, editable there, sent to tend on its
+  own or removed. Over them is a message box, for what is wanted of all of
+  them together; Copy all copies the message and them, in the text tend
+  hands an agent, and Send all to tend puts the message (as a `text` item)
+  and them into the session's context. A note still being written when
+  either is pressed goes with it. The extension never types into an agent
+  itself: the client opens the context panel as they arrive (or says so, if
+  another panel is up), and the user sends them from there — `s` one,
+  `S` or Send all everything, oldest first, to the pane they were in —
+  having seen what goes. What is taken
   is kept per tab and page, so a reload finds it again; it goes when the
   browser closes. It is all drawn in a shadow root, apart from the page's
   styles.
@@ -117,6 +121,10 @@ It goes into the context buffer as an `element` from `browser` (a `kind` of
 `url` or `text` can be given instead), where the context panel (prefix+C)
 lists it and sends it to an agent. Each item can carry a `note` — what the
 user wants done with it — which leads it in what the agent is handed.
+Several can go at once under `items`, with a `message` that goes in first
+as a `text` item; they are checked together and kept all or none. Each
+arrival is announced to the clients (the `context-arrived` event), which
+open the context panel.
 `browser.send_to_agent` takes the same params, or several under `items`, a
 `message` to lead them, and a `pane_id`, and goes straight on: the items are kept, and typed together
 into that pane — or, with no `pane_id`, the one the user was last in —

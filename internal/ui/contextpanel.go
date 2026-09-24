@@ -47,19 +47,20 @@ type ContextButton int
 const (
 	ContextCopy ContextButton = iota
 	ContextSend
+	ContextSendAll
 	ContextRemove
 	ContextClear
 	ContextClose
 )
 
-var contextButtonLabels = [...]string{"[ Copy ]", "[ Send to Agent ]", "[ Remove ]", "[ Clear ]", "[ Close ]"}
+var contextButtonLabels = [...]string{"[ Copy ]", "[ Send ]", "[ Send all ]", "[ Remove ]", "[ Clear ]", "[ Close ]"}
 
 // ContextGeometry is where the panel's parts are.
 type ContextGeometry struct {
 	Box Rect
 	// List is the items, one a line; Detail the chosen one's parts.
 	List, Detail Rect
-	Buttons      [5]Rect
+	Buttons      [6]Rect
 }
 
 const (
@@ -196,14 +197,14 @@ func drawContextPanel(dst *vt.Grid, v *ContextView, theme Theme) {
 	case v.Message != "":
 		info = v.Message
 	case v.Target != "":
-		info = "Send to Agent types it into " + v.Target + " · c copy · s send · x remove"
+		info = "Send types it into " + v.Target + " · c copy · s send · S send all · x remove"
 	default:
 		info = "no pane to send to in this tab"
 	}
 	writeString(dst, box.X+2, infoY, truncate(info, box.Cols-4), infoStyle, right)
 	for i, r := range g.Buttons {
 		style := theme.NotesAccent
-		if ContextButton(i) == ContextSend && v.Target == "" || len(v.Items) == 0 && ContextButton(i) != ContextClose {
+		if (ContextButton(i) == ContextSend || ContextButton(i) == ContextSendAll) && v.Target == "" || len(v.Items) == 0 && ContextButton(i) != ContextClose {
 			style = theme.NotesSub
 		}
 		writeString(dst, r.X, r.Y, contextButtonLabels[i], style, right)

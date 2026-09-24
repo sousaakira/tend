@@ -77,6 +77,10 @@ const (
 	EventUpdateReady
 	// EventContextChanged says the context buffer changed (context.go).
 	EventContextChanged
+	// EventContextArrived says a tool handed the context something to look
+	// at — Title is which ("browser"), Body how many items — for the
+	// client to show it (browser.go).
+	EventContextArrived
 )
 
 func (k EventKind) String() string {
@@ -111,6 +115,8 @@ func (k EventKind) String() string {
 		return "update-ready"
 	case EventContextChanged:
 		return "context-changed"
+	case EventContextArrived:
+		return "context-arrived"
 	default:
 		return "unknown"
 	}
