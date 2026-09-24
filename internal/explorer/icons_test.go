@@ -164,7 +164,7 @@ func TestTheGearsSettingsWriteTheFilesSection(t *testing.T) {
 	m.SetSettingsWriter(func(key, value string) error { written[key] = value; return nil })
 	m.openSettings()
 
-	keys(m, "j", "j") // dotfiles
+	keys(m, "j", "j", "j") // dotfiles
 	m.Key(Key{Name: "enter"})
 	if written["hidden"] != "true" || !m.settings.Hidden || !m.tree.Hidden {
 		t.Errorf("dotfiles hidden, written and applied: %v %+v", written, m.settings)

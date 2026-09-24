@@ -106,6 +106,8 @@ type Model struct {
 	settings      Settings
 	configured    bool
 	watchSettings func() (Settings, bool)
+	// binaryChanged says a new build of the panel is installed (upgrade.go).
+	binaryChanged func() bool
 	// writeSetting writes one of [files] for the gear's settings.
 	writeSetting   func(key, value string) error
 	settingsCursor int
@@ -185,8 +187,9 @@ type Settings struct {
 	Follow bool
 	// Dock and Width are how the panel opens, shown on the gear's
 	// settings; an open panel does not act on them.
-	Dock  string
-	Width int
+	Dock     string
+	Width    int
+	AutoOpen bool
 }
 
 // Configure applies settings. Only what changed since the last is applied,

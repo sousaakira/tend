@@ -229,6 +229,19 @@ type Config struct {
 	// for the user — a tab bar entry — so it can call back on the automation
 	// socket. Nil adds nothing.
 	CommandEnv []string
+	// UpdateSource says where the release check looks and whether it looks
+	// at all, read again at each check. Nil means this server never checks,
+	// which is what a test that does not care gets (updatecheck.go).
+	UpdateSource func() (manifest string, enabled bool)
+	// UpdateInterval is how often the check runs until it finds a release.
+	// Zero is herdr's half hour.
+	UpdateInterval time.Duration
+	// NotesPath is where release notes are kept: release-notes.json beside
+	// the settings file. Empty keeps none.
+	NotesPath string
+	// FakeUpdate pretends a release of this version is published, herdr's
+	// HERDR_FAKE_UPDATE_VERSION, to see the notice without publishing one.
+	FakeUpdate string
 }
 
 // PaneSpec describes a pane to open.
@@ -303,7 +316,13 @@ type Server struct {
 	// conns tracks connected clients so shutdown can hang them up. Without
 	// this they sit blocked on a socket read that nothing ever ends, and Close
 	// waits on them forever.
-	conns    map[*clientConn]struct{}
+	conns map[*clientConn]struct{}
+	// update is what the release check found (updatecheck.go).
+	update updateState
+	// captured is the context buffer (context.go).
+	captured contextState
+	// browsers are the browsers attached (browser.go).
+	browsers browserHub
 	branches *branchCache
 	closed   bool
 	// focusedPane, focusedTab and focusedWorkspace are what a client last
@@ -414,6 +433,11 @@ func build(cfg Config) (*Server, error) {
 func (s *Server) startLoops() {
 	s.wg.Add(1)
 	go s.detectLoop()
+	if s.cfg.UpdateSource != nil || s.cfg.FakeUpdate != "" {
+		s.loadUpdateState()
+		s.wg.Add(1)
+		go s.updateLoop()
+	}
 	if s.cfg.StateFile != "" {
 		s.wg.Add(1)
 		go s.persistLoop()
@@ -579,6 +603,16 @@ func (s *Server) SplitPane(target session.PaneID, dir session.Direction, spec Pa
 // where the user cd'd to, not where the pane was opened — which for the file
 // explorer is the project being worked on.
 func (s *Server) DockPane(beside session.PaneID, share float64, right bool, spec PaneSpec) (session.PaneID, error) {
+	pane, _, err := s.DockPaneUnless(beside, share, right, spec, "")
+	return pane, err
+}
+
+// DockPaneUnless is DockPane that opens nothing when beside's tab already
+// has a pane named unless, and returns that one: the files panel opened on
+// its own in every tab (herdr-sidebar's ensure) asks this way, so two
+// clients showing the same tab at once cannot dock two panels. The check
+// and the dock are under one hold of the lock, which is what makes it so.
+func (s *Server) DockPaneUnless(beside session.PaneID, share float64, right bool, spec PaneSpec, unless string) (session.PaneID, bool, error) {
 	if spec.Dir == "" {
 		s.mu.Lock()
 		rt := s.runtimes[beside]
@@ -592,21 +626,28 @@ func (s *Server) DockPane(beside session.PaneID, share float64, right bool, spec
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return 0, ErrClosed
+		return 0, false, ErrClosed
 	}
 	tab, ok := s.session.TabOf(beside)
 	if !ok {
-		return 0, fmt.Errorf("%w: %d", session.ErrNoSuchPane, beside)
+		return 0, false, fmt.Errorf("%w: %d", session.ErrNoSuchPane, beside)
+	}
+	if unless != "" {
+		for _, id := range tab.Panes() {
+			if p, ok := tab.Pane(id); ok && p.Named && p.Title == unless {
+				return id, true, nil
+			}
+		}
 	}
 	pane, err := s.session.DockPane(tab.ID, share, right, spec.record())
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if err := s.startLocked(pane.ID, spec); err != nil {
 		_ = s.session.ClosePane(pane.ID)
-		return 0, err
+		return 0, false, err
 	}
-	return pane.ID, nil
+	return pane.ID, false, nil
 }
 
 // ClosePane stops a pane's process and removes it from the session.

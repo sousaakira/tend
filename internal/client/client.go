@@ -367,9 +367,16 @@ func (c *Client) SplitPane(target uint64, direction string, spec proto.PaneSpec)
 // DockPane opens a pane along the left (or right) edge of beside's tab,
 // taking share of its width.
 func (c *Client) DockPane(beside uint64, share float64, right bool, spec proto.PaneSpec) (uint64, error) {
+	pane, _, err := c.DockPaneUnless(beside, share, right, spec, "")
+	return pane, err
+}
+
+// DockPaneUnless docks a pane unless beside's tab already has one named
+// unless, and says which happened.
+func (c *Client) DockPaneUnless(beside uint64, share float64, right bool, spec proto.PaneSpec, unless string) (uint64, bool, error) {
 	var out proto.PaneSplitResult
-	err := c.Call(proto.MethodPaneDock, proto.PaneDockParams{Beside: beside, Share: share, Right: right, Pane: spec}, &out)
-	return out.Pane, err
+	err := c.Call(proto.MethodPaneDock, proto.PaneDockParams{Beside: beside, Share: share, Right: right, Pane: spec, Unless: unless}, &out)
+	return out.Pane, out.Existing, err
 }
 
 // ActivateLink offers a URL clicked in a pane to the plugins, and reports
@@ -492,6 +499,52 @@ func (c *Client) PaneGraphics(pane uint64) (proto.PaneGraphicsResult, error) {
 }
 
 // ReloadConfig makes the server re-read the settings file.
+// AgentsCatalog lists the agent CLIs the server's machine has, and how to
+// install the ones it has not.
+func (c *Client) AgentsCatalog() (proto.AgentsCatalogResult, error) {
+	var out proto.AgentsCatalogResult
+	return out, c.Call(proto.MethodAgentsCatalog, nil, &out)
+}
+
+// BrowserOpen hands a page to the browsers attached to the server, and says
+// how many took it.
+func (c *Client) BrowserOpen(url string) (int, error) {
+	var out proto.BrowserOpenResult
+	err := c.Call(proto.MethodBrowserOpen, proto.BrowserOpenParams{URL: url}, &out)
+	return out.Browsers, err
+}
+
+// ContextList reads the context buffer, oldest first.
+func (c *Client) ContextList() ([]proto.ContextItem, error) {
+	var out proto.ContextList
+	return out.Items, c.Call(proto.MethodContextList, nil, &out)
+}
+
+// ContextRemove takes items out of the buffer; ContextClear takes them all.
+func (c *Client) ContextRemove(ids []uint64) error {
+	return c.Call(proto.MethodContextRemove, proto.ContextIDs{IDs: ids}, nil)
+}
+
+func (c *Client) ContextClear() error {
+	return c.Call(proto.MethodContextClear, proto.ContextIDs{}, nil)
+}
+
+// ContextSend types items (none: all) into a pane, submitting nothing.
+func (c *Client) ContextSend(pane uint64, ids []uint64) error {
+	return c.Call(proto.MethodContextSend, proto.ContextSendParams{Pane: pane, IDs: ids}, nil)
+}
+
+// ReleaseNotes reads the release notes the server keeps.
+func (c *Client) ReleaseNotes() (proto.ReleaseNotes, error) {
+	var out proto.ReleaseNotes
+	return out, c.Call(proto.MethodReleaseNotes, nil, &out)
+}
+
+// DismissReleaseNotes marks the notes of a version read.
+func (c *Client) DismissReleaseNotes(version string) error {
+	return c.Call(proto.MethodReleaseNotesDismiss, proto.ReleaseNotesDismissParams{Version: version}, nil)
+}
+
 func (c *Client) ReloadConfig() (proto.ReloadResult, error) {
 	var out proto.ReloadResult
 	return out, c.Call(proto.MethodServerReloadConfig, nil, &out)

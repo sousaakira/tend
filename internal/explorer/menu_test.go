@@ -193,3 +193,43 @@ func TestARightClickOpensTheMenuOnTheEntry(t *testing.T) {
 		t.Errorf("the menu:\n%s", text)
 	}
 }
+
+// contextOpener is an opener that keeps what the menu adds to the context.
+type contextOpener struct {
+	recordingOpener
+	added []string
+}
+
+func (o *contextOpener) AddContext(kind, path string) error {
+	o.added = append(o.added, kind+":"+path)
+	return nil
+}
+
+// TestAFileGoesToTheContextFromTheMenu: "Add to context" on a file puts its
+// full path in the session's context buffer as a file; without a session
+// the menu says why nothing happened. If it regresses, the files panel is no
+// way into the context the agents are handed.
+func TestAFileGoesToTheContextFromTheMenu(t *testing.T) {
+	dir := repo(t)
+	o := &contextOpener{}
+	m := New(dir, o)
+	screen(m, 40, 14)
+	for i, n := range m.fileRows {
+		if n.Name == "kept.txt" {
+			m.cursor[ViewFiles] = i
+		}
+	}
+	m.openMenu(m.selectedNode())
+	chooseMenu(t, m, "Add to context")
+	if len(o.added) != 1 || o.added[0] != "file:"+filepath.Join(dir, "kept.txt") {
+		t.Errorf("added: %v", o.added)
+	}
+
+	plain := New(dir, nil)
+	screen(plain, 40, 14)
+	plain.openMenu(plain.fileRows[len(plain.fileRows)-1])
+	chooseMenu(t, plain, "Add to context")
+	if !strings.Contains(plain.message, "not in a tend session") {
+		t.Errorf("says why: %q", plain.message)
+	}
+}

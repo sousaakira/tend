@@ -225,6 +225,19 @@ func runServe(args []string) error {
 		Scrollback:     cfg.Scrollback(),
 		Shell:          cfg.Shell(),
 		DefaultSize:    pty.Size{Cols: uint16(*cols), Rows: uint16(*rows)},
+		// The release check reads the settings file each time, so turning
+		// [update] version_check off or on needs no restart.
+		UpdateSource: func() (string, bool) {
+			c, err := config.LoadLenient()
+			if err != nil {
+				return "", false
+			}
+			return c.ManifestURL(), c.Update.VersionCheck
+		},
+		FakeUpdate: os.Getenv("TEND_FAKE_UPDATE_VERSION"),
+	}
+	if path, err := config.Path(); err == nil {
+		srvCfg.NotesPath = filepath.Join(filepath.Dir(path), "release-notes.json")
 	}
 
 	// The replacement is whatever binary is at this one's path by then, which

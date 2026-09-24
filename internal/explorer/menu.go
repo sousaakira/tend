@@ -33,6 +33,9 @@ const (
 	actReveal
 	actChangeFolder
 	actFileHistory
+	// actAddContext puts the entry's path in the session's context buffer,
+	// tend's own (internal/capture): for the context panel to hand an agent.
+	actAddContext
 )
 
 type menuItem struct {
@@ -61,6 +64,9 @@ func menuEntries(target *Node, inRepo bool) []menuItem {
 			menuItem{actCopyRelative, "Copy relative path"},
 			menuItem{actRename, "Rename…"},
 			menuItem{actDelete, "Delete"},
+			// tend's own, after herdr-sidebar's: the entry into the context
+			// buffer, for the context panel to hand an agent.
+			menuItem{actAddContext, "Add to context"},
 		)
 	}
 	return append(items,
@@ -237,6 +243,17 @@ func (m *Model) runMenu(action menuAction, target *Node) {
 		m.stagePath(target)
 	case actFileHistory:
 		m.openHistory(histCommits, m.tree.repoPath(m.git, target.Rel))
+	case actAddContext:
+		adder, ok := m.opener.(ContextAdder)
+		if !ok {
+			m.say("not in a tend session: no context to add to", true)
+			return
+		}
+		if err := adder.AddContext("file", m.tree.Path(target)); err != nil {
+			m.say("context: "+err.Error(), true)
+			return
+		}
+		m.say("added "+target.Rel+" to the context (prefix+C)", false)
 	case actCopyPath, actCopyRelative:
 		path := m.tree.Path(target)
 		if action == actCopyRelative {
@@ -357,4 +374,10 @@ func openWithSystem(path string) error {
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+// ContextAdder is an opener that can put an item in the session's context
+// buffer: tend's session, over its automation socket.
+type ContextAdder interface {
+	AddContext(kind, path string) error
 }

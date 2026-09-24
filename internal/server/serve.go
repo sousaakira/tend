@@ -63,6 +63,15 @@ var Methods = []string{
 	proto.MethodCommandRun,
 	proto.MethodPaneDock,
 	proto.MethodPaneLinkActivate,
+	proto.MethodReleaseNotes,
+	proto.MethodReleaseNotesDismiss,
+	proto.MethodAgentsCatalog,
+	proto.MethodContextAdd,
+	proto.MethodContextList,
+	proto.MethodContextRemove,
+	proto.MethodContextClear,
+	proto.MethodContextSend,
+	proto.MethodBrowserOpen,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -271,6 +280,12 @@ func (c *clientConn) forward(ev Event) error {
 		out.Kind = proto.EventWorkspaceCreated
 	case EventFocusRequest:
 		out.Kind = proto.EventFocusRequest
+	case EventUpdateReady:
+		out.Kind = proto.EventUpdateReady
+		out.Title = ev.Title
+		out.Body = ev.Body
+	case EventContextChanged:
+		out.Kind = proto.EventContextChanged
 	default:
 		// An event kind this build does not map is dropped rather than sent
 		// half-formed, so a client never sees a message it cannot interpret.
@@ -479,11 +494,11 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 		// A docked pane is a panel: it goes when its program does, and its
 		// title is the name it was given, not whatever the program sets.
 		spec.CloseOnExit, spec.Named = true, spec.Title != ""
-		pane, err := c.srv.DockPane(session.PaneID(p.Beside), p.Share, p.Right, spec)
+		pane, existing, err := c.srv.DockPaneUnless(session.PaneID(p.Beside), p.Share, p.Right, spec, p.Unless)
 		if err != nil {
 			return nil, err
 		}
-		return proto.PaneSplitResult{Pane: uint64(pane)}, nil
+		return proto.PaneSplitResult{Pane: uint64(pane), Existing: existing}, nil
 
 	case proto.MethodPaneClose:
 		var p proto.PaneCloseParams
@@ -538,6 +553,66 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 
 	case proto.MethodServerReloadConfig:
 		return c.srv.ReloadFromFile(), nil
+
+	case proto.MethodReleaseNotes:
+		notes, ok := c.srv.ReleaseNotes()
+		if !ok {
+			return nil, errors.New("there are no release notes")
+		}
+		return notes, nil
+
+	case proto.MethodAgentsCatalog:
+		// Found here, on the machine the panes run on, outside every lock:
+		// it looks through the PATH and asks each agent its version.
+		return c.srv.AgentsCatalog(), nil
+
+	case proto.MethodContextAdd:
+		var p proto.ContextItem
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.AddContext(p)
+
+	case proto.MethodContextList:
+		return proto.ContextList{Items: c.srv.ContextItems()}, nil
+
+	case proto.MethodContextRemove, proto.MethodContextClear:
+		var p proto.ContextIDs
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if req.Method == proto.MethodContextClear {
+			p.IDs = nil
+		} else if len(p.IDs) == 0 {
+			return nil, errors.New("context.remove names the items; context.clear takes them all")
+		}
+		c.srv.RemoveContext(p.IDs)
+		return nil, nil
+
+	case proto.MethodBrowserOpen:
+		var p proto.BrowserOpenParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		n, err := c.srv.SendBrowser(BrowserCommand{Action: BrowserOpen, URL: p.URL})
+		if err != nil {
+			return nil, err
+		}
+		return proto.BrowserOpenResult{Browsers: n}, nil
+
+	case proto.MethodContextSend:
+		var p proto.ContextSendParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.SendContext(session.PaneID(p.Pane), p.IDs)
+
+	case proto.MethodReleaseNotesDismiss:
+		var p proto.ReleaseNotesDismissParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, c.srv.DismissReleaseNotes(p.Version)
 
 	case proto.MethodPaneEditScrollback:
 		var p proto.PaneScreenParams
@@ -744,6 +819,7 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 		snap.Popup = &proto.PopupInfo{Pane: uint64(p.Pane), Tab: uint64(p.Tab), Width: p.Width, Height: p.Height, Title: p.Title}
 	}
 	snap.AgentView = s.agentView
+	snap.Update = s.updateSnapshotLocked()
 	sess := s.session
 	if active := sess.ActiveWorkspace(); active != nil {
 		snap.ActiveWorkspace = uint64(active.ID)

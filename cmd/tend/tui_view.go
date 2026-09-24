@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"time"
+
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
 	"github.com/sousaakira/tend/internal/vt"
@@ -396,6 +398,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		if t.hoverMenu(ev.X, ev.Y) {
 			return nil
 		}
+		if t.hoverToolbar(ev.X, ev.Y) {
+			return nil
+		}
 		t.hoverLink(ev)
 		if pane := t.paneAt(ev.X, ev.Y); pane != 0 {
 			_, err := t.forwardMouse(pane, ev, false)
@@ -414,6 +419,9 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 			return nil
 		}
 		if t.dragSidebarDivider(ev.Y) {
+			return nil
+		}
+		if t.dragSidebarWidth(ev.X) {
 			return nil
 		}
 		return t.dragDivider(ev)
@@ -438,6 +446,7 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 		t.mu.Lock()
 		t.dragPane, t.dragSide = 0, ""
 		t.draggingSidebar = false
+		t.draggingSidebarWidth = false
 		t.mu.Unlock()
 
 		return nil
@@ -529,11 +538,66 @@ func (t *tui) grabSidebarDivider(x, y int) bool {
 	if !t.sidebar {
 		return false
 	}
-	if ui.SidebarPlaceAt(t.buildFrame(), x, y, t.rows) != ui.SidebarDivider {
+	switch ui.SidebarPlaceAt(t.buildFrame(), x, y, t.rows) {
+	case ui.SidebarDivider:
+		t.draggingSidebar = true
+		return true
+	case ui.SidebarEdge:
+		// herdr's sidebar divider: a drag sets the width, a double click
+		// puts it back to the settings' (client/shell/mouse.rs).
+		now := time.Now()
+		if now.Sub(t.lastEdgeClick) <= 350*time.Millisecond {
+			t.lastEdgeClick = time.Time{}
+			if t.sidebarWidth != 0 {
+				t.sidebarWidth = 0
+				t.dirty = true
+				go t.resizeForSidebar()
+			}
+			return true
+		}
+		t.lastEdgeClick = now
+		t.draggingSidebarWidth = true
+		return true
+	}
+	return false
+}
+
+// sidebarWidthLocked is the sidebar's width: where it was dragged to, or
+// the settings'.
+func (t *tui) sidebarWidthLocked() int {
+	if t.sidebarWidth > 0 {
+		return t.sidebarWidth
+	}
+	return t.config.SidebarWidth()
+}
+
+// dragSidebarWidth moves the sidebar's edge to the pointer, and reports
+// whether the edge was the one being dragged.
+func (t *tui) dragSidebarWidth(x int) bool {
+	t.mu.Lock()
+	if !t.draggingSidebarWidth {
+		t.mu.Unlock()
 		return false
 	}
-	t.draggingSidebar = true
+	lo, hi := t.config.SidebarBounds()
+	next := ui.SidebarWidthAt(x, lo, min(hi, t.cols-1))
+	changed := next != t.sidebarWidthLocked()
+	if changed {
+		t.sidebarWidth = next
+		t.dirty = true
+	}
+	t.mu.Unlock()
+	if changed {
+		t.resizeForSidebar()
+	}
 	return true
+}
+
+// resizeForSidebar lays the panes out again beside a sidebar of a new width.
+func (t *tui) resizeForSidebar() {
+	if err := t.refresh(); err != nil {
+		t.setMessage(err.Error(), true)
+	}
 }
 
 // dragSidebarDivider moves the line to where the pointer is, and reports
@@ -650,6 +714,9 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 	if ui.SidebarHandleAt(frame, x, y, rows) {
 		return true, t.toggleSidebar()
 	}
+	if ui.SidebarPlaceAt(frame, x, y, rows) == ui.SidebarToolbar {
+		return true, t.clickToolbar(frame, x, y, rows)
+	}
 
 	row, ok := ui.SidebarRowAt(frame, x, y, rows)
 	if !ok {
@@ -671,10 +738,12 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		t.toggleGroup(row.Group)
 		return true, nil
 	case row.Action == ui.ActionOpenMenu:
+		// herdr's global menu. What the space's own menu offers is on a
+		// right-click on the space, as in herdr.
 		t.mu.Lock()
-		ws, groups := t.workspace, t.hasGroupsLocked()
+		ready, notes := t.updateReadyLocked() != "", t.notesAvailableLocked()
 		t.mu.Unlock()
-		t.openMenu(ui.SpaceMenu(ws, groups, x, y))
+		t.openMenu(ui.GlobalMenu(ready, notes, x, y))
 		return true, nil
 	case row.Action == ui.ActionToggleGrouped:
 		t.mu.Lock()

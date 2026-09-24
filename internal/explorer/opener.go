@@ -244,3 +244,12 @@ func (o *SessionOpener) Preview(path string, line int, dir string) error {
 	_, err = o.call("pane.focus", map[string]any{"pane_id": o.preview})
 	return err
 }
+
+// AddContext puts a file in the session's context buffer (context.add).
+func (o *SessionOpener) AddContext(kind, path string) error {
+	if o.Socket == "" {
+		return errors.New("not running in a tend pane")
+	}
+	_, err := o.call("context.add", map[string]any{"kind": kind, "path": path, "source": "files"})
+	return err
+}

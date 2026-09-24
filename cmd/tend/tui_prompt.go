@@ -31,6 +31,9 @@ const (
 	// promptRenameGroup renames a group, which means moving every space in it
 	// at once: a group is only the set of spaces naming it.
 	promptRenameGroup
+	// promptOpenURL asks for a page to open in the browser (tui_browser.go),
+	// the last one opened already in the box.
+	promptOpenURL
 )
 
 // startPrompt opens the prompt, seeded with the current name.
@@ -55,6 +58,12 @@ func (t *tui) startPrompt(kind promptKind) {
 	case promptRenameSpace:
 		if w, ok := t.workspaceLocked(); ok {
 			t.promptText = w.Name
+		}
+	case promptOpenURL:
+		t.promptText = t.lastURL
+		if t.promptText == "" {
+			t.promptText = "https://"
+			t.promptPristine = false // typed after, not over
 		}
 	case promptNewWorktree:
 		t.promptText = worktree.GeneratedBranch(uint64(time.Now().UnixNano()))
@@ -171,6 +180,9 @@ func (t *tui) commitPrompt() error {
 	}
 
 	switch kind {
+	case promptOpenURL:
+		go t.openInBrowser(name)
+		return nil
 	case promptRenameTab:
 		if tab == 0 {
 			return nil
@@ -233,6 +245,8 @@ func (t *tui) promptLabelLocked() string {
 		return "new group — name"
 	case promptRenameGroup:
 		return "rename group"
+	case promptOpenURL:
+		return "open in browser"
 	}
 	return ""
 }

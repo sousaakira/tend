@@ -13,6 +13,7 @@ import (
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/detect"
 	"github.com/sousaakira/tend/internal/plugin"
+	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/server"
 	"github.com/sousaakira/tend/internal/session"
@@ -100,6 +101,27 @@ const (
 	// MethodPopupClose closes the popup open, herdr's popup.close.
 	MethodPopupClose    = "popup.close"
 	MethodServerHandoff = "server.live_handoff"
+
+	// The context buffer (internal/capture, server/context.go), tend's own:
+	// how a browser extension, the files panel or a script hands the server
+	// something captured, and how it reaches an agent.
+	MethodContextAdd    = "context.add"
+	MethodContextList   = "context.list"
+	MethodContextRemove = "context.remove"
+	MethodContextClear  = "context.clear"
+	MethodContextSend   = "context.send"
+
+	// Browsers (server/browser.go), tend's own: browser.attach is how a
+	// browser — through its extension's bridge — takes the commands the
+	// rest send it; what it captures comes back in browser.context, or
+	// browser.send_to_agent to go straight on to a pane.
+	MethodBrowserAttach      = "browser.attach"
+	MethodBrowserStatus      = "browser.status"
+	MethodBrowserOpen        = "browser.open"
+	MethodBrowserNavigate    = "browser.navigate"
+	MethodBrowserSelect      = "browser.select"
+	MethodBrowserContext     = "browser.context"
+	MethodBrowserSendToAgent = "browser.send_to_agent"
 )
 
 // waitCeiling bounds any wait, however long the caller asked for. A script
@@ -962,6 +984,116 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 
 	case MethodServerStop:
 		pend.after = func() { _ = a.srv.Close() }
+		return ok2(), nil
+
+	case MethodContextAdd:
+		var p ContextAddParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		it, err := a.srv.AddContext(proto.ContextItem{
+			Kind: p.Kind, Source: p.Source, Title: p.Title, URL: p.URL, Selector: p.Selector,
+			Tag: p.Tag, Text: p.Text, Path: p.Path, Attributes: p.Attributes,
+		})
+		if err != nil {
+			return nil, fail("invalid_context", "%s", err.Error())
+		}
+		return map[string]any{"type": "context_item", "item": it}, nil
+
+	case MethodContextList:
+		return map[string]any{"type": "context_list", "items": a.srv.ContextItems()}, nil
+
+	case MethodContextRemove, MethodContextClear:
+		var p ContextIDsParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if req.Method == MethodContextRemove && len(p.IDs) == 0 {
+			return nil, fail("invalid_params", "context.remove names the items; context.clear takes them all")
+		}
+		if req.Method == MethodContextClear {
+			p.IDs = nil
+		}
+		a.srv.RemoveContext(p.IDs)
+		return ok2(), nil
+
+	case MethodBrowserAttach:
+		var p BrowserAttachParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		pend.stream = func(conn net.Conn) error { return a.followBrowser(conn, p.Name) }
+		return map[string]any{"type": "browser_attached"}, nil
+
+	case MethodBrowserStatus:
+		return map[string]any{"type": "browser_status", "browsers": a.srv.Browsers()}, nil
+
+	case MethodBrowserOpen, MethodBrowserNavigate:
+		var p BrowserURLParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		action := server.BrowserOpen
+		if req.Method == MethodBrowserNavigate {
+			action = server.BrowserNavigate
+		}
+		n, err := a.srv.SendBrowser(server.BrowserCommand{Action: action, URL: p.URL})
+		if err != nil {
+			return nil, browserErr(err)
+		}
+		return map[string]any{"type": "browser_sent", "browsers": n}, nil
+
+	case MethodBrowserSelect:
+		var p BrowserSelectParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		n, err := a.srv.SendBrowser(server.BrowserCommand{Action: server.BrowserSelect, On: p.On})
+		if err != nil {
+			return nil, browserErr(err)
+		}
+		return map[string]any{"type": "browser_sent", "browsers": n}, nil
+
+	case MethodBrowserContext, MethodBrowserSendToAgent:
+		var p BrowserCaptureParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		item := proto.ContextItem{Kind: p.Kind, Title: p.Title, URL: p.URL, Selector: p.Selector,
+			Tag: p.Tag, Text: p.Text, Attributes: p.Attributes}
+		if req.Method == MethodBrowserContext {
+			kept, err := a.srv.BrowserCapture(item)
+			if err != nil {
+				return nil, fail("invalid_context", "%s", err.Error())
+			}
+			return map[string]any{"type": "context_item", "item": kept}, nil
+		}
+		var pane session.PaneID
+		if p.PaneID != "" {
+			id, err := a.pane(p.PaneID)
+			if err != nil {
+				return nil, err
+			}
+			pane = id
+		}
+		sent, err := a.srv.BrowserSendToAgent(item, pane)
+		if err != nil {
+			return nil, fail("context_send_failed", "%s", err.Error())
+		}
+		return map[string]any{"type": "context_sent", "pane_id": PaneID(sent)}, nil
+
+	case MethodContextSend:
+		var p ContextSendParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		id, err := a.pane(p.PaneID)
+		if err != nil {
+			return nil, err
+		}
+		if err := a.srv.SendContext(id, p.IDs); err != nil {
+			return nil, fail("context_send_failed", "%s", err.Error())
+		}
 		return ok2(), nil
 
 	case MethodServerHandoff:

@@ -66,9 +66,16 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 - **Server and client**: detached daemon on a Unix socket, started on demand by
   a bare `tend`; reconnect; version/feature mismatch notice with in-place
   server restart.
+- **Tab bar** as herdr's `render_tab_bar`: each tab a block of its name and
+  four columns (eight at least), the name centred, a column of the bar
+  between blocks and before " + "; the tab in view on the accent, the others
+  on surface0 (bright black with the terminal's colours, where the bar is the
+  terminal's own background rather than a reversed band). Scroll buttons
+  for more tabs than fit are not ported: the ones that do not fit are left
+  off, as before.
 - **Sidebar**: spaces as a folding tree of groups, git branch and ahead/behind
   per space, agents list flat or grouped, draggable divider between the two
-  lists, per-list scrolling with pinned headings, collapse/expand handles, a
+  lists, its width dragged by its right edge, per-list scrolling with pinned headings, collapse/expand handles, a
   session-wide "N waiting" count.
 - **Mouse**: clickable tabs and sidebar, context menus with hover highlight,
   rename in a modal, wheel scrolling.
@@ -284,10 +291,28 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
   checksums by platform — downloads this platform's asset beside the binary it
   will replace, refuses it if the checksum does not match, and installs it by
   rename, keeping the old one until the new is in place. `tend channel
-  [stable|preview]` shows or sets the channel. **There is no default manifest
-  URL, and nothing checks or downloads on its own**: tend publishes no
-  releases, and pointing an updater at a guess would install somebody else's
-  binary. Tested against a local HTTP server.
+  [stable|preview]` shows or sets the channel. The stable channel's manifest
+  is published with each GitHub release (`latest.json`, at
+  `releases/latest/download/latest.json`); preview has none unless set. A
+  release build is offered only a newer release (herdr's semver compare); a
+  build from a working tree, any different one. Tested against a local HTTP
+  server, and `-check` against the published v0.3.0 manifest.
+- **Update notice and release notes** (herdr's `auto_update`,
+  `release_notes.rs`, `ui/release_notes.rs`, `global_menu.rs`): a release
+  build's server checks when it starts and every half hour until it finds a
+  newer release, gated by `[update] version_check` (on by default, read again
+  each time); it saves the notes to `release-notes.json` beside the settings
+  file, tells every client (a notice "v… available"), and says "update ready"
+  in the snapshot until the release runs, surviving a restart. The client
+  shows "update ready" at the right of the status bar and "● menu" on the
+  sidebar's button, whose menu is herdr's global one (settings, keybinds,
+  reload config, "update ready ●" / "what's new", detach); that entry opens
+  herdr's 80×24 notes panel (markdown as herdr draws it, scroll, esc/enter
+  close), and closing it marks the running release's notes read
+  (`release_notes.dismiss`). Nothing is installed without `tend update`.
+  `TEND_FAKE_UPDATE_VERSION` is herdr's `HERDR_FAKE_UPDATE_VERSION`.
+  Checked against GitHub: a v0.2.0 build's server found v0.3.0 and saved
+  its notes.
 - **Focus events**: a program that asked for mode 1004 is told when its pane
   gains or loses focus (`pane.focus`), and one that did not ask is not — an
   unasked-for report is a stray "[I" in somebody's shell.
@@ -375,6 +400,14 @@ of tests. herdr's API has about 110 methods; tend's protocol has 18.
 | Default theme | catppuccin | the terminal's own colours when no `name` is set | an unset theme keeps what tend has always looked like; the owner picks a palette in the settings screen or the file |
 | Window title on detach | writes "herdr" | saves the window's title when it first writes one (`CSI 22;0t`) and puts it back on detach (`CSI 23;0t`) | detaching should leave the window as tend found it; a terminal without the title stack keeps tend's last title, which is no worse than herdr's name |
 | Invalid tab bar entry | hidden, with a diagnostic | the settings file is refused at load, like every other value tend cannot use | one rule for every setting; a gap in the bar with the reason in a log nobody reads is harder to notice |
+| Sidebar toolbar | none | a row of tools over the spaces (`internal/ui/toolbar.go`, `cmd/tend/tui_toolbar.go`): Files (the files panel, as prefix+f), Agents (the agent manager, prefix+A), Context (prefix+C) and Browser (prefix+B); `[ui.toolbar] enabled` / `items`; reached by a click, by prefix+w's walk (the tools are its first stops), its name on the status line on hover or focus | the owner's direction for tend past herdr: an environment for working with agents — files, a browser, captured context — with the server between tools and agents |
+| Agent manager | none (herdr installs hooks into agents, not agents) | prefix+A or the toolbar's Agents: `agents.catalog` on the server finds each agent CLI in `internal/agents` (its executables, from `internal/integration` where it knows them; its `--version`) on the machine the panes run on, and offers the first install method its vendor documents whose program is here (script, npm, brew, pip). Installing asks, showing the command, and runs it in a tab of its own that goes on as a shell; nothing installs by itself. The commands were read from each vendor's page on 2026-09-23, with the page kept beside each | the owner's direction for tend past herdr |
+| Context buffer | none | the server keeps what tools captured (`internal/capture` says what an item is — url, element, text, file — and how it reads to an agent; `server/context.go` keeps the newest 50 for as long as the server runs). In over the automation socket (`context.add/list/remove/clear/send`, which a browser extension will call), `tend context add|list|clear`, and "Add to context" on a file in the files panel. The context panel (prefix+C or the toolbar) lists them with the chosen one's parts, copies one, and sends one to the pane this tab works with — the focused agent, else an agent in the tab, then the space — typed and not submitted. No tool talks to an agent directly | the owner's direction: the server between every tool and every agent |
+| Browser | none | the foundation (`server/browser.go`, `docs/BROWSER.md`): browsers attach over the automation socket (`browser.attach`, a stream of open/navigate/select commands) and hand back what they pick (`browser.context`, `browser.send_to_agent`), which goes into the context buffer. prefix+B or the toolbar's Browser asks for a page and sends it to an attached browser, or opens it on this machine (`[browser] command`, else the desktop's). `tend browser status|open|select|attach`, the last a stand-in for the browser. Not built yet: the extension and the native-messaging bridge it needs | the owner's direction: pages rendered by a real browser, what is picked in them reaching agents through the server |
+| Update manifest | on herdr.dev (`latest.json`, `preview.json`) | an asset of the latest GitHub release, at GitHub's fixed `releases/latest/download/latest.json` | tend's releases are on GitHub and nowhere else; the URL follows each release with nothing more to publish |
+| Installing an update | "detach, run `herdr update`, then run Herdr again to reconnect" | "run `tend update -handoff` in any pane; what is running keeps running" | tend's handoff replaces the server under its programs, so nothing needs leaving |
+| Sidebar "menu" button | opens the global menu | the same — before, it opened the current space's menu, which is on a right-click on the space | ported with the release notes, whose only way in is that menu |
+| Release notes markdown | `**` drawn as it is | `**bold**` drawn in bold | tend's notes are its GitHub release text, which uses it |
 | Integration assets | `.sh` and `.ps1` | Unix `.sh` / `.js` / `.ts` / Hermes plugin only | Windows PowerShell assets not ported yet; platform code is compile-gated when they are |
 
 ---
@@ -724,23 +757,26 @@ Ported (see "Ported, and checked"). Left:
   slow server would show as a slow redraw for that frame; herdr streams them.
 - Verified with a stand-in program, not with a real image viewer.
 
-### 14. Updater with channels — the mechanism is done; publishing is not
+### 14. Updater with channels — done, but for package managers and Windows
 
-Ported (see "Ported, and checked"). What is left is the owner's, not an
-agent's:
+Ported (see "Ported, and checked"): the manifest, `tend update`, the
+background check, the notice, "update ready", and the release notes.
 
-- **Publishing releases.** Releases are published on GitHub (v0.1.0,
-  v0.2.0): a tag, `make dist`'s four binaries and a SHA256SUMS, which
-  `site/install.sh` installs from the latest. No update manifest is
-  published with them, so until `[update] manifest` points at one, `tend
-  update` says so and stops; the install script is the way to upgrade.
-  Signing is not done.
-- **"Newer" versus "different".** herdr compares semantic versions; tend's
-  version is the git description it was built from, and two of those have no
-  order. `tend update` says the published build differs from this one.
-- Background checks, the "an update is available" notice, release notes on
-  first run after an update, Homebrew and the Windows installer path
-  (`update.rs` covers all of those).
+Publishing a release, which each one needs for the check to see it:
+
+1. Tag it (`git tag -a v0.4.0 -m v0.4.0`) and push the tag.
+2. `make dist` — the four binaries and SHA256SUMS, built on the tag.
+3. Write the notes in markdown (`### New`, `- item`, `` `code` ``,
+   `**bold**`): they are both the GitHub release's text and what the
+   notes panel shows.
+4. `make manifest NOTES=notes.md` — `dist/latest.json`.
+5. `gh release create v0.4.0 --notes-file notes.md dist/*` — latest.json
+   with the binaries, or no tend will hear of the release.
+
+Left: Homebrew, mise and Nix guidance (`update_install_command`), the
+preview channel's own manifest shape (`PreviewManifest`, build ids), the
+manifest's `announcement`, and the Windows installer path. Signing is not
+done.
 
 ### 15. Windows — large, and cannot be run from Linux
 
@@ -773,6 +809,29 @@ agent's:
   did not have).
 - Copy mode does not refuse a motion over content that changed underneath, as
   herdr does (`stale_content`).
+- herdr keeps the chrome a user arranged — the sidebar's width, the split
+  between its lists, the groups folded — in a preferences file
+  (`persist_chrome_preferences`); tend keeps them for as long as the client
+  runs. The sidebar's width is dragged by its right edge as in herdr
+  (`set_sidebar_width_from_column`, 18 to 36, a double click back to
+  `[ui] sidebar_width`), and starts at the setting each time.
+- The files panel opens in every tab by itself, herdr-sidebar's auto_open
+  (`ensure.rs`, run there on tab.created, workspace.created and
+  pane.focused): each time the client shows a tab without it, it docks one
+  beside the pane in focus and keeps the focus there; a tab where the panel
+  was closed — prefix+f, q, or its pane closed — keeps it closed until
+  prefix+f opens it there again (herdr-sidebar's snooze, kept by the client
+  rather than in files, so a new client starts without them). `[files]
+  auto_open`, on by default as there, and on the settings screen and the
+  gear. `pane.dock`'s `unless` makes the check and the dock one step on the
+  server, so two clients on one tab dock one panel.
+- The files panel starts a new build of itself when one is installed
+  (`internal/explorer/upgrade.go`): a `tend files` watches its binary on its
+  two-second tick and, once a new one has settled and the panel is only
+  showing something, execs it in the same pane with the tree's folders, the
+  selection and the view carried in `TEND_FILES_STATE`. herdr has no such
+  thing to copy; its sidebar is a plugin herdr restarts. `tend view`
+  (the preview) does not do it yet.
 
 ---
 

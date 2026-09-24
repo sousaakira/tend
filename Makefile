@@ -21,7 +21,7 @@ DEV_PKGS ?= ./...
 # SESSION is which session `make restart` acts on.
 SESSION ?= default
 
-.PHONY: toolchain run dev watch test test-race check fmt vet bench build install dist clean restart
+.PHONY: toolchain run dev watch test test-race check fmt vet bench build install dist manifest clean restart
 
 ## toolchain: fail with a usable message instead of "go: No such file or directory".
 toolchain:
@@ -139,7 +139,16 @@ dist: toolchain
 		$(STATIC) GOOS=$$os GOARCH=$$arch $(GO) build -ldflags "$(LDFLAGS)" \
 			-o "dist/tend-$$os-$$arch" ./cmd/tend || exit 1; \
 	done
+	@cd dist && sha256sum tend-* > SHA256SUMS
 	@ls -1 dist
+
+## manifest: write dist/latest.json, the update manifest, from the release's
+## notes: make manifest NOTES=notes.md (after make dist, on the release's tag).
+# The same notes are the GitHub release's text. Published with the release,
+# the manifest is what every tend's background check reads.
+manifest: toolchain
+	@test -n "$(NOTES)" || { echo "usage: make manifest NOTES=notes.md"; exit 1; }
+	$(GO) run ./tools/manifest -version $(VERSION) -notes $(NOTES) -dir dist
 
 clean:
 	rm -rf bin dist

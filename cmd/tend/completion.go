@@ -19,6 +19,8 @@ var commands = []struct{ name, help string }{
 	{"agent", "drive an agent: read, prompt, wait"},
 	{"pane", "drive a pane: read, type, wait"},
 	{"notify", "tell whoever is watching the session"},
+	{"context", "add to, list or clear what the agents are to be handed"},
+	{"browser", "the session's browsers: status, open, select, attach"},
 	{"terminal", "set or clear the outer window's title"},
 	{"layout", "save or rebuild a tab's arrangement"},
 	{"events", "follow a session's events"},

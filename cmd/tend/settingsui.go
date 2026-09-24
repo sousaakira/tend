@@ -76,6 +76,11 @@ var settingRows = []settingRow{
 		},
 	},
 	{
+		label: "files open", section: "files", key: "auto_open",
+		choices: []settingChoice{{"in every tab", "true"}, {"when asked (prefix+f)", "false"}},
+		value:   func(c config.Config) string { return config.Bool(c.FilesAutoOpen()) },
+	},
+	{
 		label: "files follow", section: "files", key: "follow",
 		choices: []settingChoice{{"the pane beside", "true"}, {"stay put", "false"}},
 		value:   func(c config.Config) string { return config.Bool(c.FilesFollow()) },

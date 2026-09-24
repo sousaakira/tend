@@ -124,6 +124,12 @@ func Run(m *Model, in *os.File, out io.Writer) error {
 			}
 		case <-resized:
 		case <-tick.C:
+			// A new build installed: hand over to it (upgrade.go). The
+			// deferred restores put the terminal back before the caller
+			// starts it.
+			if m.upgradeDue() {
+				return ErrUpgrade
+			}
 			// Not while a diff or a file is up: reading it again would move
 			// what is being read.
 			if m.mode == modeList {

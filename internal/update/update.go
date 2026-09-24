@@ -6,10 +6,10 @@
 // verified before it is put anywhere; and a replacement that is atomic, so a
 // failure leaves the binary that was working.
 //
-// Two things are deliberately not here. Nothing downloads on its own — an
-// update happens because somebody ran `tend update` — and there is no default
-// manifest URL, because tend has no published releases and inventing one would
-// point the updater at somebody else's.
+// Nothing downloads on its own, as in herdr: a background check (CheckLatest)
+// only says a release is there, and an update happens because somebody ran
+// `tend update`. The stable channel's manifest is published with each GitHub
+// release (StableManifest); the preview channel has none unless one is set.
 package update
 
 import (

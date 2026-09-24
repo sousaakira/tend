@@ -46,7 +46,34 @@ const (
 	MenuFiles    = "menu-files"
 	MenuMoveBack = "menu-move-back"
 	MenuMoveOn   = "menu-move-on"
+	// The global menu's, herdr's (`client/shell/global_menu.rs`): the
+	// settings screen, the list of keys, re-reading the settings, the
+	// release notes, and detaching.
+	MenuSettings = "menu-settings"
+	MenuKeybinds = "menu-keybinds"
+	MenuReload   = "menu-reload"
+	MenuWhatsNew = "menu-whats-new"
+	MenuDetach   = "menu-detach"
 )
+
+// GlobalMenu is herdr's global menu, which its sidebar's "menu" button
+// opens: settings, keybinds, reload config, the release notes when there
+// are any — "update ready" with a dot while they are a release newer than
+// the one running, "what's new" otherwise — and detach.
+func GlobalMenu(ready, notes bool, x, y int) Menu {
+	items := []MenuItem{
+		{Label: "settings", Action: MenuSettings},
+		{Label: "keybinds", Action: MenuKeybinds},
+		{Label: "reload config", Action: MenuReload},
+	}
+	switch {
+	case ready:
+		items = append(items, MenuItem{Label: "update ready ●", Action: MenuWhatsNew})
+	case notes:
+		items = append(items, MenuItem{Label: "what's new", Action: MenuWhatsNew})
+	}
+	return Menu{Title: "menu", Items: append(items, MenuItem{Label: "detach", Action: MenuDetach}), X: x, Y: y}
+}
 
 // MenuItem is one line of a menu.
 type MenuItem struct {

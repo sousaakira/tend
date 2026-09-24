@@ -72,6 +72,11 @@ const (
 	// and each client moves itself; a session nobody is attached to has
 	// nothing to move.
 	EventFocusRequest
+	// EventUpdateReady says the release check found a newer release: Title
+	// is its version, Body how to install it.
+	EventUpdateReady
+	// EventContextChanged says the context buffer changed (context.go).
+	EventContextChanged
 )
 
 func (k EventKind) String() string {
@@ -102,6 +107,10 @@ func (k EventKind) String() string {
 		return "notify"
 	case EventSessionChanged:
 		return "session-changed"
+	case EventUpdateReady:
+		return "update-ready"
+	case EventContextChanged:
+		return "context-changed"
 	default:
 		return "unknown"
 	}

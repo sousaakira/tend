@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"sort"
+	"time"
+
 	"github.com/sousaakira/tend/internal/agentview"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/ui"
-	"sort"
 )
 
 // Navigating a session means three things that are easy to confuse: which
@@ -413,13 +415,19 @@ func (t *tui) spacesSectionLocked() ui.SidebarSection {
 	} else {
 		rows = append(rows, t.spaceRowsLocked()...)
 	}
+	// herdr's launcher reads "● menu" while an update is ready, so the menu
+	// that says so is found.
+	menu := "menu"
+	if t.updateReadyLocked() != "" {
+		menu = "● menu"
+	}
 	return ui.SidebarSection{
 		Rows: rows,
 		Footer: []ui.SidebarRow{{
 			Kind:           ui.SidebarAction,
 			Label:          newLabel,
 			Action:         ui.ActionNewSpace,
-			Trailing:       "menu",
+			Trailing:       menu,
 			TrailingAction: ui.ActionOpenMenu,
 		}},
 		Scroll: t.spacesScroll,
@@ -962,6 +970,9 @@ type navTarget struct {
 	// machine's own row, which header says.
 	machine string
 	header  bool
+	// tool is set for a tool on the toolbar, the first places the cursor
+	// stops, above the spaces.
+	tool string
 }
 
 // targetOf returns where a row goes, and whether it goes anywhere. Headings,
@@ -1036,7 +1047,10 @@ func (t *tui) navigate(delta int) {
 	defer t.mu.Unlock()
 
 	rows := t.sidebarWalkLocked()
-	targets := make([]navTarget, 0, len(rows))
+	targets := make([]navTarget, 0, len(rows)+4)
+	for _, it := range t.toolbarLocked() {
+		targets = append(targets, navTarget{tool: it.ID})
+	}
 	for _, r := range rows {
 		if target, ok := targetOf(r); ok {
 			targets = append(targets, target)
@@ -1054,6 +1068,10 @@ func (t *tui) navigate(delta int) {
 		}
 	}
 	t.nav = targets[(at+delta+len(targets))%len(targets)]
+	if t.nav.tool != "" {
+		// A tool's name, as its hover says it, since the icon alone does not.
+		t.message, t.alert, t.msgAt = toolLabels[t.nav.tool], false, time.Now()
+	}
 	t.revealSidebarLocked()
 	t.dirty = true
 }
@@ -1116,6 +1134,8 @@ func (t *tui) navigateKey(key string) (bool, error) {
 		t.mu.Unlock()
 		t.leaveNavigate()
 		switch {
+		case target.tool != "":
+			return true, t.runTool(target.tool)
 		case target.header:
 			return true, t.clickMachine(target.machine)
 		case target.machine != "" && target.workspace != 0:

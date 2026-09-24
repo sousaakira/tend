@@ -227,6 +227,20 @@ type tui struct {
 	sidebarSplit int
 	// draggingSidebar marks that the divider is being moved.
 	draggingSidebar bool
+	// sidebarWidth is where the user dragged the sidebar's edge to, or zero
+	// for the settings' width; draggingSidebarWidth marks the drag, and
+	// lastEdgeClick is for herdr's double click back to the default. What
+	// one person is looking at, so the client's alone.
+	sidebarWidth         int
+	draggingSidebarWidth bool
+	lastEdgeClick        time.Time
+	// The files panel in every tab (tui_files.go): the tabs it was closed
+	// in, the tabs it was last seen in, and the docks under way.
+	filesSnoozed  map[uint64]bool
+	filesHad      map[uint64]bool
+	filesEnsuring map[uint64]bool
+	// toolbarHover is the tool under the pointer (tui_toolbar.go).
+	toolbarHover string
 	// folded names the groups shut in this client's sidebar. Which groups a
 	// space belongs to is a session fact; which of them this person has
 	// folded away is not, so it is never sent upstream.
@@ -242,7 +256,19 @@ type tui struct {
 	alert       bool
 	msgAt       time.Time
 	overlay     []string
-	zoom        bool
+	// notes is the release notes panel while it is up (tui_notes.go).
+	notes *ui.ReleaseNotesView
+	// agentMgr is the agent manager while it is up, and agentStatus the
+	// list it shows, in the same order (tui_agents.go).
+	agentMgr    *ui.AgentManagerView
+	agentStatus []proto.AgentStatus
+	// contextView is the context panel while it is up, and contextItems the
+	// items it lists, in its order (tui_context.go).
+	contextView  *ui.ContextView
+	contextItems []proto.ContextItem
+	// lastURL is the page last opened in the browser, the prompt's seed.
+	lastURL string
+	zoom    bool
 	// hostLight is whether the outer terminal is light, as it last said;
 	// hostExplicit whether it said so itself rather than by its background
 	// colour; hostAsked whether it was asked, so the reports are turned off
@@ -601,6 +627,7 @@ func (t *tui) refresh() error {
 
 	t.requestRepaint()
 	t.markDirty()
+	t.ensureFiles()
 	return nil
 }
 
@@ -623,7 +650,7 @@ func (t *tui) layoutAreaLocked() ui.Rect {
 	// The gutter is the sidebar's width, or the two columns kept for the
 	// handle that brings it back. One helper answers for both, so the panes
 	// cannot be laid out over something that is drawn.
-	left := ui.SidebarGutter(ui.Frame{Sidebar: t.sidebar}, t.cols)
+	left := ui.SidebarGutter(ui.Frame{Sidebar: t.sidebar, SidebarWidth: t.sidebarWidthLocked()}, t.cols)
 	return ui.Rect{
 		X:    left,
 		Y:    top,
@@ -759,6 +786,10 @@ func (t *tui) Event(ev proto.Event) {
 				_ = t.jumpToPane(ev.Pane)
 			}
 		}()
+	case proto.EventUpdateReady:
+		t.updateAnnounced(ev)
+	case proto.EventContextChanged:
+		t.contextChanged()
 	case proto.EventNotify:
 		// Somebody asked for the user to be told: a script, a hook, a plugin.
 		// It goes out the same ways an agent's own state does.
@@ -1032,15 +1063,20 @@ func (t *tui) buildFrame() ui.Frame {
 	}
 
 	frame := ui.Frame{
-		Session:   t.sessionLabel(),
-		Message:   t.message,
-		Alert:     t.alert,
-		Prefix:    t.keys.Armed(),
-		Overlay:   t.overlay,
-		Menu:      t.menu,
-		Navigator: t.navigatorFrameLocked(),
-		Toast:     t.toastFrameLocked(),
-		LinkHover: t.linkHover,
+		Session: t.sessionLabel(),
+		Message: t.message,
+		Alert:   t.alert,
+		Prefix:  t.keys.Armed(),
+		Overlay: t.overlay,
+		Menu:    t.menu,
+
+		ReleaseNotes: t.notes,
+		AgentManager: t.agentMgr,
+		Context:      t.contextView,
+		UpdateReady:  t.updateReadyLocked() != "",
+		Navigator:    t.navigatorFrameLocked(),
+		Toast:        t.toastFrameLocked(),
+		LinkHover:    t.linkHover,
 
 		WorktreeOpen: t.worktreeOpenFrameLocked(),
 		Selection:    t.sel,
@@ -1114,6 +1150,9 @@ func (t *tui) buildFrame() ui.Frame {
 
 	if t.sidebar {
 		frame.Sidebar = true
+		frame.SidebarWidth = t.sidebarWidthLocked()
+		frame.Toolbar = t.toolbarLocked()
+		frame.ToolbarIcons = t.config.Files.Icons
 		frame.Navigating = t.navigating
 		frame.SidebarSplit = t.sidebarSplit
 		frame.Spaces = t.spacesSectionLocked()
@@ -1219,6 +1258,16 @@ func (t *tui) handleInput(data []byte) error {
 	// The welcome is over everything and takes every key, as herdr's does.
 	if t.onboardingUp() {
 		return t.onboardingInput(data)
+	}
+	// So is the release notes panel while it is up, as herdr's is.
+	if t.notesUp() {
+		return t.notesInput(data)
+	}
+	if t.agentManagerUp() {
+		return t.agentManagerInput(data)
+	}
+	if t.contextUp() {
+		return t.contextInput(data)
 	}
 	forward, commands, mice := t.keys.FeedAll(data)
 	if len(forward) > 0 {
@@ -1413,6 +1462,16 @@ func (t *tui) command(action ui.Action) error {
 
 	case ui.CommandRenameSpace:
 		t.startPrompt(promptRenameSpace)
+		return nil
+
+	case ui.CommandAgentManager:
+		return t.openAgentManager()
+
+	case ui.CommandContext:
+		return t.openContext()
+
+	case ui.CommandBrowser:
+		t.startPrompt(promptOpenURL)
 		return nil
 
 	case ui.CommandNavigator:

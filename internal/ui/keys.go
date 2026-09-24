@@ -90,6 +90,15 @@ const (
 	// CommandNavigator opens herdr's navigator: every space, tab and pane in
 	// a popup, searchable and filtered by state (herdr's goto, prefix+g).
 	CommandNavigator
+	// CommandAgentManager opens the agent manager: the agent CLIs tend knows
+	// of, found or not, and a way to install each (tend's own, prefix+A).
+	CommandAgentManager
+	// CommandContext opens the context panel: what tools captured, to copy
+	// or send to an agent (tend's own, prefix+C).
+	CommandContext
+	// CommandBrowser asks for a page and opens it in the browser (tend's
+	// own, prefix+B).
+	CommandBrowser
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
@@ -191,6 +200,12 @@ func (c Command) String() string {
 		return "files"
 	case CommandNavigator:
 		return "navigator"
+	case CommandAgentManager:
+		return "agent-manager"
+	case CommandContext:
+		return "context"
+	case CommandBrowser:
+		return "browser"
 	default:
 		return "none"
 	}
@@ -229,6 +244,9 @@ var Keys = []struct {
 	{"G", CommandNewWorktree, "new worktree"},
 	{"( )", CommandNextSpace, "switch space"},
 	{"a", CommandToggleAgents, "show agents"},
+	{"A", CommandAgentManager, "agent manager: find, install"},
+	{"C", CommandContext, "context: captured, to send to an agent"},
+	{"B", CommandBrowser, "open a page in the browser"},
 	{"g", CommandNavigator, "find a space, tab or pane"},
 	{"w", CommandNavigate, "walk the sidebar"},
 	{"m", CommandMenu, "menu"},
@@ -315,6 +333,9 @@ func DefaultBindings() map[string]Command {
 		")":         CommandNextSpace,
 		"(":         CommandPrevSpace,
 		"a":         CommandToggleAgents,
+		"A":         CommandAgentManager,
+		"C":         CommandContext,
+		"B":         CommandBrowser,
 		"g":         CommandNavigator, "w": CommandNavigate,
 		"e": CommandEditScrollback,
 		"f": CommandFiles,

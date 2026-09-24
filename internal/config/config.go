@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/sousaakira/tend/internal/update"
 )
 
 // Config is everything tend can be told.
@@ -30,6 +32,7 @@ type Config struct {
 	Worktrees  Worktrees `toml:"worktrees"`
 	Notify     Notify    `toml:"notify"`
 	Update     Update    `toml:"update"`
+	Browser    Browser   `toml:"browser"`
 	Sound      Sound     `toml:"sound"`
 	Files      Files     `toml:"files"`
 }
@@ -52,7 +55,13 @@ type Files struct {
 	// Dock is the edge it opens on: "right" (the default, the owner's
 	// choice) or "left".
 	Dock string `toml:"dock"`
+	// AutoOpen docks the panel in every tab as it is shown, herdr-sidebar's
+	// auto_open, save in a tab where it was closed. Nil is on, as there.
+	AutoOpen *bool `toml:"auto_open"`
 }
+
+// FilesAutoOpen is whether the panel opens by itself in each tab.
+func (c Config) FilesAutoOpen() bool { return c.Files.AutoOpen == nil || *c.Files.AutoOpen }
 
 // FilesOnLeft is whether the files panel opens on the left edge: only when
 // the settings say so.
@@ -69,22 +78,34 @@ func (c Config) FilesWidth() int {
 	return c.Files.Width
 }
 
-// Update configures where `tend update` looks.
-//
-// There is no default URL. tend publishes no releases, and pointing the
-// updater at a guess would have it install somebody else's binary.
+// Browser configures the browser tend opens pages in when none is attached
+// to the session: Command is the program and its arguments, the page's URL
+// added last; empty is the desktop's own (xdg-open, open on a Mac).
+type Browser struct {
+	Command string `toml:"command"`
+}
+
+// Update configures where `tend update` and the background check look.
 type Update struct {
 	// Channel is "stable" or "preview".
 	Channel string `toml:"channel"`
 	// Manifest and Preview are the URLs of the two channels' manifests.
+	// Stable's is the one published with tend's GitHub releases unless
+	// another is set; preview has none unless one is.
 	Manifest string `toml:"manifest"`
 	Preview  string `toml:"preview"`
+	// VersionCheck is herdr's version_check: look for a newer release in
+	// the background, and say when there is one. Nothing is installed.
+	VersionCheck bool `toml:"version_check"`
 }
 
 // ManifestURL is the manifest for the configured channel.
 func (c Config) ManifestURL() string {
 	if c.Update.Channel == "preview" {
 		return c.Update.Preview
+	}
+	if c.Update.Manifest == "" {
+		return update.StableManifest
 	}
 	return c.Update.Manifest
 }
@@ -200,6 +221,58 @@ type UI struct {
 	// the row back while a space has one tab. Both herdr's.
 	TabBarPosition          string `toml:"tab_bar_position"`
 	HideTabBarWhenSingleTab bool   `toml:"hide_tab_bar_when_single_tab"`
+	// SidebarWidth is the sidebar's width in columns, and SidebarMinWidth
+	// and SidebarMaxWidth the bounds dragging its edge keeps it within:
+	// herdr's, 26, 18 and 36.
+	SidebarWidth    int `toml:"sidebar_width"`
+	SidebarMinWidth int `toml:"sidebar_min_width"`
+	SidebarMaxWidth int `toml:"sidebar_max_width"`
+	// Toolbar is the row of tools over the sidebar's lists.
+	Toolbar Toolbar `toml:"toolbar"`
+}
+
+// Toolbar configures the sidebar's tools: whether they are shown, and
+// which, in order. Nil Enabled is on; no Items is every tool.
+type Toolbar struct {
+	Enabled *bool    `toml:"enabled"`
+	Items   []string `toml:"items"`
+}
+
+// ToolbarTools are the tools a toolbar can hold, in their default order.
+var ToolbarTools = []string{"files", "agents", "browser", "context"}
+
+// ToolbarItems is the tools the sidebar shows, none when it is off.
+func (c Config) ToolbarItems() []string {
+	if c.UI.Toolbar.Enabled != nil && !*c.UI.Toolbar.Enabled {
+		return nil
+	}
+	if len(c.UI.Toolbar.Items) == 0 {
+		return ToolbarTools
+	}
+	return c.UI.Toolbar.Items
+}
+
+// SidebarBounds are the least and most a dragged sidebar may be, herdr's
+// validated_sidebar_bounds: its defaults when either is unset.
+func (c Config) SidebarBounds() (int, int) {
+	lo, hi := c.UI.SidebarMinWidth, c.UI.SidebarMaxWidth
+	if lo <= 0 {
+		lo = 18
+	}
+	if hi <= 0 {
+		hi = 36
+	}
+	return lo, hi
+}
+
+// SidebarWidth is the sidebar's width from the settings, within its bounds.
+func (c Config) SidebarWidth() int {
+	w := c.UI.SidebarWidth
+	if w <= 0 {
+		w = 26
+	}
+	lo, hi := c.SidebarBounds()
+	return min(max(w, lo), hi)
 }
 
 // Theme names the colours. Name picks one of the palettes in ThemeNames; each
@@ -254,7 +327,7 @@ func Defaults() Config {
 		Server:    Server{DetectInterval: "150ms", Persist: true},
 		Worktrees: Worktrees{Directory: "~/.tend/worktrees"},
 		Notify:    Notify{Toasts: "tend"},
-		Update:    Update{Channel: "stable"},
+		Update:    Update{Channel: "stable", VersionCheck: true},
 	}
 }
 
@@ -416,6 +489,18 @@ func (c Config) validate() error {
 	case "", "spaces", "workspaces", "priority":
 	default:
 		return fmt.Errorf("ui.agent_panel_sort is %q; use \"spaces\" or \"priority\"", c.UI.AgentPanelSort)
+	}
+	for _, item := range c.UI.Toolbar.Items {
+		known := false
+		for _, tool := range ToolbarTools {
+			known = known || item == tool
+		}
+		if !known {
+			return fmt.Errorf("ui.toolbar.items has %q; the tools are %s", item, strings.Join(ToolbarTools, ", "))
+		}
+	}
+	if lo, hi := c.SidebarBounds(); lo < 4 || hi < lo {
+		return fmt.Errorf("ui.sidebar_min_width and sidebar_max_width are %d and %d; the least must be at least 4 and no more than the most", lo, hi)
 	}
 	switch c.UI.TabBarPosition {
 	case "", "top", "bottom":
@@ -658,6 +743,12 @@ grouped = false
 # tab_bar_position = "top"
 # hide_tab_bar_when_single_tab = false
 
+# The sidebar's width, and the least and most dragging its right edge can
+# make it. A double click on the edge puts it back to sidebar_width.
+# sidebar_width = 26
+# sidebar_min_width = 18
+# sidebar_max_width = 36
+
 # What goes at the right end of the tab bar, in order. Types: zoom (ZOOM
 # while a pane is zoomed), hostname, datetime (format is strftime, "%H:%M"
 # by default), text, and command (the last line it prints, run every
@@ -670,6 +761,12 @@ grouped = false
 #   { type = "command", command = "git -C ~/src/app branch --show-current" },
 # ]
 # tab_bar_right_separator = " "
+
+# The tools over the sidebar's lists: files (the files panel, as prefix+f),
+# agents, browser and context. items picks which, in order.
+# [ui.toolbar]
+# enabled = true
+# items = ["files", "agents", "browser", "context"]
 
 [ui.theme]
 # A named theme: catppuccin, catppuccin-latte, terminal, tokyo-night,
@@ -728,11 +825,14 @@ focused = false
 
 [update]
 # Which channel "tend update" follows, and where each one's manifest is.
-# There is no default URL: tend publishes no releases, so an updater pointed
-# at a guess would install somebody else's binary.
+# Stable's is published with each release on GitHub; set manifest only to
+# follow somewhere else. Preview has none unless you set one.
 channel = "stable"
-# manifest = "https://example.invalid/tend/latest.json"
+# manifest = "https://github.com/sousaakira/tend/releases/latest/download/latest.json"
 # preview = "https://example.invalid/tend/preview.json"
+# Look for a newer release in the background and say when there is one:
+# a notice, and "update ready" in the status bar. Nothing is installed.
+version_check = true
 
 [sound]
 # Make a sound as well. With no file named, this is the terminal bell.

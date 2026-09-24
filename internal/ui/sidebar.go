@@ -124,9 +124,32 @@ func (r SidebarRow) height() int {
 	return 1
 }
 
-// SidebarWidth is how many columns the sidebar takes. Wide enough for a
+// SidebarWidth is how many columns the sidebar takes unless a frame says
+// otherwise (Frame.SidebarWidth): herdr's default. Wide enough for a
 // repository name and a state marker, narrow enough to cost a pane little.
 const SidebarWidth = 26
+
+// The bounds a dragged sidebar is kept within, herdr's sidebar_min_width
+// and sidebar_max_width defaults.
+const (
+	SidebarMinWidth = 18
+	SidebarMaxWidth = 36
+)
+
+// sidebarWidthOf is the sidebar's width in a frame.
+func sidebarWidthOf(f Frame) int {
+	if f.SidebarWidth > 0 {
+		return f.SidebarWidth
+	}
+	return SidebarWidth
+}
+
+// SidebarWidthAt is the width a drag of the sidebar's edge to column x
+// asks for, herdr's set_sidebar_width_from_column: the edge under the
+// pointer, kept within min and max.
+func SidebarWidthAt(x, minWidth, maxWidth int) int {
+	return min(max(x+1, minWidth), maxWidth)
+}
 
 // SidebarColumns is how many columns the sidebar occupies in a frame, which is
 // none when it is hidden.
@@ -137,7 +160,7 @@ func SidebarColumns(f Frame, cols int) int {
 	if !f.Sidebar {
 		return 0
 	}
-	return min(SidebarWidth, cols)
+	return min(sidebarWidthOf(f), cols)
 }
 
 // TrailingStart is the column where a row's trailing label begins, or -1 when
@@ -145,11 +168,11 @@ func SidebarColumns(f Frame, cols int) int {
 //
 // Drawing and hit-testing both ask this, so a button cannot be drawn in one
 // place and clicked in another.
-func TrailingStart(r SidebarRow) int {
+func TrailingStart(r SidebarRow, width int) int {
 	if r.Trailing == "" {
 		return -1
 	}
-	at := SidebarWidth - 2 - len([]rune(r.Trailing))
+	at := width - 2 - len([]rune(r.Trailing))
 	if at <= 1 {
 		return -1
 	}
@@ -212,7 +235,10 @@ func agentsCeiling(height int) int { return max(agentsFloor(height), height/2) }
 // them and a session with twenty does not bury the agents.
 func SidebarSplitAt(f Frame, rows int) int {
 	height := SidebarHeight(rows)
-	if height < 2*sidebarMinSection+1 {
+	// The toolbar, when there is one, is above both lists: they share what
+	// is under it.
+	top := toolbarTop(f, rows)
+	if height-top < 2*sidebarMinSection+1 {
 		// No room to divide. The spaces take what there is; the agents list
 		// is the one that can be reached by other means.
 		return height
@@ -233,7 +259,7 @@ func SidebarSplitAt(f Frame, rows int) int {
 		want = min(max(want, agentsFloor(height)), agentsCeiling(height))
 		at = height - want - 1
 	}
-	return min(max(at, sidebarMinSection), height-sidebarMinSection-1)
+	return min(max(at, top+sidebarMinSection), height-sidebarMinSection-1)
 }
 
 // sectionHeight is how many lines a section's entries would take in full.
@@ -272,11 +298,12 @@ func scrollable(s SidebarSection, height int) (pinned []SidebarRow, rest []Sideb
 // A divider of -1 means there is no room for one.
 func sidebarRegions(f Frame, rows int) (spaces, agents Rect, divider int) {
 	height := SidebarHeight(rows)
+	top := toolbarTop(f, rows)
 	at := SidebarSplitAt(f, rows)
 	if at >= height {
-		return Rect{Y: 0, Rows: height}, Rect{}, -1
+		return Rect{Y: top, Rows: height - top}, Rect{}, -1
 	}
-	return Rect{Y: 0, Rows: at},
+	return Rect{Y: top, Rows: at - top},
 		Rect{Y: at + 1, Rows: height - at - 1},
 		at
 }
@@ -339,6 +366,9 @@ func drawSidebar(dst *vt.Grid, f Frame, theme Theme) {
 		row.SetCell(width-1, vt.Cell{R: '│', Style: theme.Border, Width: 1})
 	}
 
+	if toolbarShown(f, dst.Rows()) {
+		drawToolbar(dst, f, width, theme)
+	}
 	spaces, agents, divider := sidebarRegions(f, dst.Rows())
 	drawSection(dst, f.Spaces, spaces, width, theme)
 	if divider >= 0 {
@@ -394,7 +424,7 @@ func SidebarHandleAt(f Frame, x, y, rows int) bool {
 	if !f.Sidebar {
 		return y == 0 && x < ShowHandleWidth
 	}
-	width := SidebarColumns(f, SidebarWidth)
+	width := sidebarWidthOf(f)
 	return y == hideHandleRow(f, rows) && x >= width-2 && x < width
 }
 
@@ -507,7 +537,7 @@ func drawSidebarRow(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
 		}
 		x := writeString(dst, 1, y, marker, style, limit)
 		writeString(dst, x, y, truncate(r.Label, limit-x), style, limit)
-		if at := TrailingStart(r); at >= 0 {
+		if at := TrailingStart(r, limit+1); at >= 0 {
 			writeString(dst, at, y, r.Trailing, machineSignalStyle(r.State, theme), limit)
 		}
 
@@ -564,7 +594,7 @@ func MachineSignal(state string) string {
 // drawTrailing puts a row's button against the right edge. A toggle belongs
 // at the edge of what it toggles, not trailing the words that name it.
 func drawTrailing(dst *vt.Grid, r SidebarRow, y, limit int, theme Theme) {
-	at := TrailingStart(r)
+	at := TrailingStart(r, limit+1)
 	if at < 0 {
 		return
 	}
@@ -715,6 +745,11 @@ const (
 	SidebarAgentsList
 	// SidebarDivider is the line between them, which can be dragged.
 	SidebarDivider
+	// SidebarEdge is the rule down the sidebar's right edge, which dragged
+	// sets its width.
+	SidebarEdge
+	// SidebarToolbar is the toolbar over the lists (toolbar.go).
+	SidebarToolbar
 )
 
 // SidebarPlaceAt says what is under a point.
@@ -722,8 +757,17 @@ const (
 // Drawing and hit-testing share sidebarRegions, so a click cannot land
 // somewhere other than what it looks like it is on.
 func SidebarPlaceAt(f Frame, x, y, rows int) SidebarPlace {
-	if !f.Sidebar || x >= SidebarColumns(f, SidebarWidth) || y >= SidebarHeight(rows) {
+	if !f.Sidebar || x >= sidebarWidthOf(f) || y >= SidebarHeight(rows) {
 		return SidebarNowhere
+	}
+	// The rule down the right edge is herdr's sidebar divider: dragged, it
+	// sets the sidebar's width. Not on the hide handle's row, whose corner
+	// is the handle.
+	if x == sidebarWidthOf(f)-1 && !SidebarHandleAt(f, x, y, rows) {
+		return SidebarEdge
+	}
+	if y < toolbarTop(f, rows) {
+		return SidebarToolbar
 	}
 	spaces, agents, divider := sidebarRegions(f, rows)
 	switch {
@@ -744,23 +788,24 @@ func SidebarPlaceAt(f Frame, x, y, rows int) SidebarPlace {
 // which is what it looks like it should do.
 func SidebarRowAt(f Frame, x, y, rows int) (SidebarRow, bool) {
 	spaces, agents, _ := sidebarRegions(f, rows)
+	width := sidebarWidthOf(f)
 	switch SidebarPlaceAt(f, x, y, rows) {
 	case SidebarSpacesList:
-		return rowInSection(f.Spaces, spaces, x, y)
+		return rowInSection(f.Spaces, spaces, width, x, y)
 	case SidebarAgentsList:
-		return rowInSection(f.Agents, agents, x, y)
+		return rowInSection(f.Agents, agents, width, x, y)
 	}
 	return SidebarRow{}, false
 }
 
-func rowInSection(s SidebarSection, region Rect, x, y int) (SidebarRow, bool) {
+func rowInSection(s SidebarSection, region Rect, width, x, y int) (SidebarRow, bool) {
 	// The footer is looked at first: it is drawn over the bottom of the
 	// region, and a click there means the footer, not whatever entry would
 	// have reached that far.
 	at := region.Y + region.Rows - footerHeight(s)
 	for _, r := range s.Footer {
 		if y >= at && y < at+r.height() {
-			return resolveTrailing(r, x, y, at), true
+			return resolveTrailing(r, width, x, y, at), true
 		}
 		at += r.height()
 	}
@@ -773,7 +818,7 @@ func rowInSection(s SidebarSection, region Rect, x, y int) (SidebarRow, bool) {
 	for _, r := range walk {
 		height := r.height()
 		if y >= at && y < at+height {
-			return resolveTrailing(r, x, y, at), true
+			return resolveTrailing(r, width, x, y, at), true
 		}
 		at += height
 	}
@@ -783,8 +828,8 @@ func rowInSection(s SidebarSection, region Rect, x, y int) (SidebarRow, bool) {
 // resolveTrailing points a row at its trailing button when the click was on
 // one. Without it the "menu" beside "new" would create a space, which is the
 // one thing somebody reaching for a menu did not ask for.
-func resolveTrailing(r SidebarRow, x, y, top int) SidebarRow {
-	if start := TrailingStart(r); r.TrailingAction != "" && start >= 0 && x >= start && y == top {
+func resolveTrailing(r SidebarRow, width, x, y, top int) SidebarRow {
+	if start := TrailingStart(r, width); r.TrailingAction != "" && start >= 0 && x >= start && y == top {
 		r.Action = r.TrailingAction
 	}
 	return r

@@ -890,3 +890,132 @@ func TestOpeningAWorktreeFromThePopup(t *testing.T) {
 		return !strings.Contains(s, "checkouts") && strings.Contains(a.sidebarText(), "feature/side")
 	})
 }
+
+// TestAContextCaptureReachesThePaneThroughTheServer: what a tool hands the
+// server — here `tend context add`, over the automation socket a browser
+// extension will use — shows in the context panel (prefix+C) with its parts,
+// and Send to Agent types it into the pane this tab works with, without
+// submitting it. If it regresses, a capture has no way from the tool that
+// made it to the agent that needs it.
+func TestAContextCaptureReachesThePaneThroughTheServer(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, []string{"attach", "-s", "ctx"}, pty.Options{Size: pty.Size{Cols: 110, Rows: 34}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(110, 34, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stopSession(t, "ctx")
+	})
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	add := exec.Command(bin, "context", "add", "-s", "ctx", "-source", "browser", "-url", "https://example.com/login",
+		"-title", "Login", "-selector", "#email", "-tag", "input")
+	add.Env = env
+	if out, err := add.CombinedOutput(); err != nil {
+		t.Fatalf("context add: %v\n%s", err, out)
+	}
+
+	a.send(t, "\x02C")
+	a.waitForScreen(t, "the capture in the context panel", func(s string) bool {
+		return strings.Contains(s, "CONTEXT") && strings.Contains(s, "[element] #email") &&
+			strings.Contains(s, "SELECTED ELEMENT") && strings.Contains(s, "https://example.com/login")
+	})
+	a.send(t, "s")
+	a.waitForScreen(t, "typed into the pane, the panel gone", func(s string) bool {
+		return strings.Contains(s, "Context captured in tend:") && !strings.Contains(s, "SELECTED ELEMENT")
+	})
+}
+
+// TestABrowserAttachedTakesThePagesAndItsCapturesReachThePane: a browser
+// attached over the socket — `tend browser attach` standing in for the
+// extension's bridge — is sent the page prefix+B asks for, and an element it
+// sends to an agent is typed into the pane. If it regresses, the browser's
+// road to and from the session is cut somewhere along it.
+func TestABrowserAttachedTakesThePagesAndItsCapturesReachThePane(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh")
+	bin := buildBinary(t)
+	p, err := pty.Start(bin, []string{"attach", "-s", "web"}, pty.Options{Size: pty.Size{Cols: 110, Rows: 34}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(110, 34, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() {
+		_ = p.Close()
+		stopSession(t, "web")
+	})
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+
+	browser := exec.Command(bin, "browser", "attach", "-s", "web", "-name", "stand-in")
+	browser.Env = env
+	out, err := browser.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := browser.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = browser.Process.Kill(); _ = browser.Wait() })
+	lines := make(chan string, 8)
+	go func() {
+		r := bufio.NewReader(out)
+		for {
+			line, err := r.ReadString('\n')
+			if err != nil {
+				return
+			}
+			lines <- line
+		}
+	}()
+	// Attached once status names it.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		st := exec.Command(bin, "browser", "status", "-s", "web")
+		st.Env = env
+		if got, _ := st.Output(); strings.Contains(string(got), "stand-in") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the stand-in never attached")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	a.send(t, "\x02B")
+	a.waitForScreen(t, "the page prompt", func(s string) bool { return strings.Contains(s, "open in browser") })
+	a.send(t, "example.com/login\r")
+	select {
+	case line := <-lines:
+		if !strings.Contains(line, `"action":"open"`) || !strings.Contains(line, `"url":"https://example.com/login"`) {
+			t.Errorf("the browser was sent %s", line)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the browser was sent nothing")
+	}
+
+	apiPath, err := transport.APISocketPath("web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn := dialAPISocket(t, apiPath)
+	defer conn.Close()
+	r := bufio.NewReader(conn)
+	list := callAPI(t, conn, r, `{"id":"list","method":"pane.list"}`)
+	panes, _ := list["result"].(map[string]any)["panes"].([]any)
+	pane, _ := panes[0].(map[string]any)["pane_id"].(string)
+	reply := callAPI(t, conn, r, `{"id":"s","method":"browser.send_to_agent","params":{"url":"https://example.com/login","selector":"#email","tag":"input","pane_id":"`+pane+`"}}`)
+	if reply["error"] != nil {
+		t.Fatalf("send_to_agent: %v", reply)
+	}
+	a.waitForScreen(t, "the capture typed into the pane", func(s string) bool {
+		return strings.Contains(s, "Context captured in tend:") && strings.Contains(s, "(from browser)")
+	})
+}

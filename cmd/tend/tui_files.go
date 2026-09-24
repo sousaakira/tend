@@ -43,6 +43,10 @@ func (t *tui) toggleFiles() error {
 
 	switch {
 	case panel != 0 && panel == focus:
+		// Closed by hand: the tab stays without it (ensureFiles).
+		t.mu.Lock()
+		t.snoozeFilesLocked(t.tab)
+		t.mu.Unlock()
 		return t.client.ClosePane(panel)
 	case panel != 0:
 		t.focusPane(panel)
@@ -52,12 +56,10 @@ func (t *tui) toggleFiles() error {
 	}
 
 	t.mu.Lock()
-	cols, onRight := t.config.FilesWidth(), !t.config.FilesOnLeft()
+	// Opened by hand: the tab is back to having it on its own.
+	delete(t.filesSnoozed, t.tab)
+	share, onRight := t.filesShareLocked(right-left), !t.config.FilesOnLeft()
 	t.mu.Unlock()
-	share := 0.25
-	if width := right - left; width > 0 {
-		share = float64(cols) / float64(width)
-	}
 	created, err := t.client.DockPane(focus, share, onRight, proto.PaneSpec{Command: filesCommand, Title: filesTitle})
 	if err != nil {
 		if t.reportStaleServer(err) {
@@ -69,4 +71,95 @@ func (t *tui) toggleFiles() error {
 	t.focus = created
 	t.mu.Unlock()
 	return t.refresh()
+}
+
+// filesShareLocked is the part of a tab width wide the panel opens at.
+func (t *tui) filesShareLocked(width int) float64 {
+	if width <= 0 {
+		return 0.25
+	}
+	return float64(t.config.FilesWidth()) / float64(width)
+}
+
+// The panel in every tab, herdr-sidebar's auto_open (its ensure.rs, run on
+// tab.created, workspace.created and pane.focused): each time the client
+// shows a tab without the panel, it docks one beside the pane in focus and
+// leaves the focus where it was — save in a tab where the panel was closed,
+// by prefix+f, by q in it or by closing its pane, which keeps it closed
+// until prefix+f opens it there again (herdr-sidebar's snooze). The server
+// docks nothing when the tab has one already (pane.dock's unless), so two
+// clients showing one tab cannot dock two.
+
+// snoozeFilesLocked marks a tab the panel was closed in.
+func (t *tui) snoozeFilesLocked(tab uint64) {
+	if t.filesSnoozed == nil {
+		t.filesSnoozed = map[uint64]bool{}
+	}
+	t.filesSnoozed[tab] = true
+	delete(t.filesHad, tab)
+}
+
+// ensureFiles docks the panel in the tab shown when it should have one.
+// Called after each refresh, which is when the tab shown or its panes may
+// have changed.
+func (t *tui) ensureFiles() {
+	t.mu.Lock()
+	tab, focus := t.tab, t.focus
+	if tab == 0 || focus == 0 {
+		t.mu.Unlock()
+		return
+	}
+	inTab := map[uint64]bool{}
+	left, right := 0, 0
+	for i, r := range t.rects {
+		inTab[r.Pane] = true
+		if i == 0 || r.X < left {
+			left = r.X
+		}
+		right = max(right, r.X+r.Cols)
+	}
+	has := false
+	for _, p := range t.snap.Panes {
+		if inTab[p.ID] && p.Title == filesTitle {
+			has = true
+		}
+	}
+	if t.filesHad == nil {
+		t.filesHad = map[uint64]bool{}
+	}
+	switch {
+	case has:
+		t.filesHad[tab] = true
+		t.mu.Unlock()
+		return
+	case t.filesHad[tab]:
+		// It was here and is gone: closed, however it was.
+		t.snoozeFilesLocked(tab)
+	}
+	if !t.config.FilesAutoOpen() || t.filesSnoozed[tab] || t.filesEnsuring[tab] ||
+		t.zoom || t.popupRect != nil || !t.serverHas(proto.FeatureDockUnless) {
+		t.mu.Unlock()
+		return
+	}
+	if t.filesEnsuring == nil {
+		t.filesEnsuring = map[uint64]bool{}
+	}
+	t.filesEnsuring[tab] = true
+	share, onRight := t.filesShareLocked(right-left), !t.config.FilesOnLeft()
+	t.mu.Unlock()
+
+	go func() {
+		_, _, err := t.client.DockPaneUnless(focus, share, onRight,
+			proto.PaneSpec{Command: filesCommand, Title: filesTitle}, filesTitle)
+		t.mu.Lock()
+		delete(t.filesEnsuring, tab)
+		t.mu.Unlock()
+		if err != nil {
+			t.setMessage("files panel: "+err.Error(), true)
+			return
+		}
+		if err := t.refresh(); err != nil {
+			t.setMessage(err.Error(), true)
+		}
+	}()
 }

@@ -404,3 +404,58 @@ type WorktreeRemoveParams struct {
 	Force       bool   `json:"force"`
 	Trust       bool   `json:"trust_repository"`
 }
+
+// ContextAddParams is what MethodContextAdd takes: one captured item. Kind
+// is url, element, text or file; the fields for it are required by kind.
+type ContextAddParams struct {
+	Kind       string            `json:"kind" schema:"required"`
+	Source     string            `json:"source"`
+	Title      string            `json:"title"`
+	URL        string            `json:"url"`
+	Selector   string            `json:"selector"`
+	Tag        string            `json:"tag"`
+	Text       string            `json:"text"`
+	Path       string            `json:"path"`
+	Attributes map[string]string `json:"attributes"`
+}
+
+// ContextIDsParams names items of the buffer, for MethodContextRemove.
+type ContextIDsParams struct {
+	IDs []uint64 `json:"ids"`
+}
+
+// ContextSendParams sends items (none: all) to a pane, typed in and not
+// submitted.
+type ContextSendParams struct {
+	PaneID string   `json:"pane_id" schema:"required"`
+	IDs    []uint64 `json:"ids"`
+}
+
+// BrowserAttachParams attaches a browser; Name says which, for status.
+type BrowserAttachParams struct {
+	Name string `json:"name"`
+}
+
+// BrowserURLParams is a page to open or go to.
+type BrowserURLParams struct {
+	URL string `json:"url" schema:"required"`
+}
+
+// BrowserSelectParams turns element picking on or off.
+type BrowserSelectParams struct {
+	On bool `json:"on"`
+}
+
+// BrowserCaptureParams is what a browser picked: an element by default,
+// with the page it is on; PaneID, for send_to_agent, is where it goes (none:
+// the pane the user was last in).
+type BrowserCaptureParams struct {
+	Kind       string            `json:"kind"`
+	Title      string            `json:"title"`
+	URL        string            `json:"url"`
+	Selector   string            `json:"selector"`
+	Tag        string            `json:"tag"`
+	Text       string            `json:"text"`
+	Attributes map[string]string `json:"attributes"`
+	PaneID     string            `json:"pane_id"`
+}

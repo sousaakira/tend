@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sousaakira/tend/internal/pty"
 	"github.com/sousaakira/tend/internal/vt"
@@ -122,7 +123,7 @@ func TestAFileChosenInThePanelOpensInTheEditorInATab(t *testing.T) {
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
 	env := append(os.Environ(),
 		"TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh",
-		"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"),
+		"TEND_CONFIG="+quietConfig(t),
 		// An editor that shows the file and stays, so the tab is there to
 		// be seen.
 		`EDITOR=sh -c 'cat "$0"; sleep 60'`, "VISUAL=",
@@ -192,7 +193,7 @@ func TestTextFoundInThePanelOpensTheEditorOnItsLine(t *testing.T) {
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
 	env := append(os.Environ(),
 		"TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh",
-		"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"),
+		"TEND_CONFIG="+quietConfig(t),
 		"PATH="+fake+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"EDITOR=vi", "VISUAL=",
 	)
@@ -241,7 +242,7 @@ func TestThePanelFollowsThePaneBesideItToAnotherProject(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(runtimeDir) })
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
 	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh",
-		"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"))
+		"TEND_CONFIG="+quietConfig(t))
 	bin := buildBinary(t)
 	p, err := pty.Start(bin, []string{"attach", "-s", "follow"}, pty.Options{Size: pty.Size{Cols: 130, Rows: 30}, Env: env})
 	if err != nil {
@@ -285,7 +286,7 @@ func TestThePanelPreviewsInATabAndReusesIt(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(runtimeDir) })
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
 	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh",
-		"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"))
+		"TEND_CONFIG="+quietConfig(t))
 	bin := buildBinary(t)
 	p, err := pty.Start(bin, []string{"attach", "-s", "preview"}, pty.Options{Size: pty.Size{Cols: 140, Rows: 30}, Env: env})
 	if err != nil {
@@ -368,5 +369,101 @@ func TestThePanelKeepsItsIconsBesideASettingItDoesNotKnow(t *testing.T) {
 	a.send(t, "\x02f")
 	a.waitForScreen(t, "the panel with icons", func(s string) bool {
 		return strings.Contains(s, "📁 src") || strings.Contains(s, "📁") && strings.Contains(s, "src")
+	})
+}
+
+// TestAnOpenPanelMovesToANewBuildByItself: with the panel open, a new tend
+// binary put where it was started from replaces it in the same process and
+// pane, with the folder that was open still open. If it regresses, every
+// install needs the panel closed and opened again before it shows.
+func TestAnOpenPanelMovesToANewBuildByItself(t *testing.T) {
+	project := gitProject(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "tend")
+	copyFile := func(to string) {
+		t.Helper()
+		raw, err := os.ReadFile(buildBinary(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(to, raw, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	copyFile(bin)
+	p, err := pty.Start(bin, []string{"files", project}, pty.Options{
+		Size: pty.Size{Cols: 40, Rows: 16},
+		// Not in a session, even when the tests run inside one: a panel
+		// that finds a session follows the pane beside it elsewhere.
+		Env: append(withoutEnv(withoutEnv(os.Environ(), "TEND_SOCKET_PATH"), "TEND_PANE_ID"),
+			"TEND_CONFIG="+quietConfig(t), "TERM=xterm-256color"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	a := &attached{pty: p, screen: vt.NewScreen(40, 16, 0)}
+	go func() { _, _ = io.Copy(a, p) }()
+	a.waitForScreen(t, "the tree", func(s string) bool { return strings.Contains(s, "▸ src") })
+	a.send(t, "l")
+	a.waitForScreen(t, "src open", func(s string) bool { return strings.Contains(s, "▾ src") })
+
+	// A new build, put in place as an install does: written beside, then
+	// renamed over. Its time is set back so it has already settled.
+	copyFile(bin + ".new")
+	past := time.Now().Add(-5 * time.Second)
+	_ = os.Chtimes(bin+".new", past, past)
+	if err := os.Rename(bin+".new", bin); err != nil {
+		t.Fatal(err)
+	}
+	exe := "/proc/" + itoa(p.Pid()) + "/exe"
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		target, err := os.Readlink(exe)
+		if err == nil && !strings.HasSuffix(target, "(deleted)") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the panel still runs the old build: %s %v", target, err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	a.waitForScreen(t, "the new build, with src still open", func(s string) bool {
+		return strings.Contains(s, "▾ src") && strings.Contains(s, "kept.txt")
+	})
+}
+
+// TestThePanelOpensInEveryTabUnlessClosedThere: with [files] auto_open, a
+// tab shown without the panel gets one beside the pane in focus, which keeps
+// the keys; a panel closed in a tab stays closed there; a new tab gets its
+// own. If it regresses, every new tab needs prefix+f again, or a panel the
+// user closed comes straight back.
+func TestThePanelOpensInEveryTabUnlessClosedThere(t *testing.T) {
+	t.Setenv("PATH", filepath.Dir(buildBinary(t))+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[files]\nauto_open = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, cfg)
+	a := startSession(t, 120, 30)
+	panel := func(s string) bool { return strings.Contains(s, " files ─") }
+	a.waitForScreen(t, "the panel, opened by itself", panel)
+	a.sendUntil(t, "echo still-the-shell\n", "the keys still with the shell", func(s string) bool {
+		return strings.Contains(s, "still-the-shell")
+	})
+
+	// prefix+f goes to the panel, and again closes it.
+	a.send(t, "\x02f")
+	time.Sleep(300 * time.Millisecond)
+	a.send(t, "\x02f")
+	a.waitForScreen(t, "the panel closed", func(s string) bool { return !panel(s) })
+	time.Sleep(time.Second)
+	if panel(strings.Join(a.lines(), "\n")) {
+		t.Fatal("a panel closed by hand came back by itself")
+	}
+
+	a.send(t, "\x02c")
+	a.waitForScreen(t, "a new tab, with its panel", func(s string) bool {
+		return strings.Contains(s, "tab 2") && panel(s)
 	})
 }

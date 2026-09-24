@@ -874,7 +874,7 @@ func TestSidebarTrailingIsItsOwnTarget(t *testing.T) {
 	if row, _ := SidebarRowAt(f, 2, 0, rows); row.Action != ActionNewSpace {
 		t.Errorf("the left of the row should create a space, got %q", row.Action)
 	}
-	at := TrailingStart(f.Spaces.Rows[0])
+	at := TrailingStart(f.Spaces.Rows[0], SidebarWidth)
 	if at < 0 {
 		t.Fatal("the trailing button should have a column")
 	}
@@ -1362,7 +1362,7 @@ func TestSidebarFooterStaysAtTheBottom(t *testing.T) {
 	if row, ok := SidebarRowAt(f, 2, foot, rows); !ok || row.Action != ActionNewSpace {
 		t.Errorf("the footer should be a target, got %+v ok=%v", row, ok)
 	}
-	at := TrailingStart(f.Spaces.Footer[0])
+	at := TrailingStart(f.Spaces.Footer[0], SidebarWidth)
 	if row, ok := SidebarRowAt(f, at, foot, rows); !ok || row.Action != ActionOpenMenu {
 		t.Errorf("the footer's button should be its own target, got %+v", row)
 	}

@@ -26,7 +26,7 @@ command = "printf 'IN-THE-COMMAND\n'; read _"
 key = "U"
 command = "echo done > `+marker+`"
 description = "mark it"
-`), 0o600); err != nil {
+`+quietSettings), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	withConfig(t, configPath)
@@ -79,7 +79,7 @@ type = "popup"
 width = 40
 height = "50%"
 command = "printf 'IN-THE-POPUP\n'; read x; printf 'got-%s\n' \"$x\"; sleep 1"
-`), 0o600); err != nil {
+`+quietSettings), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	withConfig(t, configPath)

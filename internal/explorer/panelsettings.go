@@ -39,6 +39,11 @@ var panelSettings = []panelSetting{
 		},
 	},
 	{
+		label: "open", key: "auto_open",
+		options: []settingOption{{"in every tab", "true"}, {"when asked", "false"}},
+		current: func(s Settings) string { return strconv.FormatBool(s.AutoOpen) },
+	},
+	{
 		label: "follow", key: "follow",
 		options: []settingOption{{"the pane beside", "true"}, {"stay put", "false"}},
 		current: func(s Settings) string { return strconv.FormatBool(s.Follow) },
@@ -108,6 +113,8 @@ func (m *Model) cycleSetting(i int) {
 		s.Icons, _ = strconv.Unquote(next.toml)
 	case "follow":
 		s.Follow = next.toml == "true"
+	case "auto_open":
+		s.AutoOpen = next.toml == "true"
 	case "hidden":
 		s.Hidden = next.toml == "true"
 	case "dock":

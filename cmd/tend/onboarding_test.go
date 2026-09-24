@@ -10,9 +10,26 @@ import (
 // TestMain turns the first-run welcome off for every tend these tests start:
 // each begins with no settings file, which is exactly when the welcome shows,
 // and it takes every key. The one test about the welcome turns it back on.
+//
+// It also points every tend at a settings file of its own, of the defaults
+// but for the files panel opening in every tab (quietConfig). Before, a test
+// that named no file read the settings of whoever ran it — the owner's own,
+// on the owner's machine — which went unnoticed until a default changed.
+// A test about settings still names its own.
 func TestMain(m *testing.M) {
 	os.Setenv(skipOnboardingEnv, "1")
-	os.Exit(m.Run())
+	dir, err := os.MkdirTemp("", "tend-test-config")
+	if err != nil {
+		panic(err)
+	}
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(quietSettings), 0o644); err != nil {
+		panic(err)
+	}
+	os.Setenv("TEND_CONFIG", path)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // TestTheFirstRunWelcomesAndThenOffersTheIntegrations is herdr's
@@ -24,6 +41,9 @@ func TestMain(m *testing.M) {
 // welcome comes back on every start.
 func TestTheFirstRunWelcomesAndThenOffersTheIntegrations(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(path, []byte(quietSettings), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	withConfig(t, path)
 	a := startSessionEnv(t, 110, 30, skipOnboardingEnv+"=")
 	a.waitForScreen(t, "the welcome", func(s string) bool {
@@ -39,7 +59,9 @@ func TestTheFirstRunWelcomesAndThenOffersTheIntegrations(t *testing.T) {
 
 	a.send(t, "\r")
 	a.waitForScreen(t, "the settings screen", func(s string) bool {
-		return !strings.Contains(s, "mouse-first terminal") && strings.Contains(s, "written to "+path)
+		// Where it was written is read from the file just below: the path
+		// of a test's temporary directory is longer than the screen gives it.
+		return !strings.Contains(s, "mouse-first terminal") && strings.Contains(s, "written to ")
 	})
 	data, err := os.ReadFile(path)
 	if err != nil || !strings.Contains(string(data), "onboarding = false") {

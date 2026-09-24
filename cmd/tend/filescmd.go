@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -34,6 +35,15 @@ func runFiles(args []string) error {
 		return errors.New("files draws on a terminal, and stdin is not one")
 	}
 	dir := fs.Arg(0)
+	// Started by a panel handing over to a new build: its state comes along
+	// (explorer/upgrade.go), and the directory it had followed to wins.
+	carried, resumed := explorer.DecodeState(os.Getenv(filesStateEnv))
+	_ = os.Unsetenv(filesStateEnv)
+	if resumed {
+		if info, err := os.Stat(carried.Root); err == nil && info.IsDir() {
+			dir = carried.Root
+		}
+	}
 	if dir == "" {
 		var err error
 		if dir, err = os.Getwd(); err != nil {
@@ -64,7 +74,7 @@ func runFiles(args []string) error {
 		}
 		return explorer.Settings{
 			Icons: cfg.Files.Icons, Hidden: cfg.Files.Hidden, Follow: cfg.FilesFollow() && !*still,
-			Dock: dock, Width: cfg.FilesWidth(),
+			Dock: dock, Width: cfg.FilesWidth(), AutoOpen: cfg.FilesAutoOpen(),
 		}
 	}
 	m.Configure(settings())
@@ -92,5 +102,41 @@ func runFiles(args []string) error {
 		}
 		return s, true
 	})
-	return explorer.Run(m, os.Stdin, os.Stdout)
+	if resumed {
+		m.Restore(carried)
+	}
+	// A new build installed while the panel is open replaces it in place,
+	// so the panel shows what was installed without being closed and opened
+	// again (explorer/upgrade.go).
+	bin := watchBinary()
+	if bin != nil {
+		m.WatchBinary(bin.changed)
+	}
+	for {
+		err := explorer.Run(m, os.Stdin, os.Stdout)
+		if !errors.Is(err, explorer.ErrUpgrade) || bin == nil {
+			return err
+		}
+		env := append(withoutEnv(os.Environ(), filesStateEnv), filesStateEnv+"="+explorer.EncodeState(m.State()))
+		err = reexec(bin.path, os.Args, env)
+		// Still here: the new build could not be started. Say so and go on
+		// with this one, watching no more — trying again every two seconds
+		// would only fail every two seconds.
+		m.WatchBinary(nil)
+		m.Warn("could not start the new build: " + err.Error())
+	}
+}
+
+// filesStateEnv carries a panel's state into the build that replaces it.
+const filesStateEnv = "TEND_FILES_STATE"
+
+// withoutEnv is an environment without one variable.
+func withoutEnv(env []string, name string) []string {
+	out := env[:0:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, name+"=") {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

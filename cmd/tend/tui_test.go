@@ -184,12 +184,12 @@ func startSessionConfigured(t *testing.T, cols, rows int, cfg server.Config) *at
 
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
-	// Point at a file that does not exist, so the tests see the defaults
-	// rather than whatever settings the machine running them happens to have.
-	// A test about settings names its own file instead.
+	// A file of the defaults (quietConfig), so the tests see them rather than
+	// whatever settings the machine running them happens to have. A test
+	// about settings names its own file instead.
 	configPath := configOverride
 	if configPath == "" {
-		configPath = filepath.Join(t.TempDir(), "absent.toml")
+		configPath = quietConfig(t)
 	}
 	t.Setenv("TEND_CONFIG", configPath)
 
@@ -945,7 +945,7 @@ func (a *attached) sendUntil(t *testing.T, keys, what string, cond func(string) 
 func TestAttachReconnects(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
-	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	configPath := quietConfig(t)
 	t.Setenv("TEND_CONFIG", configPath)
 	bin := buildBinary(t)
 
@@ -1496,8 +1496,11 @@ func TestAttachMenuClosesASpace(t *testing.T) {
 	})
 }
 
-// TestAttachMenuButtonAndEscape: the menu is reachable without a right-click,
-// and leaves without doing anything.
+// TestAttachMenuButtonAndEscape: the sidebar's "menu" button opens herdr's
+// global menu — settings, keybinds, reload config, detach — and escape
+// leaves it without doing anything. The space's own menu is on a
+// right-click on the space. If it regresses, the menu that holds the
+// release notes cannot be reached, or escaping it acts.
 func TestAttachMenuButtonAndEscape(t *testing.T) {
 	a := startSession(t, 100, 18)
 	a.waitForScreen(t, "the new row", func(s string) bool {
@@ -1506,13 +1509,13 @@ func TestAttachMenuButtonAndEscape(t *testing.T) {
 
 	row := a.lineContaining(t, "new")
 	a.clickAt(t, ui.SidebarWidth-3, row)
-	a.waitForScreen(t, "the space menu", func(s string) bool {
-		return strings.Contains(s, "close space")
+	a.waitForScreen(t, "the global menu", func(s string) bool {
+		return strings.Contains(s, "reload config") && strings.Contains(s, "keybinds") && !strings.Contains(s, "close space")
 	})
 
 	a.send(t, "\x1b")
 	a.waitForScreen(t, "the menu to close", func(s string) bool {
-		return !strings.Contains(s, "close space")
+		return !strings.Contains(s, "reload config")
 	})
 	// Escaping is not a decision: the space is still there.
 	if !strings.Contains(a.sidebarText(), "main") {
@@ -2608,7 +2611,7 @@ func TestAttachStillHandsOverTheMouseToAnOlderServer(t *testing.T) {
 func TestAttachOverSSH(t *testing.T) {
 	bin := buildBinary(t)
 	near, far := t.TempDir(), t.TempDir()
-	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	configPath := quietConfig(t)
 
 	// Stands in for ssh: drops the host and the word "tend", and runs the
 	// rest with this build, as if on a machine with its own runtime directory.
@@ -2689,7 +2692,7 @@ func TestAttachOverSSHSaysWhyItFailed(t *testing.T) {
 func TestAttachComesBackToTheSameLayoutAfterARestart(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
-	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	configPath := quietConfig(t)
 	t.Setenv("TEND_CONFIG", configPath)
 	bin := buildBinary(t)
 
@@ -2796,7 +2799,7 @@ func TestBareTendStartsWhenTheRuntimeDirectoryIsGone(t *testing.T) {
 	// A path that does not exist yet, as /run/user/<uid>/tend does not.
 	runtimeDir := filepath.Join(t.TempDir(), "not", "made", "yet")
 	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
-	configPath := filepath.Join(t.TempDir(), "absent.toml")
+	configPath := quietConfig(t)
 	t.Setenv("TEND_CONFIG", configPath)
 
 	bin := buildBinary(t)
@@ -2848,7 +2851,7 @@ func TestANewTabOnAnotherMachineRunsThatMachinesShell(t *testing.T) {
 		Size: pty.Size{Cols: 100, Rows: 16},
 		Env: append(os.Environ(),
 			"TEND_RUNTIME_DIR="+near,
-			"TEND_CONFIG="+filepath.Join(t.TempDir(), "absent.toml"),
+			"TEND_CONFIG="+quietConfig(t),
 			"TEND_SSH="+stand,
 			"SHELL=/nowhere/zsh",
 			"TERM=xterm-256color",
@@ -2872,5 +2875,142 @@ func TestANewTabOnAnotherMachineRunsThatMachinesShell(t *testing.T) {
 	a.waitForScreen(t, "a second tab", func(s string) bool { return strings.Contains(s, "tab 2") })
 	a.sendUntil(t, "echo $((40+2))-there\n", "the new tab's shell", func(s string) bool {
 		return strings.Contains(s, "42-there")
+	})
+}
+
+// TestTheSidebarsEdgeDragsToAWidth: dragging the rule down the sidebar's
+// right edge makes the sidebar that wide, within herdr's 18 to 36, with the
+// panes beside it following; a double click on the edge puts it back. If it
+// regresses, the sidebar is the one width whatever the names in it need.
+func TestTheSidebarsEdgeDragsToAWidth(t *testing.T) {
+	a := startSession(t, 100, 20)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	rule := func() int {
+		line := []rune(a.lines()[6])
+		for x, r := range line {
+			if r == '│' {
+				return x
+			}
+		}
+		return -1
+	}
+	if got := rule(); got != ui.SidebarWidth-1 {
+		t.Fatalf("the edge starts at %d", got)
+	}
+
+	// Counted from one, as the terminal reports: the rule is column 26.
+	a.dragFromTo(t, 0, ui.SidebarWidth, 7, 34, 7)
+	a.waitForScreen(t, "the sidebar 34 wide, the pane beside it", func(s string) bool {
+		line := []rune(strings.Split(s, "\n")[6])
+		return len(line) > 34 && line[33] == '│' && line[25] != '│'
+	})
+
+	a.dragFromTo(t, 0, 34, 7, 90, 7)
+	a.waitForScreen(t, "no wider than 36", func(s string) bool {
+		line := []rune(strings.Split(s, "\n")[6])
+		return len(line) > 36 && line[35] == '│'
+	})
+
+	a.clickAt(t, 36, 7)
+	a.clickAt(t, 36, 7)
+	a.waitForScreen(t, "a double click puts it back", func(s string) bool {
+		line := []rune(strings.Split(s, "\n")[6])
+		return len(line) > 26 && line[25] == '│'
+	})
+}
+
+// quietConfig is a settings file of the defaults but for the files panel
+// opening by itself in every tab, which would put a panel beside every pane
+// every test lays out and reads. The tests about that panel ask for it.
+func quietConfig(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(quietSettings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// quietSettings is quietConfig's file, and what a test's own settings add
+// to stay out of the files panel's way.
+const quietSettings = "[files]\nauto_open = false\n\n[ui.toolbar]\nenabled = false\n"
+
+// TestTheToolbarsFilesToolTogglesThePanel: with the toolbar on, the tools
+// are over the spaces; a click on Files opens the files panel as prefix+f
+// does and a second one on it closes it, and the keyboard's walk of the
+// sidebar reaches the tools. If it regresses, the toolbar is a picture of
+// buttons that do nothing, or it covers the list under it.
+func TestTheToolbarsFilesToolTogglesThePanel(t *testing.T) {
+	t.Setenv("PATH", filepath.Dir(buildBinary(t))+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[files]\nauto_open = false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withConfig(t, cfg)
+	a := startSession(t, 120, 30)
+	a.waitForScreen(t, "the tools over the spaces", func(s string) bool {
+		lines := strings.Split(s, "\n")
+		return strings.Contains(lines[0], " F ") && strings.Contains(lines[0], " C ") && strings.Contains(lines[2], "spaces")
+	})
+	panel := func(s string) bool { return strings.Contains(s, " files ─") }
+
+	// Counted from one: the Files tool is the second column's chip.
+	a.clickAt(t, 3, 1)
+	a.waitForScreen(t, "the files panel", panel)
+	a.clickAt(t, 3, 1)
+	a.waitForScreen(t, "the panel closed", func(s string) bool { return !panel(s) })
+
+	// prefix+w, then up from the spaces to the tools: the last is Context,
+	// whose name the status line says.
+	a.send(t, "\x02w")
+	time.Sleep(200 * time.Millisecond)
+	a.send(t, "k")
+	time.Sleep(200 * time.Millisecond)
+	a.send(t, "k")
+	a.waitForScreen(t, "a tool's name on the status line", func(s string) bool {
+		return strings.Contains(s, "Context — captured") || strings.Contains(s, "Browser (next)")
+	})
+}
+
+// TestTheAgentManagerInstallsInATabOfItsOwn: prefix+A lists the agents the
+// server's machine has and has not; enter on one that is not asks, showing
+// the command, and enter again runs it in a new tab, which says how it went.
+// The network is a stand-in: curl here prints a harmless script, so the
+// whole way is run and nothing is fetched. If it regresses, the manager
+// installs without asking, or somewhere the user cannot see.
+func TestTheAgentManagerInstallsInATabOfItsOwn(t *testing.T) {
+	// A PATH of the stand-in curl, the system's own programs, and go, which
+	// the session builds tend with: no agent the machine running this has
+	// installed elsewhere, and no real curl.
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("needs go on the PATH")
+	}
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "curl"), []byte("#!/bin/sh\necho 'echo fake-install-ran'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin:"+filepath.Dir(goBin))
+	a := startSession(t, 120, 40)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.send(t, "\x02A")
+	a.waitForScreen(t, "the manager, with amp installable", func(s string) bool {
+		return strings.Contains(s, "AGENT MANAGER") && strings.Contains(s, "○ Amp")
+	})
+	row, col := -1, -1
+	for i, line := range a.lines() {
+		if c := columnOfString(line, "○ Amp"); c >= 0 {
+			row, col = i, c
+		}
+	}
+	a.clickAt(t, col+3, row+1)
+	a.clickAt(t, col+3, row+1)
+	a.waitForScreen(t, "the command, asked about", func(s string) bool {
+		return strings.Contains(s, "install: curl -fsSL https://ampcode.com/install.sh | bash")
+	})
+	a.send(t, "\r")
+	a.waitForScreen(t, "the install run in its own tab", func(s string) bool {
+		return strings.Contains(s, "install amp") && strings.Contains(s, "fake-install-ran") &&
+			strings.Contains(s, "[tend] Amp installed") && !strings.Contains(s, "AGENT MANAGER")
 	})
 }

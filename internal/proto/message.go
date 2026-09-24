@@ -52,6 +52,28 @@ const (
 	// making anything again: the programs keep running wherever they end up.
 	// MethodServerReloadConfig makes the server re-read the settings file.
 	MethodServerReloadConfig = "server.reload_config"
+	// MethodReleaseNotes reads the release notes the server keeps, and
+	// MethodReleaseNotesDismiss marks them read: herdr's release_notes.
+	// The notes are the server's, saved when its check found a release, so
+	// a client on another machine reads the ones for the build it talks to.
+	MethodReleaseNotes        = "release_notes.get"
+	MethodReleaseNotesDismiss = "release_notes.dismiss"
+	// MethodAgentsCatalog lists the agent CLIs tend knows of, as found on
+	// the server's machine — where panes, and so agents, run — with how to
+	// install the ones that are not there (internal/agents).
+	MethodAgentsCatalog = "agents.catalog"
+	// The context buffer (internal/capture): what tools captured — a page's
+	// URL, an element picked in it, text, a file — kept by the server, which
+	// is between every tool and every agent, until it is sent to one.
+	MethodContextAdd    = "context.add"
+	MethodContextList   = "context.list"
+	MethodContextRemove = "context.remove"
+	MethodContextClear  = "context.clear"
+	MethodContextSend   = "context.send"
+	// MethodBrowserOpen hands a page to the browsers attached to the server
+	// (server/browser.go); none attached is an error, and the client opens
+	// the page itself instead.
+	MethodBrowserOpen = "browser.open"
 	// MethodPaneFocus says which pane the client is looking at, so programs
 	// that asked for focus events are told.
 	MethodPaneFocus = "pane.focus"
@@ -145,6 +167,15 @@ var KnownMethods = []string{
 	MethodCommandRun,
 	MethodPaneDock,
 	MethodPaneLinkActivate,
+	MethodReleaseNotes,
+	MethodReleaseNotesDismiss,
+	MethodAgentsCatalog,
+	MethodContextAdd,
+	MethodContextList,
+	MethodContextRemove,
+	MethodContextClear,
+	MethodContextSend,
+	MethodBrowserOpen,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -209,6 +240,15 @@ const (
 	FeatureServerShell = "server-shell"
 	// FeaturePopup is a server that opens popups and says so in the snapshot.
 	FeaturePopup = "popup"
+	// FeatureContext: the server keeps the context buffer and says when it
+	// changes with EventContextChanged.
+	FeatureContext = "context"
+	// FeatureDockUnless: pane.dock takes Unless and docks nothing when the
+	// tab already has that pane.
+	FeatureDockUnless = "dock-unless"
+	// FeatureUpdate: the server checks for releases, says so with
+	// EventUpdateReady, and the snapshot carries what it found.
+	FeatureUpdate = "update"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
@@ -216,7 +256,8 @@ const (
 var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
-	FeatureFocusRequest, FeatureAgentView, FeatureServerShell, FeaturePopup,
+	FeatureFocusRequest, FeatureAgentView, FeatureServerShell, FeaturePopup, FeatureUpdate,
+	FeatureDockUnless, FeatureContext,
 }
 
 // --- session ---------------------------------------------------------------
@@ -380,6 +421,105 @@ type SessionSnapshot struct {
 	// AgentView is a filter and order a script set on the agent list.
 	AgentView       *agentview.View `json:"agent_view,omitempty"`
 	TabBarSeparator string          `json:"tab_bar_separator,omitempty"`
+	// Update is what the server's release check knows, if anything.
+	Update *UpdateInfo `json:"update,omitempty"`
+}
+
+// UpdateInfo is herdr's update state as a client shows it.
+type UpdateInfo struct {
+	// Ready is the version of a release newer than the server's build, once
+	// a check has found one: "update ready" until it is installed.
+	Ready string `json:"ready,omitempty"`
+	// Install is how to install it, as the notice says.
+	Install string `json:"install,omitempty"`
+	// Notes is the version whose release notes are kept, which is what the
+	// menu's "what's new" opens; empty when there are none.
+	Notes string `json:"notes,omitempty"`
+}
+
+// ReleaseNotes are the notes release_notes.get returns. Newer is whether
+// they are a release newer than the server's build — an update ready —
+// rather than what is new in the one running.
+type ReleaseNotes struct {
+	Version string `json:"version"`
+	Body    string `json:"body"`
+	Newer   bool   `json:"newer,omitempty"`
+	Install string `json:"install,omitempty"`
+}
+
+// ContextItem is one thing in the context buffer. Kind is what it is —
+// "url", "element" (a part of a page, picked in a browser), "text", "file" —
+// and Source what captured it ("browser", "files", "cli", ...). The fields
+// that do not apply to a kind are left empty.
+type ContextItem struct {
+	ID       uint64 `json:"id,omitempty"`
+	Kind     string `json:"kind"`
+	Source   string `json:"source,omitempty"`
+	Title    string `json:"title,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Selector string `json:"selector,omitempty"`
+	Tag      string `json:"tag,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Path     string `json:"path,omitempty"`
+	// Attributes are an element's, as the page has them.
+	Attributes map[string]string `json:"attributes,omitempty"`
+	// Created is when it was captured, in seconds since the epoch.
+	Created int64 `json:"created,omitempty"`
+}
+
+// ContextList is context.list's answer, oldest first.
+type ContextList struct {
+	Items []ContextItem `json:"items"`
+}
+
+// ContextIDs names items of the buffer; none is all of them.
+type ContextIDs struct {
+	IDs []uint64 `json:"ids,omitempty"`
+}
+
+// ContextSendParams sends items (none: all) to a pane, typed into it for
+// the user to read over and send; nothing is submitted.
+type ContextSendParams struct {
+	Pane uint64   `json:"pane"`
+	IDs  []uint64 `json:"ids,omitempty"`
+}
+
+// BrowserOpenParams is a page for browser.open, and BrowserOpenResult how
+// many attached browsers took it.
+type BrowserOpenParams struct {
+	URL string `json:"url"`
+}
+
+type BrowserOpenResult struct {
+	Browsers int `json:"browsers"`
+}
+
+// AgentStatus is one agent as agents.catalog finds it.
+type AgentStatus struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Installed   bool   `json:"installed"`
+	Path        string `json:"path,omitempty"`
+	Version     string `json:"version,omitempty"`
+	// InstallKind and InstallCommand are the method to offer (npm, script,
+	// ...), empty when none can run here; Missing then names the program the
+	// vendor's first method needs.
+	InstallKind    string `json:"install_kind,omitempty"`
+	InstallCommand string `json:"install_command,omitempty"`
+	InstallSource  string `json:"install_source,omitempty"`
+	Missing        string `json:"missing,omitempty"`
+}
+
+// AgentsCatalogResult is agents.catalog's answer.
+type AgentsCatalogResult struct {
+	Agents []AgentStatus `json:"agents"`
+}
+
+// ReleaseNotesDismissParams names the notes read, so a dismiss for notes
+// that were replaced meanwhile is refused rather than applied to others.
+type ReleaseNotesDismissParams struct {
+	Version string `json:"version"`
 }
 
 // StatusSegment is one entry at the right of the tab bar. Zoom marks the
@@ -478,6 +618,10 @@ type PaneDockParams struct {
 	// left, which is a panel on the wrong side rather than no panel.
 	Right bool     `json:"right,omitempty"`
 	Pane  PaneSpec `json:"pane"`
+	// Unless names a pane the tab may already have, in which case nothing is
+	// docked and that pane is the answer, with Existing set. A server from
+	// before it (FeatureDockUnless) docks regardless.
+	Unless string `json:"unless,omitempty"`
 }
 
 // PopupInfo is a popup: its pane, the tab it floats over, and its size as
@@ -504,6 +648,8 @@ type PaneLinkResult struct {
 // PaneSplitResult reports the new pane.
 type PaneSplitResult struct {
 	Pane uint64 `json:"pane"`
+	// Existing is set when pane.dock's Unless found the pane already there.
+	Existing bool `json:"existing,omitempty"`
 }
 
 // PaneCloseParams closes one pane.
@@ -724,6 +870,12 @@ const (
 	// EventFocusRequest asks a client to show a pane, for pane.focus and
 	// tab.focus over the automation socket.
 	EventFocusRequest = "focus-request"
+	// EventUpdateReady says the server's check found a newer release:
+	// Title is its version, Body how to install it.
+	EventUpdateReady = "update-ready"
+	// EventContextChanged says the context buffer changed. It carries
+	// nothing: a client that shows the buffer reads it again.
+	EventContextChanged = "context-changed"
 )
 
 // Event is something that happened, sent unsolicited.

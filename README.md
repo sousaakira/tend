@@ -72,6 +72,26 @@ grouped by space and tab, with what it is doing. `ctrl+b w` walks it and Enter
 jumps — which is the point, since the agent that stopped is rarely the one you
 are looking at.
 
+Over the spaces is a row of tools. Files opens and closes the files panel,
+as `ctrl+b f` does. Agents (or `ctrl+b A`) is the agent manager: the agent
+CLIs tend knows of — Claude Code, Codex, Gemini CLI, OpenCode, Copilot and
+more — which of them this machine has, with their version, and for the rest
+the install command their vendor documents, run in a tab of its own once
+you have seen it and said yes. Context (or `ctrl+b C`) is what
+tools have captured for the agents — a page, an element picked in one, text,
+a file: put things there with `tend context add`, with "Add to context" on a
+file in the files panel, or from any tool over the automation socket
+(`context.add`); then copy one, or send it to the agent this tab works with,
+where it is typed in for you to read over and send. Browser (or `ctrl+b B`) opens a page: in the
+browser attached to the session when there is one, otherwise in
+`[browser] command` or the desktop's own. A browser extension that picks
+elements on a page and hands them to the context is the next step; the
+server's side of it is there (`docs/BROWSER.md`). `ctrl+b w` walks them too, and `[ui.toolbar] enabled =
+false` takes the row away.
+
+The sidebar's right edge can be dragged to make it wider or narrower (18 to
+36 columns); a double click on it puts it back to `[ui] sidebar_width`.
+
 ### the files panel
 
 `ctrl+b f` (or "files panel" on a pane's right-click menu) docks it on the
@@ -110,6 +130,7 @@ icons = "nerd"   # "none" (default), "nerd" for a Nerd Font, or "emoji"
 width = 32       # columns it opens at
 dock = "right"   # or "left"
 follow = true    # follow the pane beside it
+auto_open = true # open in every tab by itself; false: only on prefix+f
 hidden = false   # hide dotfiles
 ```
 
@@ -204,6 +225,11 @@ PANE  COMMAND  AGENT   STATE    TITLE
 ```bash
 curl -fsSL https://sousaakira.github.io/tend/install.sh | sh
 ```
+
+tend looks for a newer release in the background and says so: a notice, and
+"update ready" at the right of the status bar. `tend update -handoff`
+installs it without stopping what is running; the sidebar's "menu" has what
+is new in it. `[update] version_check = false` turns the check off.
 
 Or from a checkout:
 

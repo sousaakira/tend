@@ -16,10 +16,9 @@ import (
 
 // `tend update` and `tend channel`, herdr's two update commands.
 //
-// Nothing here runs on its own. herdr checks for updates in the background
-// and offers one; tend asks nothing and downloads nothing until somebody runs
-// the command, because a program that replaces its own binary unprompted is a
-// program you have to trust more than this one has earned.
+// Nothing here runs on its own. The server checks in the background and
+// says when a release is ready, as herdr's does (server/updatecheck.go);
+// downloading and installing wait for somebody to run this command.
 
 func runUpdate(args []string) error {
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
@@ -31,10 +30,11 @@ func runUpdate(args []string) error {
 				"downloads the build published on the configured channel and puts it in\n"+
 				"place of this one. the download is checked against the manifest's\n"+
 				"checksum before anything is installed.\n\n"+
-				"set the channel's manifest URL in the settings file first:\n\n"+
+				"the stable channel is published with each release on github; a\n"+
+				"preview channel needs its manifest set in the settings file:\n\n"+
 				"  [update]\n"+
-				"  channel = \"stable\"\n"+
-				"  manifest = \"https://…/latest.json\"\n\n")
+				"  channel = \"preview\"\n"+
+				"  preview = \"https://…/preview.json\"\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -60,7 +60,7 @@ func runUpdate(args []string) error {
 		return err
 	}
 
-	if !update.Differs(release, version) {
+	if !offered(release, version) {
 		fmt.Fprintf(os.Stderr, "%s already on %s (%s)\n", tag(), release.Version, channelName(cfg))
 		return nil
 	}
@@ -174,4 +174,15 @@ func channelName(cfg config.Config) string {
 		return "preview"
 	}
 	return "stable"
+}
+
+// offered is whether a published release is one to install over this build:
+// a newer one, as herdr decides, when this build is a release; any other
+// one when it is not, since a build from a working tree has no place in
+// the order and whoever runs it asked for the published one.
+func offered(release update.Release, running string) bool {
+	if _, ok := update.ParseVersion(running); ok {
+		return update.Newer(release.Version, running)
+	}
+	return update.Differs(release, running)
 }

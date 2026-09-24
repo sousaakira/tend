@@ -29,12 +29,30 @@ type Theme struct {
 	Status      vt.Style
 	StatusKey   vt.Style
 	StatusAlert vt.Style
-	// TabInactive is a tab not in view, which is the bar itself unless a
-	// palette gives it a surface of its own.
+	// The tab bar, herdr's (`client/shell/tabs.rs`): TabBar is the bar
+	// between and around the tabs, TabActive the tab in view, and
+	// TabInactive each other one, each a block of its own colour so a gap
+	// of the bar's between two reads as the edge between them.
+	TabBar      vt.Style
+	TabActive   vt.Style
 	TabInactive vt.Style
 
 	Overlay      vt.Style
 	OverlayTitle vt.Style
+
+	// StatusUpdate is herdr's "update ready" at the right of the status
+	// bar: the accent, bold, on the bar.
+	StatusUpdate vt.Style
+	// The release notes panel (releasenotes.go), in herdr's tokens: text on
+	// panel_bg, the frame and headings in the accent, the subtitle in
+	// overlay1, code on surface0 and fenced blocks on surface1, and the
+	// close button in the panel's colour on the accent.
+	Notes       vt.Style
+	NotesAccent vt.Style
+	NotesSub    vt.Style
+	NotesCode   vt.Style
+	NotesFence  vt.Style
+	NotesButton vt.Style
 
 	// A menu is drawn plainly and marks its selection by reversing it, which
 	// is the other way round from the overlay. Reversing the whole panel and
@@ -77,10 +95,23 @@ func DefaultTheme() Theme {
 		Status:      vt.Style{Attrs: vt.AttrReverse},
 		StatusKey:   vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
 		StatusAlert: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold, FG: vt.IndexedColor(1)},
-		TabInactive: vt.Style{Attrs: vt.AttrReverse},
+		// The terminal's own background under the bar rather than the
+		// reversed band the status line is: the tabs are blocks on it, the
+		// one in view in the accent, the others in bright black.
+		TabBar:      vt.Style{},
+		TabActive:   vt.Style{FG: vt.IndexedColor(0), BG: vt.IndexedColor(4), Attrs: vt.AttrBold},
+		TabInactive: vt.Style{BG: vt.IndexedColor(8)},
 
 		Overlay:      vt.Style{Attrs: vt.AttrReverse},
 		OverlayTitle: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
+
+		StatusUpdate: vt.Style{Attrs: vt.AttrReverse | vt.AttrBold, FG: vt.IndexedColor(4)},
+		Notes:        vt.Style{},
+		NotesAccent:  vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
+		NotesSub:     dim,
+		NotesCode:    vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
+		NotesFence:   vt.Style{FG: vt.IndexedColor(7)},
+		NotesButton:  vt.Style{Attrs: vt.AttrReverse | vt.AttrBold},
 
 		Menu:         vt.Style{},
 		MenuTitle:    vt.Style{FG: vt.IndexedColor(4), Attrs: vt.AttrBold},
@@ -192,6 +223,10 @@ func (t Theme) withPalette(p Palette) Theme {
 	fg(&t.Idle, p.Green)
 	fg(&t.Done, p.Teal)
 	fg(&t.StatusAlert, p.Red)
+	fg(&t.StatusUpdate, p.Accent)
+	fg(&t.NotesAccent, p.Accent)
+	fg(&t.NotesCode, p.Accent)
+	fg(&t.NotesSub, p.Overlay1)
 
 	if p.PanelBG.IsDefault() {
 		// A palette with no panel colour of its own (terminal) keeps the
@@ -206,11 +241,20 @@ func (t Theme) withPalette(p Palette) Theme {
 	contrast := p.PanelBG
 	on := func(fg, bg vt.Color, attrs vt.Attr) vt.Style { return vt.Style{FG: fg, BG: bg, Attrs: attrs} }
 	t.Status = on(p.Overlay1, p.PanelBG, 0)
+	t.TabBar = on(p.Overlay1, p.PanelBG, 0)
+	t.TabActive = on(contrast, p.Accent, vt.AttrBold)
 	t.TabInactive = on(p.Overlay0, p.Surface0, 0)
 	t.StatusKey = on(contrast, p.Accent, vt.AttrBold)
 	t.StatusAlert = on(contrast, p.Red, vt.AttrBold)
 	t.Overlay = on(p.Text, p.PanelBG, 0)
 	t.OverlayTitle = on(p.Accent, p.PanelBG, vt.AttrBold)
+	t.StatusUpdate = on(p.Accent, p.PanelBG, vt.AttrBold)
+	t.Notes = on(p.Text, p.PanelBG, 0)
+	t.NotesAccent = on(p.Accent, p.PanelBG, vt.AttrBold)
+	t.NotesSub = on(p.Overlay1, p.PanelBG, 0)
+	t.NotesCode = on(p.Accent, p.Surface0, vt.AttrBold)
+	t.NotesFence = on(p.Text, p.Surface1, 0)
+	t.NotesButton = on(contrast, p.Accent, vt.AttrBold)
 	t.Menu = on(p.Text, p.PanelBG, 0)
 	t.MenuTitle = on(p.Accent, p.PanelBG, vt.AttrBold)
 	t.MenuSelected = on(contrast, p.Accent, vt.AttrBold)
@@ -339,6 +383,13 @@ type Frame struct {
 	// Sidebar shows the spaces and agents down the left edge, and SidebarRows
 	// is what it holds.
 	Sidebar bool
+	// SidebarWidth is the sidebar's width in columns, when the user has
+	// dragged it to one; zero is SidebarWidth.
+	SidebarWidth int
+	// Toolbar is the tools over the sidebar's lists, none when it is off;
+	// ToolbarIcons the icon theme they are drawn in (toolbar.go).
+	Toolbar      []ToolbarItem
+	ToolbarIcons string
 	// Spaces and Agents are the sidebar's two lists. They are separate
 	// because they answer different questions and because one sharing the
 	// other's scroll meant the spaces pushed the agents off the bottom.
@@ -365,6 +416,15 @@ type Frame struct {
 	// are fourteen of them, and cramming those into a status bar means
 	// truncating exactly the ones somebody was looking for.
 	Overlay []string
+	// ReleaseNotes is herdr's release notes panel, when it is up.
+	ReleaseNotes *ReleaseNotesView
+	// AgentManager is the agent manager, when it is up (agentmanager.go).
+	AgentManager *AgentManagerView
+	// Context is the context panel, when it is up (contextpanel.go).
+	Context *ContextView
+	// UpdateReady puts herdr's "update ready" at the right of the status
+	// bar, from when a release is found until it is running.
+	UpdateReady bool
 
 	// Menu is a context menu, opened on the thing it acts on. Nil when none
 	// is open.
@@ -477,14 +537,22 @@ func TabSegments(f Frame, cols int) []TabSegment {
 	if start, width := StatusArea(f, cols); width > 0 {
 		cols = start - 1
 	}
-	for _, tab := range f.Tabs {
-		label := tabLabel(tab)
-		width := runewidth.StringWidth(label)
+	// herdr's: each tab a block of its name and four columns, eight at
+	// least, with a column of the bar between two; the new-tab button after
+	// the last, a column along.
+	for i, tab := range f.Tabs {
+		if i > 0 {
+			x++
+		}
+		width := max(runewidth.StringWidth(tabLabel(tab))+4, minTabWidth)
 		if x+width > cols {
 			break
 		}
 		out = append(out, TabSegment{Tab: tab.ID, Start: x, End: x + width})
 		x += width
+	}
+	if len(out) > 0 {
+		x++
 	}
 	if width := runewidth.StringWidth(NewTabLabel); x+width <= cols {
 		out = append(out, TabSegment{New: true, Start: x, End: x + width})
@@ -492,12 +560,14 @@ func TabSegments(f Frame, cols int) []TabSegment {
 	return out
 }
 
+// minTabWidth is herdr's MIN_TAB_WIDTH.
+const minTabWidth = 8
+
 func tabLabel(tab Tab) string {
-	label := tab.Name
-	if label == "" {
-		label = itoa(tab.ID)
+	if tab.Name == "" {
+		return itoa(tab.ID)
 	}
-	return " " + label + " "
+	return tab.Name
 }
 
 // TabAt reports what a click on the bar landed on.
@@ -540,6 +610,15 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	if len(f.Overlay) > 0 {
 		drawOverlay(dst, f.Overlay, theme)
 	}
+	if f.ReleaseNotes != nil {
+		drawReleaseNotes(dst, f.ReleaseNotes, theme)
+	}
+	if f.AgentManager != nil {
+		drawAgentManager(dst, f.AgentManager, theme)
+	}
+	if f.Context != nil {
+		drawContextPanel(dst, f.Context, theme)
+	}
 	if f.Toast != nil {
 		drawToast(dst, *f.Toast, theme)
 	}
@@ -567,7 +646,7 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 		return
 	}
 	for x := SidebarGutter(f, dst.Cols()); x < dst.Cols(); x++ {
-		row.SetCell(x, vt.Cell{R: ' ', Style: theme.Status, Width: 1})
+		row.SetCell(x, vt.Cell{R: ' ', Style: theme.TabBar, Width: 1})
 	}
 
 	byID := make(map[uint64]Tab, len(f.Tabs))
@@ -577,20 +656,25 @@ func drawTabs(dst *vt.Grid, f Frame, theme Theme) {
 
 	for _, seg := range TabSegments(f, dst.Cols()) {
 		if seg.New {
-			writeString(dst, seg.Start, y, NewTabLabel, theme.StatusKey, dst.Cols())
+			writeString(dst, seg.Start, y, NewTabLabel, theme.TabBar, dst.Cols())
 			continue
 		}
 		tab := byID[seg.Tab]
 		style := theme.TabInactive
 		if tab.Active {
-			style = theme.StatusKey
+			style = theme.TabActive
 		}
 		if tab.Alert && !tab.Active {
 			// A blocked agent in a tab you are not looking at is the one thing
 			// the bar exists to tell you.
 			style = theme.StatusAlert
 		}
-		writeString(dst, seg.Start, y, tabLabel(tab), style, dst.Cols())
+		// The name in the middle of its block, as herdr centres it.
+		width := seg.End - seg.Start
+		label := truncate(tabLabel(tab), width)
+		pad := width - runewidth.StringWidth(label)
+		text := strings.Repeat(" ", pad/2) + label + strings.Repeat(" ", pad-pad/2)
+		writeString(dst, seg.Start, y, text, style, seg.End)
 		if f.TabDropTarget != 0 && seg.Tab == f.TabDropTarget {
 			mark := theme.BorderFocused
 			mark.BG = style.BG
@@ -929,6 +1013,12 @@ func drawStatus(dst *vt.Grid, f Frame, theme Theme) {
 
 	limit := dst.Cols()
 	x := 0
+	// herdr's mode bar keeps "update ready" at its right end, thirteen
+	// cells the rest of the bar stops short of.
+	if ready := " update ready"; f.UpdateReady && dst.Cols() > 40 {
+		limit -= len(ready) + 1
+		writeString(dst, limit, y, ready, theme.StatusUpdate, dst.Cols())
+	}
 
 	if f.Offline {
 		x = writeString(dst, x, y, " OFFLINE ", theme.StatusAlert, limit)
