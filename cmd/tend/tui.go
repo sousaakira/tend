@@ -369,7 +369,13 @@ func (t *tui) run() error {
 	if err != nil {
 		return err
 	}
+	// Under the lock: the connection delivers events from the moment it is
+	// open, and an event that re-reads the session (refresh) can run before
+	// this line. It found no client and crashed the client — seen when a
+	// tab bar command's first output arrived at once.
+	t.mu.Lock()
 	t.client = c
+	t.mu.Unlock()
 	defer c.Close()
 	// Going to another saved machine changes which connection is the
 	// client's; whichever it is at the end is closed with the watchers.
@@ -475,8 +481,10 @@ func (t *tui) reconnect() error {
 		}
 		c, err := openSessionOn(t.host, t.session, t)
 		if err == nil {
+			t.mu.Lock()
 			old := t.client
 			t.client = c
+			t.mu.Unlock()
 			if old != nil {
 				_ = old.Close()
 			}
@@ -542,7 +550,15 @@ func (t *tui) ensureSession() error {
 // switched, the terminal resized — rather than on every frame: the layout is a
 // round trip, and panes change shape far less often than they change content.
 func (t *tui) refresh() error {
-	snap, err := t.client.Snapshot()
+	// An event can ask for this before run has the connection (see run):
+	// there is nothing to re-read yet, and run reads it next anyway.
+	t.mu.Lock()
+	c := t.client
+	t.mu.Unlock()
+	if c == nil {
+		return nil
+	}
+	snap, err := c.Snapshot()
 	if err != nil {
 		return err
 	}
