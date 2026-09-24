@@ -7,6 +7,7 @@ import (
 	"github.com/sousaakira/tend/internal/capture"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/session"
+	"github.com/sousaakira/tend/internal/vt"
 )
 
 // The context buffer: what tools captured, kept here until it is sent to an
@@ -79,6 +80,11 @@ func (s *Server) RemoveContext(ids []uint64) {
 // to read, and submits nothing: the user reads it over, adds a question,
 // and sends it themselves.
 func (s *Server) SendContext(pane session.PaneID, ids []uint64) error {
+	return s.SendContextWith(pane, ids, "")
+}
+
+// SendContextWith is SendContext led by a message for the agent.
+func (s *Server) SendContextWith(pane session.PaneID, ids []uint64, message string) error {
 	items := s.ContextItems()
 	if len(ids) > 0 {
 		want := map[uint64]bool{}
@@ -96,5 +102,24 @@ func (s *Server) SendContext(pane session.PaneID, ids []uint64) error {
 	if len(items) == 0 {
 		return fmt.Errorf("context: nothing to send")
 	}
-	return s.SendText(pane, capture.Format(items))
+	return s.typeUnsubmitted(pane, capture.FormatWith(message, items))
+}
+
+// typeUnsubmitted types text captured elsewhere — a web page's, much of it —
+// into a pane for the user to read over, and makes sure none of it acts.
+//
+// Two things could. A line break typed into a program that is not taking a
+// paste is Enter: into a shell, each line of a page's text ran as a command,
+// which is how this was found. And an escape in the text could end a
+// bracketed paste early and let what follows act as keys. So control
+// characters are dropped, and a program that has not asked for bracketed
+// paste — a shell, not an agent — gets the text on one line, its breaks
+// shown as ⏎ and none of them pressed.
+func (s *Server) typeUnsubmitted(pane session.PaneID, text string) error {
+	rt, err := s.runtime(pane)
+	if err != nil {
+		return err
+	}
+	modes := rt.modes()
+	return s.writeTo(rt, vt.EncodeText(capture.Inert(text, modes.BracketedPaste), modes))
 }

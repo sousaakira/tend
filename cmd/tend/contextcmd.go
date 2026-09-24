@@ -68,6 +68,7 @@ func runContextAdd(args []string) error {
 	elementTag := fs.String("tag", "", "an element's tag")
 	file := fs.String("file", "", "a file's path")
 	source := fs.String("source", "cli", "what captured it")
+	note := fs.String("note", "", "what to do about it, for the agent")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(),
 			"usage: tend context add [flags] [text...]\n\n"+
@@ -77,7 +78,7 @@ func runContextAdd(args []string) error {
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(hoistFlags(args, map[string]bool{"s": true, "kind": true, "url": true, "title": true,
-		"selector": true, "tag": true, "file": true, "source": true})); err != nil {
+		"selector": true, "tag": true, "file": true, "source": true, "note": true})); err != nil {
 		return err
 	}
 	text := strings.Join(fs.Args(), " ")
@@ -106,7 +107,7 @@ func runContextAdd(args []string) error {
 		}
 	}
 	params := map[string]any{"kind": *kind, "source": *source, "title": *title, "url": *url,
-		"selector": *selector, "tag": *elementTag, "path": *file, "text": text}
+		"selector": *selector, "tag": *elementTag, "path": *file, "text": text, "note": *note}
 	out, err := apiCall(*name, api.MethodContextAdd, params, false)
 	if err != nil {
 		return err

@@ -2,7 +2,10 @@ package server
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/sousaakira/tend/internal/proto"
 )
@@ -45,7 +48,69 @@ func TestCommandsGoToTheBrowsersAttached(t *testing.T) {
 	if err != nil || it.Kind != "element" || it.Source != "browser" {
 		t.Errorf("captured: %+v %v", it, err)
 	}
-	if _, err := s.BrowserSendToAgent(proto.ContextItem{Selector: "#go"}, 0); err == nil {
+	if _, err := s.BrowserSendToAgent([]proto.ContextItem{{Selector: "#go"}}, 0, ""); err == nil {
 		t.Error("no pane in focus, none named: an error")
+	}
+}
+
+// TestPickedElementsGoTogetherAndCannotAct: elements picked on a page, with
+// the notes on them, are typed into the pane as one message. A program that
+// takes pastes (an agent) gets it as a bracketed paste with its lines; one
+// that does not (a shell) gets it on one line, since each break would be
+// Enter — none of it is pressed. If it regresses, a page's text sent to a
+// shell runs as commands, or the notes do not reach the agent.
+func TestPickedElementsGoTogetherAndCannotAct(t *testing.T) {
+	s := newServer(t)
+	dir := t.TempDir()
+	items := []proto.ContextItem{
+		{URL: "https://example.com/", Selector: "#save", Tag: "button", Text: "Salvar", Note: "should be green"},
+		{URL: "https://example.com/", Selector: "h1", Tag: "h1", Text: "Pedidos\nrm -rf ~", Note: "too big on phones"},
+	}
+	for _, c := range []struct {
+		name, setup string
+		paste       bool
+	}{
+		{"agent", `printf '\033[?2004h'; `, true},
+		{"shell", ``, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			out := dir + "/" + c.name
+			ws, err := s.NewWorkspace(c.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, pane, err := s.NewTab(ws, c.name, shell(c.setup+`stty -icanon -echo min 1; exec cat > `+out))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.paste {
+				waitFor(t, "bracketed paste asked for", func() bool {
+					rt, err := s.runtime(pane)
+					return err == nil && rt.modes().BracketedPaste
+				})
+			}
+			time.Sleep(200 * time.Millisecond) // stty has run
+			if _, err := s.BrowserSendToAgent(append([]proto.ContextItem(nil), items...), pane, "fix these on mobile"); err != nil {
+				t.Fatal(err)
+			}
+			var got string
+			waitFor(t, "the text typed", func() bool {
+				raw, _ := os.ReadFile(out)
+				got = string(raw)
+				return strings.Contains(got, "too big on phones")
+			})
+			if !strings.Contains(got, "fix these on mobile") || strings.Index(got, "fix these on mobile") > strings.Index(got, "Context captured") {
+				t.Errorf("the message first: %q", got)
+			}
+			if !strings.Contains(got, "note: should be green") || !strings.Contains(got, "[2] element (from browser)") {
+				t.Errorf("both, with their notes: %q", got)
+			}
+			if c.paste && (!strings.HasPrefix(got, "\x1b[200~") || !strings.Contains(got, "\nrm -rf ~")) {
+				t.Errorf("a paste, with its lines: %q", got)
+			}
+			if !c.paste && (strings.ContainsAny(got, "\n\r") || !strings.Contains(got, " ⏎ rm -rf ~")) {
+				t.Errorf("one line, nothing pressed: %q", got)
+			}
+		})
 	}
 }

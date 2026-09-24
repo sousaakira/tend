@@ -10,10 +10,53 @@ browser + extension ──(bridge)──► tend server ──► context buffer
                      ◄── commands ──┘
 ```
 
-What exists today is the server's side and a stand-in for the browser's:
-everything below works against `tend browser attach`, which prints the
-commands a browser would follow. The extension and the bridge it needs are
-the next step (see "Still to build").
+## The browser tend opens
+
+The toolbar's Browser (prefix+B) — or `tend browser launch [url]` — opens a
+page in tend's browser when no browser is attached to the session yet: a
+Chromium-family browser in a profile of the session's own
+(`~/.local/share/tend/browser/<session>/`), started with tend's extension
+loaded. Nothing is installed by hand, and the user's own browser and
+profile are not touched.
+
+- **The extension** (`internal/browserext/extension/`, built into tend and
+  written out each time the browser opens, so it is always the running
+  tend's) connects to the native messaging host `dev.tend.browser` as it
+  starts, and follows the session's commands. Its manifest carries a fixed
+  key, so its ID is always `kafdikfjfbpngnlobakdlnepmciniffa`.
+- **Picking and notes**: its toolbar icon or Alt+Shift+T turns picking on in
+  the page. The element under the pointer is outlined with its selector over
+  it; a click takes it and opens a note on it (Enter saves, Shift+Enter a new
+  line, Esc skips), and picking goes on, so several are taken in a row, each
+  numbered on the page. Esc, or Done picking, stops. A floating chat button
+  holds them all: each with its note, editable there, sent to the agent on
+  its own or removed. Over them is a message box, for what is wanted of all
+  of them together; Copy all copies the message and them, in the text tend
+  hands an agent, and Send all to agent sends them together, as one message
+  led by it. A note still being written when either is pressed goes with
+  it. What is taken
+  is kept per tab and page, so a reload finds it again; it goes when the
+  browser closes. It is all drawn in a shadow root, apart from the page's
+  styles.
+- **The bridge** (`tend browser bridge`) is that host: the browser starts it,
+  from a script in the profile, with the environment the browser was started
+  with (`TEND_BROWSER_SESSION`, and `TEND_BROWSER_REMOTE` for a session over
+  ssh). It speaks native messaging — JSON after four bytes of its length —
+  on its standard streams, attaches to the session as a browser, passes each
+  command on, and takes the extension's requests to the socket: only the
+  browser's own (`browser.context`, `browser.send_to_agent`,
+  `browser.status`). Its registration is in the profile's
+  `NativeMessagingHosts/`, where a browser started on that profile looks.
+- **Which browser**: `[browser] program` if set, else the first of chromium,
+  chromium-browser, microsoft-edge, vivaldi, google-chrome-for-testing. Tried
+  on 2026-09-23: Chromium 153 and Edge 153 load the extension; Google Chrome
+  154 and Brave 153 do not, since Google's own Chrome stopped honouring
+  `--load-extension`, so they are not tried. With none of them, the page
+  opens in the desktop's browser without the extension, and tend says so.
+  `[browser] command` opens a browser of your own instead, also without it.
+
+A second page for the same session opens as a tab in the browser already
+running on that profile.
 
 ## The protocol
 
@@ -72,10 +115,17 @@ The browser hands back what was picked:
 
 It goes into the context buffer as an `element` from `browser` (a `kind` of
 `url` or `text` can be given instead), where the context panel (prefix+C)
-lists it and sends it to an agent. `browser.send_to_agent` takes the same
-params and a `pane_id`, and goes straight on: the item is kept, and typed
+lists it and sends it to an agent. Each item can carry a `note` — what the
+user wants done with it — which leads it in what the agent is handed.
+`browser.send_to_agent` takes the same params, or several under `items`, a
+`message` to lead them, and a `pane_id`, and goes straight on: the items are kept, and typed together
 into that pane — or, with no `pane_id`, the one the user was last in —
 without being submitted.
+
+Nothing typed this way can act. Control characters are dropped, so an
+escape in a page's text cannot end a bracketed paste early; and a program
+that has not asked for bracketed paste — a shell, not an agent — gets the
+text on one line, each break shown as ⏎, since a break would be Enter.
 
 ## Trying it without a browser
 
@@ -86,18 +136,12 @@ tend browser open https://example.com   # the stand-in prints it
 tend api browser.context '{"url":"https://example.com","selector":"h1","text":"Example Domain"}'
 ```
 
-## Still to build
+## Not done
 
-- **The extension** (`tend-browser-extension`): highlights the element under
-  the pointer while `select` is on, builds a selector for the one clicked,
-  and sends `browser.context` with its tag, text and attributes; follows
-  `open` and `navigate`.
-- **The bridge**: an extension cannot open a Unix socket. Chromium-family
-  browsers and Firefox both give an extension native messaging instead — a
-  program the browser starts, speaking length-prefixed JSON on its standard
-  streams — so a `tend browser bridge` would be that program, relaying
-  between the extension and `browser.attach` / `browser.context` on the
-  socket, plus the host manifest that tells the browser where it is.
-- **The TEND Browser**: `[browser] command` is where a browser started with
-  its own profile and the extension loaded goes, so pages tend opens land in
-  one that can pick elements.
+- Firefox: it gives extensions native messaging too, but loads an unsigned
+  one only for a session and only through its developer tools, so tend's
+  browser is Chromium-family.
+- Picking a stretch of text rather than an element, and screenshots, which
+  the context's kinds leave room for.
+- Knowing when the agent has read what was sent: the extension marks an item
+  sent when tend has typed it, not when anybody has pressed Enter.

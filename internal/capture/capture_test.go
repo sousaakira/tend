@@ -36,3 +36,21 @@ func TestItemsAreCheckedAndReadAsAnAgentReadsThem(t *testing.T) {
 		t.Errorf("summary: %q", s)
 	}
 }
+
+// TestTextTypedIntoAPaneCannotAct: a page's text loses every control
+// character — an escape that would end a paste, a bell, a Ctrl+C — and keeps
+// its line breaks only for a program that takes pastes; for one that does
+// not, the lines are joined, since each break would be Enter. If it
+// regresses, sending a page's element into a shell runs its text as
+// commands, or text crafted to leave a paste acts as keys in an agent.
+func TestTextTypedIntoAPaneCannotAct(t *testing.T) {
+	evil := "line one\r\nrm -rf ~\x1b[201~\nnext\x03\x07\tend"
+	pasted := Inert(evil, true)
+	if strings.ContainsAny(pasted, "\x1b\x03\x07\r\t") || !strings.Contains(pasted, "line one\nrm -rf ~[201~\nnext end") {
+		t.Errorf("for a paste: %q", pasted)
+	}
+	typed := Inert(evil, false)
+	if strings.ContainsAny(typed, "\n\r\x1b\x03") || typed != "line one ⏎ rm -rf ~[201~ ⏎ next end" {
+		t.Errorf("for a shell: %q", typed)
+	}
+}

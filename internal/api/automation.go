@@ -993,7 +993,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		}
 		it, err := a.srv.AddContext(proto.ContextItem{
 			Kind: p.Kind, Source: p.Source, Title: p.Title, URL: p.URL, Selector: p.Selector,
-			Tag: p.Tag, Text: p.Text, Path: p.Path, Attributes: p.Attributes,
+			Tag: p.Tag, Text: p.Text, Path: p.Path, Attributes: p.Attributes, Note: p.Note,
 		})
 		if err != nil {
 			return nil, fail("invalid_context", "%s", err.Error())
@@ -1059,8 +1059,7 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 		if err := decode(req.Params, &p); err != nil {
 			return nil, err
 		}
-		item := proto.ContextItem{Kind: p.Kind, Title: p.Title, URL: p.URL, Selector: p.Selector,
-			Tag: p.Tag, Text: p.Text, Attributes: p.Attributes}
+		item := captureItem(p)
 		if req.Method == MethodBrowserContext {
 			kept, err := a.srv.BrowserCapture(item)
 			if err != nil {
@@ -1076,7 +1075,14 @@ func (a *API) callMore(req Request, pend *pending) (any, error) {
 			}
 			pane = id
 		}
-		sent, err := a.srv.BrowserSendToAgent(item, pane)
+		items := []proto.ContextItem{item}
+		if len(p.Items) > 0 {
+			items = items[:0]
+			for _, it := range p.Items {
+				items = append(items, captureItem(it))
+			}
+		}
+		sent, err := a.srv.BrowserSendToAgent(items, pane, p.Message)
 		if err != nil {
 			return nil, fail("context_send_failed", "%s", err.Error())
 		}

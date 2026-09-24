@@ -463,6 +463,9 @@ type ContextItem struct {
 	Path     string `json:"path,omitempty"`
 	// Attributes are an element's, as the page has them.
 	Attributes map[string]string `json:"attributes,omitempty"`
+	// Note is what the user wrote about it: what is wrong with it, what
+	// to do to it. It is the part an agent is asked to act on.
+	Note string `json:"note,omitempty"`
 	// Created is when it was captured, in seconds since the epoch.
 	Created int64 `json:"created,omitempty"`
 }

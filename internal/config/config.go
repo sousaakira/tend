@@ -79,9 +79,13 @@ func (c Config) FilesWidth() int {
 }
 
 // Browser configures the browser tend opens pages in when none is attached
-// to the session: Command is the program and its arguments, the page's URL
-// added last; empty is the desktop's own (xdg-open, open on a Mac).
+// to the session. By default it is tend's own: a Chromium-family browser in
+// a profile of tend's with tend's extension loaded (internal/browserext);
+// Program names which browser (chromium, brave-browser, ...), else the
+// first found. Command, when set, replaces all that with a program of the
+// user's own, the page's URL added last, and no extension.
 type Browser struct {
+	Program string `toml:"program"`
 	Command string `toml:"command"`
 }
 

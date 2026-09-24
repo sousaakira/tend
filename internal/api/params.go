@@ -408,6 +408,7 @@ type WorktreeRemoveParams struct {
 // ContextAddParams is what MethodContextAdd takes: one captured item. Kind
 // is url, element, text or file; the fields for it are required by kind.
 type ContextAddParams struct {
+	Note       string            `json:"note"`
 	Kind       string            `json:"kind" schema:"required"`
 	Source     string            `json:"source"`
 	Title      string            `json:"title"`
@@ -450,6 +451,13 @@ type BrowserSelectParams struct {
 // with the page it is on; PaneID, for send_to_agent, is where it goes (none:
 // the pane the user was last in).
 type BrowserCaptureParams struct {
+	// Items are several at once, for send_to_agent: sent together, as one
+	// message. With Items, the fields below are not read.
+	Items []BrowserCaptureParams `json:"items"`
+	// Message leads what send_to_agent types: the user's words for the
+	// items together.
+	Message    string            `json:"message"`
+	Note       string            `json:"note"`
 	Kind       string            `json:"kind"`
 	Title      string            `json:"title"`
 	URL        string            `json:"url"`

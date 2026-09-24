@@ -82,11 +82,13 @@ tools have captured for the agents — a page, an element picked in one, text,
 a file: put things there with `tend context add`, with "Add to context" on a
 file in the files panel, or from any tool over the automation socket
 (`context.add`); then copy one, or send it to the agent this tab works with,
-where it is typed in for you to read over and send. Browser (or `ctrl+b B`) opens a page: in the
-browser attached to the session when there is one, otherwise in
-`[browser] command` or the desktop's own. A browser extension that picks
-elements on a page and hands them to the context is the next step; the
-server's side of it is there (`docs/BROWSER.md`). `ctrl+b w` walks them too, and `[ui.toolbar] enabled =
+where it is typed in for you to read over and send. Browser (or `ctrl+b B`) opens a page in tend's
+browser: Chromium (or Edge) in a profile of the session's own, with tend's
+extension already in it. Its icon, or Alt+Shift+T, lets you pick elements on
+the page — outlined as you point, numbered as you take them — and write a
+note on each; a chat button in the corner holds them all, to copy at once or
+send to the agent one by one or together, typed in for you to read over. Nothing to install; your own browser is left alone
+(`docs/BROWSER.md`). `ctrl+b w` walks them too, and `[ui.toolbar] enabled =
 false` takes the row away.
 
 The sidebar's right edge can be dragged to make it wider or narrower (18 to
@@ -227,8 +229,9 @@ curl -fsSL https://sousaakira.github.io/tend/install.sh | sh
 ```
 
 tend looks for a newer release in the background and says so: a notice, and
-"update ready" at the right of the status bar. `tend update -handoff`
-installs it without stopping what is running; the sidebar's "menu" has what
+"update ready" at the right of the status bar. The sidebar's "menu" → update
+ready shows what is new in it, and `u` there installs it (`tend update
+-handoff`, in a tab of its own) without stopping what is running; the sidebar's "menu" has what
 is new in it. `[update] version_check = false` turns the check off.
 
 Or from a checkout:

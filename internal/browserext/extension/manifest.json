@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "tend",
+  "version": "0.2.0",
+  "description": "Pick elements on a page, write notes on them, and hand them to the tend session's agents.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAj03XEYDpFFRk87JdgUV6XY3ShSk6lboisK//PTts7lF2Ks3s52MZL5D6NHubst7vgyLAiW/gDAVgCJfcqOpeMayR2ARDomPVsN7ECzcpjgVApK2+3iwiDzyNklEDebrWXjy5DQrN47S8aU59gTyjIR7i+xUh0dPPb6gww4JSRZXymVqOMq5glbotaJ/YZSJ53zACC2d/uUFw+O+qfnLNbuPVZ+JTtsXS1ungJvDywSKWuDIVasFQagxebYRCLbK1f3uMftsAc0DamX22UDpZQZYH0Ib8AH3XdIUJeR7kqjAebIPBI0sSUTQxtjag7g92za415KT54s2i9KIdr63yrwIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "tabs",
+    "scripting",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "tend: pick elements and write notes for the agents (Alt+Shift+T)"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+T"
+      },
+      "description": "Pick an element for tend"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

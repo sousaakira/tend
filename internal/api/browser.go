@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/server"
 )
 
@@ -61,4 +62,10 @@ func (a *API) followBrowser(conn net.Conn, name string) error {
 			}
 		}
 	}
+}
+
+// captureItem is what a browser sent, as a context item.
+func captureItem(p BrowserCaptureParams) proto.ContextItem {
+	return proto.ContextItem{Kind: p.Kind, Title: p.Title, URL: p.URL, Selector: p.Selector,
+		Tag: p.Tag, Text: p.Text, Attributes: p.Attributes, Note: p.Note}
 }

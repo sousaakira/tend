@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/sousaakira/tend/internal/api"
+	"github.com/sousaakira/tend/internal/config"
 )
 
 // `tend browser`, the session's browsers from a shell (server/browser.go):
@@ -19,7 +20,7 @@ import (
 // through will do, and how that road is tried before there is an extension.
 func runBrowser(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: tend browser status|open <url>|select on|off|attach")
+		return errors.New("usage: tend browser status|open <url>|select on|off|attach|launch [url]|bridge")
 	}
 	fs := flag.NewFlagSet("browser "+args[0], flag.ExitOnError)
 	name := sessionFlag(fs)
@@ -56,8 +57,18 @@ func runBrowser(args []string) error {
 		return err
 	case "attach":
 		return browserAttach(*name, *label)
+	case "bridge":
+		return runBrowserBridge()
+	case "launch":
+		cfg, _ := config.LoadLenient()
+		used, err := launchTendBrowser(*name, remoteHost, cfg.Browser.Program, fs.Arg(0))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "%s opened %s with tend's extension, for session %q\n", tag(), used, *name)
+		return nil
 	}
-	return fmt.Errorf("tend browser: %q is not status, open, select or attach", args[0])
+	return fmt.Errorf("tend browser: %q is not status, open, select, attach, launch or bridge", args[0])
 }
 
 // browserAttach holds a browser.attach stream open and prints what comes.

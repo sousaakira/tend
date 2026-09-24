@@ -58,14 +58,23 @@ func Check(it proto.ContextItem) error {
 	default:
 		return fmt.Errorf("capture: kind %q; use %s", it.Kind, strings.Join(Kinds, ", "))
 	}
-	if len(it.Text) > MaxText {
+	if len(it.Text) > MaxText || len(it.Note) > MaxText {
 		return fmt.Errorf("capture: %d bytes of text, more than %d", len(it.Text), MaxText)
 	}
 	return nil
 }
 
-// Summary is an item in one line, for a list.
+// Summary is an item in one line, for a list: what it is, and the note on
+// it after a dash when there is one.
 func Summary(it proto.ContextItem) string {
+	line := summary(it)
+	if note := oneLine(it.Note); note != "" {
+		line += " — " + note
+	}
+	return line
+}
+
+func summary(it proto.ContextItem) string {
 	switch it.Kind {
 	case KindURL:
 		if it.Title != "" {
@@ -97,8 +106,15 @@ func oneLine(s string) string {
 
 // Format is items as an agent is handed them: a line saying what follows,
 // then each item with what it has, in plain text a prompt can hold.
-func Format(items []proto.ContextItem) string {
+func Format(items []proto.ContextItem) string { return FormatWith("", items) }
+
+// FormatWith is Format led by a message: what the user wrote for all of
+// them together, the request the items are the context of.
+func FormatWith(message string, items []proto.ContextItem) string {
 	var b strings.Builder
+	if message = strings.TrimSpace(message); message != "" {
+		b.WriteString(message + "\n\n")
+	}
 	b.WriteString("Context captured in tend:\n")
 	for i, it := range items {
 		fmt.Fprintf(&b, "\n[%d] %s", i+1, it.Kind)
@@ -111,6 +127,9 @@ func Format(items []proto.ContextItem) string {
 				fmt.Fprintf(&b, "%s: %s\n", name, value)
 			}
 		}
+		// The note first: it is what the user wants done, and what the
+		// rest says where.
+		field("note", it.Note)
 		field("title", it.Title)
 		field("url", it.URL)
 		field("selector", it.Selector)
@@ -134,6 +153,34 @@ func Format(items []proto.ContextItem) string {
 			} else {
 				field("text", it.Text)
 			}
+		}
+	}
+	return b.String()
+}
+
+// Inert is text made safe to type into a terminal program without anything
+// in it acting: every control character goes — an escape could end a
+// bracketed paste and turn what follows into keys — but a line break and a
+// tab. Where the program takes pastes (bracketed), breaks stay, and it
+// reads them as text; where it does not, a break would be Enter, so the text
+// goes on one line, each break shown as ⏎.
+func Inert(text string, bracketed bool) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	var b strings.Builder
+	for _, r := range text {
+		switch {
+		case r == '\n' || r == '\r':
+			if bracketed {
+				b.WriteByte('\n')
+			} else {
+				b.WriteString(" ⏎ ")
+			}
+		case r == '\t':
+			b.WriteByte(' ')
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0):
+			// dropped
+		default:
+			b.WriteRune(r)
 		}
 	}
 	return b.String()

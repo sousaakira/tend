@@ -2,9 +2,11 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
+	"github.com/sousaakira/tend/internal/capture"
 	"github.com/sousaakira/tend/internal/proto"
 	"github.com/sousaakira/tend/internal/session"
 )
@@ -143,13 +145,15 @@ func (s *Server) BrowserCapture(it proto.ContextItem) (proto.ContextItem, error)
 	return s.AddContext(it)
 }
 
-// BrowserSendToAgent captures an item and types it into a pane — the one
-// named, or the one the user was last in — for the agent there, submitting
-// nothing. It returns the pane it went to.
-func (s *Server) BrowserSendToAgent(it proto.ContextItem, pane session.PaneID) (session.PaneID, error) {
-	kept, err := s.BrowserCapture(it)
-	if err != nil {
-		return 0, err
+// BrowserSendToAgent captures items and types them, together and led by the
+// user's message for them, into a pane —
+// the one named, or the one the user was last in — for the agent there,
+// submitting nothing: the elements picked on a page and the notes on them,
+// as one message. It returns the pane they went to. An item that is not fit
+// for the buffer stops the lot before any is kept.
+func (s *Server) BrowserSendToAgent(items []proto.ContextItem, pane session.PaneID, message string) (session.PaneID, error) {
+	if len(items) == 0 {
+		return 0, errors.New("browser: nothing to send")
 	}
 	if pane == 0 {
 		pane = s.FocusedPane()
@@ -157,5 +161,22 @@ func (s *Server) BrowserSendToAgent(it proto.ContextItem, pane session.PaneID) (
 	if pane == 0 {
 		return 0, errors.New("browser: no pane to send to; name one")
 	}
-	return pane, s.SendContext(pane, []uint64{kept.ID})
+	for i := range items {
+		items[i].Source = "browser"
+		if items[i].Kind == "" {
+			items[i].Kind = "element"
+		}
+		if err := capture.Check(items[i]); err != nil {
+			return 0, fmt.Errorf("item %d: %w", i+1, err)
+		}
+	}
+	ids := make([]uint64, 0, len(items))
+	for _, it := range items {
+		kept, err := s.AddContext(it)
+		if err != nil {
+			return 0, err
+		}
+		ids = append(ids, kept.ID)
+	}
+	return pane, s.SendContextWith(pane, ids, message)
 }

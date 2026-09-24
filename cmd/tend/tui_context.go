@@ -105,6 +105,7 @@ func contextEntry(it proto.ContextItem) ui.ContextEntry {
 			e.Parts = append(e.Parts, ui.ContextPart{Heading: heading, Value: value})
 		}
 	}
+	add("NOTE", it.Note)
 	if it.Title != "" && it.URL != "" {
 		add("PAGE", it.Title)
 	}
