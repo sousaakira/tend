@@ -422,6 +422,8 @@ type Frame struct {
 	AgentManager *AgentManagerView
 	// Sessions is the sessions list, when it is up (sessions.go).
 	Sessions *SessionsView
+	// Issues is the GitHub issues panel, when it is up (issues.go).
+	Issues *IssuesView
 	// Context is the context panel, when it is up (contextpanel.go).
 	Context *ContextView
 	// UpdateReady puts herdr's "update ready" at the right of the status
@@ -620,6 +622,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.Sessions != nil {
 		drawSessions(dst, f.Sessions, theme)
+	}
+	if f.Issues != nil {
+		drawIssues(dst, f.Issues, theme)
 	}
 	if f.Context != nil {
 		drawContextPanel(dst, f.Context, theme)

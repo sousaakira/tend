@@ -499,6 +499,34 @@ func (c *Client) PaneGraphics(pane uint64) (proto.PaneGraphicsResult, error) {
 }
 
 // ReloadConfig makes the server re-read the settings file.
+// GitHubIssues lists the issues of the repository a pane's project is on.
+func (c *Client) GitHubIssues(p proto.GitHubIssuesParams) (proto.GitHubIssuesResult, error) {
+	var out proto.GitHubIssuesResult
+	return out, c.Call(proto.MethodGitHubIssues, p, &out)
+}
+
+// GitHubIssueComment comments on an issue.
+func (c *Client) GitHubIssueComment(repo string, number int, body string) error {
+	return c.Call(proto.MethodGitHubIssueComment, proto.GitHubIssueParams{Repo: repo, Number: number, Body: body}, nil)
+}
+
+// GitHubIssueState closes an issue for a reason, or opens it again.
+func (c *Client) GitHubIssueState(repo string, number int, state, reason string) error {
+	return c.Call(proto.MethodGitHubIssueState, proto.GitHubIssueParams{Repo: repo, Number: number, State: state, Reason: reason}, nil)
+}
+
+// GitHubIssueCreate files an issue.
+func (c *Client) GitHubIssueCreate(repo, title, body string) (proto.GitHubIssueCreated, error) {
+	var out proto.GitHubIssueCreated
+	return out, c.Call(proto.MethodGitHubIssueCreate, proto.GitHubIssueParams{Repo: repo, Title: title, Body: body}, &out)
+}
+
+// GitHubIssue reads one issue with its thread.
+func (c *Client) GitHubIssue(repo string, number int) (proto.GitHubIssueDetail, error) {
+	var out proto.GitHubIssueDetail
+	return out, c.Call(proto.MethodGitHubIssue, proto.GitHubIssueParams{Repo: repo, Number: number}, &out)
+}
+
 // AgentSessions lists the conversations agents keep on the server's
 // machine, the last written first.
 func (c *Client) AgentSessions() (proto.AgentSessionsResult, error) {

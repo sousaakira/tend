@@ -1,0 +1,223 @@
+//go:build unix
+
+package github
+
+import (
+	"errors"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// TestARemoteIsReadInEveryFormGitWritesIt: https, scp-like and ssh remotes
+// on github.com name their repository, with or without .git; another host
+// names none. If it regresses, a project cloned over ssh has "no GitHub
+// remote".
+func TestARemoteIsReadInEveryFormGitWritesIt(t *testing.T) {
+	for remote, want := range map[string]string{
+		"https://github.com/sousaakira/tend.git":        "sousaakira/tend",
+		"https://github.com/sousaakira/tend":            "sousaakira/tend",
+		"https://token@github.com/stablyai/orca.git":    "stablyai/orca",
+		"git@github.com:sousaakira/orca.git":            "sousaakira/orca",
+		"ssh://git@github.com/sousaakira/tend.git":      "sousaakira/tend",
+		"ssh://git@github.com:22/sousaakira/tend":       "sousaakira/tend",
+		"https://gitlab.com/someone/project.git":        "",
+		"git@bitbucket.org:someone/project.git":         "",
+		"https://github.com/sousaakira/tend/extra/path": "",
+	} {
+		owner, name, ok := ParseRemote(remote)
+		got := ""
+		if ok {
+			got = owner + "/" + name
+		}
+		if got != want {
+			t.Errorf("%s = %q, want %q", remote, got, want)
+		}
+	}
+}
+
+// TestAForkListsWhatItForkedFirst: a checkout with origin and upstream on
+// GitHub gives upstream first, as Orca does, and one with no GitHub remote
+// says so. If it regresses, a fork's issues list shows the fork's, which
+// usually has none, with no word that upstream is there.
+func TestAForkListsWhatItForkedFirst(t *testing.T) {
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	if _, err := ReposFor(dir); !errors.Is(err, ErrNoRepo) {
+		t.Errorf("no remotes: %v", err)
+	}
+	git("remote", "add", "origin", "git@github.com:me/orca.git")
+	git("remote", "add", "mirror", "https://gitlab.com/me/orca.git")
+	git("remote", "add", "upstream", "https://github.com/stablyai/orca.git")
+	repos, err := ReposFor(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 2 || repos[0].Slug() != "stablyai/orca" || repos[0].Remote != "upstream" || repos[1].Slug() != "me/orca" {
+		t.Errorf("repos: %+v", repos)
+	}
+}
+
+// fakeGh puts a gh on PATH that records its arguments and prints out, or
+// fails with stderr.
+func fakeGh(t *testing.T, out, stderr string, code int) (argsFile string) {
+	t.Helper()
+	bin := t.TempDir()
+	argsFile = filepath.Join(bin, "args")
+	outFile := filepath.Join(bin, "out")
+	if err := os.WriteFile(outFile, []byte(out), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argsFile + "\ncat > " + argsFile + ".stdin\ncat " + outFile + "\n"
+	if stderr != "" {
+		script += "echo '" + stderr + "' >&2\n"
+	}
+	script += "exit " + string(rune('0'+code)) + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	return argsFile
+}
+
+// TestTheListIsGitHubsSearchWithWhatWasTyped: the list asks GitHub's issue
+// search for the repository's issues in the preset, with what was typed
+// after it, the last updated first, and leaves pull requests out. If it
+// regresses, typing label:bug finds nothing, or PRs show among issues.
+func TestTheListIsGitHubsSearchWithWhatWasTyped(t *testing.T) {
+	args := fakeGh(t, `{"total_count":7,"items":[
+		{"number":12,"title":"Crash on start","state":"open","html_url":"https://github.com/o/r/issues/12",
+		 "user":{"login":"ana"},"labels":[{"name":"bug"}],"assignees":[{"login":"me"}],"comments":3,"updated_at":"2026-09-20T10:00:00Z"},
+		{"number":13,"title":"A PR","state":"open","pull_request":{"url":"x"},"user":{"login":"bo"},"updated_at":"2026-09-20T10:00:00Z"}]}`, "", 0)
+	issues, total, err := List(Repo{Owner: "o", Name: "r"}, FilterMine, "label:bug crash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 7 || len(issues) != 1 {
+		t.Fatalf("total %d, issues %+v", total, issues)
+	}
+	i := issues[0]
+	if i.Number != 12 || i.Author != "ana" || i.Labels[0] != "bug" || i.Assignees[0] != "me" || i.Comments != 3 || i.Updated.Day() != 20 {
+		t.Errorf("issue: %+v", i)
+	}
+	got, _ := os.ReadFile(args)
+	q := ""
+	for _, a := range strings.Split(string(got), "\n") {
+		if strings.HasPrefix(a, "search/issues?") {
+			v, _ := url.ParseQuery(strings.TrimPrefix(a, "search/issues?"))
+			q = v.Get("q") + " sort=" + v.Get("sort")
+		}
+	}
+	if q != "repo:o/r is:issue is:open assignee:@me label:bug crash sort=updated" {
+		t.Errorf("search: %q (args %q)", q, got)
+	}
+}
+
+// TestAnIssueIsReadWithItsThread: one issue comes with its text, labels,
+// assignees and comments. If it regresses, the detail shows a title and
+// nothing under it.
+func TestAnIssueIsReadWithItsThread(t *testing.T) {
+	fakeGh(t, `{"number":12,"title":"Crash","state":"OPEN","url":"https://github.com/o/r/issues/12","body":"It crashes.",
+		"author":{"login":"ana"},"labels":[{"name":"bug"}],"assignees":[{"login":"me"}],
+		"comments":[{"author":{"login":"bo"},"body":"Same here.","createdAt":"2026-09-21T10:00:00Z"}],
+		"createdAt":"2026-09-19T10:00:00Z","updatedAt":"2026-09-21T10:00:00Z"}`, "", 0)
+	d, err := Get(Repo{Owner: "o", Name: "r"}, 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Title != "Crash" || d.State != "open" || d.Body != "It crashes." || len(d.Thread) != 1 || d.Thread[0].Author != "bo" || d.Comments != 1 {
+		t.Errorf("detail: %+v", d)
+	}
+}
+
+// TestWhatGhNeedsIsSaid: gh missing and gh not logged in are told apart
+// from other failures, which keep gh's own first line. If it regresses, the
+// list says "exit status 4" where it should say to run gh auth login.
+func TestWhatGhNeedsIsSaid(t *testing.T) {
+	fakeGh(t, "", "To get started with GitHub CLI, please run:  gh auth login", 4)
+	if _, _, err := List(Repo{Owner: "o", Name: "r"}, FilterOpen, ""); !errors.Is(err, ErrNotLoggedIn) {
+		t.Errorf("not logged in: %v", err)
+	}
+	fakeGh(t, "", "HTTP 404: Not Found (https://api.github.com/search/issues)", 1)
+	if _, _, err := List(Repo{Owner: "o", Name: "r"}, FilterOpen, ""); err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Errorf("404: %v", err)
+	}
+	old := Gh
+	Gh = "tend-no-such-gh"
+	defer func() { Gh = old }()
+	if _, _, err := List(Repo{Owner: "o", Name: "r"}, FilterOpen, ""); !errors.Is(err, ErrNoGh) {
+		t.Errorf("no gh: %v", err)
+	}
+}
+
+// TestWhatIsWrittenGoesToGitHub: a comment's text goes on gh's standard
+// input, a close carries its reason, a reopen is a reopen, and a new issue
+// comes back with its number. If it regresses, a comment with a quote in it
+// is cut on a command line, or an issue closed "not planned" is closed as
+// done.
+func TestWhatIsWrittenGoesToGitHub(t *testing.T) {
+	repo := Repo{Owner: "o", Name: "r"}
+	args := fakeGh(t, "", "", 0)
+	if err := AddComment(repo, 12, "It's fixed in \"main\".\nSecond line."); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(args)
+	in, _ := os.ReadFile(args + ".stdin")
+	if string(got) != "issue\ncomment\n12\n--repo\no/r\n--body-file\n-\n" || string(in) != "It's fixed in \"main\".\nSecond line." {
+		t.Errorf("comment: %q, stdin %q", got, in)
+	}
+	if err := AddComment(repo, 12, "  "); err == nil {
+		t.Error("an empty comment was sent")
+	}
+
+	if err := Close(repo, 12, ReasonNotPlanned); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(args); string(got) != "issue\nclose\n12\n--repo\no/r\n--reason\nnot planned\n" {
+		t.Errorf("close: %q", got)
+	}
+	if err := Reopen(repo, 12); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(args); string(got) != "issue\nreopen\n12\n--repo\no/r\n" {
+		t.Errorf("reopen: %q", got)
+	}
+
+	fakeGh(t, "Creating issue in o/r\n\nhttps://github.com/o/r/issues/57\n", "", 0)
+	n, url, err := Create(repo, "Footer overlaps", "On mobile.")
+	if err != nil || n != 57 || url != "https://github.com/o/r/issues/57" {
+		t.Errorf("create = %d %q %v", n, url, err)
+	}
+}
+
+// TestAnIssuesBranchIsNamedAfterIt: the branch work on an issue goes on
+// carries its number and a slug of its title, and is found again by the
+// number whatever the title became. If it regresses, starting work twice on
+// one issue makes two worktrees.
+func TestAnIssuesBranchIsNamedAfterIt(t *testing.T) {
+	for title, want := range map[string]string{
+		"[Bug]: Checkout button is grey!":          "issue-42-bug-checkout-button-is-grey",
+		"Ação com acentos":                         "issue-42-acao-com-acentos",
+		"Teste: começar a trabalhar cria worktree": "issue-42-teste-comecar-a-trabalhar-cria-worktree",
+		"Über Straße, déjà vu":                     "issue-42-uber-strasse-deja-vu",
+		"???":                                      "issue-42",
+		"A very long title that goes on and on well past the edge": "issue-42-a-very-long-title-that-goes-on-and-on",
+	} {
+		got := IssueBranch(42, title)
+		if got != want {
+			t.Errorf("%q = %q, want %q", title, got, want)
+		}
+		if !IsIssueBranch(got, 42) || IsIssueBranch(got, 4) {
+			t.Errorf("%q is not found again by its number alone", got)
+		}
+	}
+}

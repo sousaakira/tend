@@ -85,7 +85,13 @@ file in the files panel, or from any tool over the automation socket
 agent this tab works with, where it is typed in for you to read over and send. Sessions (or `ctrl+b S`) lists the
 conversations your agents keep on this machine (Claude Code's so far): type to
 search them, enter to resume one in a new tab where it was held, and mark old
-ones to delete them. Browser (or `ctrl+b B`) opens a page in tend's
+ones to delete them. Issues (or `ctrl+b I`) lists the GitHub issues of the
+project you are in, through `gh`: pick a filter with tab, type to search
+(GitHub's syntax works: `label:bug`), enter to read one with its comments;
+there `c` comments, `x` closes it, and `w` starts work on it — a worktree on
+`issue-<n>-…` and your agent in it, told to complete the issue. `ctrl+n` files
+a new one.
+Browser (or `ctrl+b B`) opens a page in tend's
 browser: Chromium (or Edge) in a profile of the session's own, with tend's
 extension already in it. Its icon, or Alt+Shift+T, lets you pick elements on
 the page — outlined as you point, numbered as you take them — and write a

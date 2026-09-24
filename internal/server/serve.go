@@ -68,6 +68,11 @@ var Methods = []string{
 	proto.MethodAgentsCatalog,
 	proto.MethodAgentSessions,
 	proto.MethodAgentSessionsDelete,
+	proto.MethodGitHubIssues,
+	proto.MethodGitHubIssue,
+	proto.MethodGitHubIssueComment,
+	proto.MethodGitHubIssueState,
+	proto.MethodGitHubIssueCreate,
 	proto.MethodContextAdd,
 	proto.MethodContextList,
 	proto.MethodContextRemove,
@@ -574,6 +579,29 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 
 	case proto.MethodAgentSessions:
 		return c.srv.AgentSessions()
+
+	case proto.MethodGitHubIssues:
+		// gh and git are run here, on the machine the projects are on, and
+		// outside every lock: they reach the network.
+		var p proto.GitHubIssuesParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubIssues(p)
+
+	case proto.MethodGitHubIssue:
+		var p proto.GitHubIssueParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubIssue(p)
+
+	case proto.MethodGitHubIssueComment, proto.MethodGitHubIssueState, proto.MethodGitHubIssueCreate:
+		var p proto.GitHubIssueParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubIssueWrite(req.Method, p)
 
 	case proto.MethodAgentSessionsDelete:
 		var p proto.AgentSessionsDeleteParams

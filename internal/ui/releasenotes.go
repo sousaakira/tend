@@ -102,8 +102,15 @@ func notesBody(v *ReleaseNotesView, width int, theme Theme) []notesLine {
 		out = append(out, wrapNotes(notesLine{spans: append([]notesSpan{{" ", theme.Notes}}, inlineCode(v.Install, theme)...), fill: theme.Notes}, width)...)
 		out = append(out, notesLine{fill: theme.Notes})
 	}
+	return append(out, markdownLines(v.Body, width, theme)...)
+}
+
+// markdownLines is markdown as the notes draw it, wrapped to a width: the
+// release notes' body, and an issue's text and comments.
+func markdownLines(body string, width int, theme Theme) []notesLine {
+	var out []notesLine
 	fenced := false
-	for _, raw := range strings.Split(v.Body, "\n") {
+	for _, raw := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
 		trimmed := strings.TrimSpace(raw)
 		var line notesLine
 		switch {

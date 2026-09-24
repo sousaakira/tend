@@ -67,6 +67,16 @@ const (
 	// (internal/agentsessions): tend's own sessions list.
 	MethodAgentSessions       = "agent_sessions.list"
 	MethodAgentSessionsDelete = "agent_sessions.delete"
+	// MethodGitHubIssues lists the issues of the GitHub repository a pane's
+	// project is on, and MethodGitHubIssue reads one with its thread
+	// (internal/github, through the gh of the server's machine).
+	MethodGitHubIssues = "github.issues"
+	MethodGitHubIssue  = "github.issue"
+	// What is written to GitHub from the panel: a comment, an issue closed
+	// or opened again, a new issue.
+	MethodGitHubIssueComment = "github.issue.comment"
+	MethodGitHubIssueState   = "github.issue.state"
+	MethodGitHubIssueCreate  = "github.issue.create"
 	// The context buffer (internal/capture): what tools captured — a page's
 	// URL, an element picked in it, text, a file — kept by the server, which
 	// is between every tool and every agent, until it is sent to one.
@@ -177,6 +187,11 @@ var KnownMethods = []string{
 	MethodAgentsCatalog,
 	MethodAgentSessions,
 	MethodAgentSessionsDelete,
+	MethodGitHubIssues,
+	MethodGitHubIssue,
+	MethodGitHubIssueComment,
+	MethodGitHubIssueState,
+	MethodGitHubIssueCreate,
 	MethodContextAdd,
 	MethodContextList,
 	MethodContextRemove,
@@ -564,6 +579,76 @@ type AgentSessionsDeleteParams struct {
 type AgentSessionsDeleteResult struct {
 	Deleted []string          `json:"deleted"`
 	Kept    map[string]string `json:"kept,omitempty"`
+}
+
+// GitHubIssuesParams asks for a list: of the project Pane is working in,
+// through Remote (empty for the default, upstream before origin), in one of
+// the presets (github.Filters), with Query in GitHub's search syntax.
+type GitHubIssuesParams struct {
+	Pane   uint64 `json:"pane,omitempty"`
+	Remote string `json:"remote,omitempty"`
+	Filter int    `json:"filter,omitempty"`
+	Query  string `json:"query,omitempty"`
+}
+
+// GitHubIssue is one issue in a list.
+type GitHubIssue struct {
+	Number    int      `json:"number"`
+	Title     string   `json:"title"`
+	State     string   `json:"state"`
+	Author    string   `json:"author,omitempty"`
+	Labels    []string `json:"labels,omitempty"`
+	Assignees []string `json:"assignees,omitempty"`
+	Comments  int      `json:"comments"`
+	// Updated is in Unix seconds.
+	Updated int64  `json:"updated"`
+	URL     string `json:"url"`
+}
+
+// GitHubIssuesResult is github.issues' answer: the repository listed, the
+// remote it came through and the others there are, the directory it was
+// found from, the issues, and how many the search found in all.
+type GitHubIssuesResult struct {
+	Repo    string        `json:"repo"`
+	Remote  string        `json:"remote"`
+	Remotes []string      `json:"remotes"`
+	Dir     string        `json:"dir"`
+	Issues  []GitHubIssue `json:"issues"`
+	Total   int           `json:"total"`
+}
+
+// GitHubIssueParams names an issue: owner/name and its number. What is
+// written takes the rest: a comment's Body; the State an issue is put in,
+// open or closed, and the Reason it is closed for; a new issue's Title and
+// Body.
+type GitHubIssueParams struct {
+	Repo   string `json:"repo"`
+	Number int    `json:"number,omitempty"`
+	Title  string `json:"title,omitempty"`
+	Body   string `json:"body,omitempty"`
+	State  string `json:"state,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// GitHubIssueCreated is github.issue.create's answer.
+type GitHubIssueCreated struct {
+	Number int    `json:"number"`
+	URL    string `json:"url"`
+}
+
+// GitHubComment is one comment in an issue's thread.
+type GitHubComment struct {
+	Author  string `json:"author"`
+	Body    string `json:"body"`
+	Created int64  `json:"created"`
+}
+
+// GitHubIssueDetail is one issue whole.
+type GitHubIssueDetail struct {
+	GitHubIssue
+	Body    string          `json:"body"`
+	Created int64           `json:"created"`
+	Thread  []GitHubComment `json:"thread"`
 }
 
 // AgentsCatalogResult is agents.catalog's answer.

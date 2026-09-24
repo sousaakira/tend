@@ -35,6 +35,30 @@ type Config struct {
 	Browser    Browser   `toml:"browser"`
 	Sound      Sound     `toml:"sound"`
 	Files      Files     `toml:"files"`
+	Issues     Issues    `toml:"issues"`
+}
+
+// Issues configures starting work on a GitHub issue from the issues panel.
+type Issues struct {
+	// Agent is the agent CLI the work starts in; empty is the agent of the
+	// pane in view, else claude.
+	Agent string `toml:"agent"`
+	// Prompt is what the agent is started with. {url}, {number}, {title}
+	// and {repo} are the issue's. Orca's default, whose "Complete {{
+	// artifact_url}}" this is, trusts the agent to read the issue itself.
+	Prompt string `toml:"prompt"`
+}
+
+// DefaultIssuePrompt is the prompt when none is set.
+const DefaultIssuePrompt = "Complete {url}"
+
+// IssuePrompt is the prompt an issue's work starts with.
+func (c Config) IssuePrompt(url string, number int, title, repo string) string {
+	prompt := c.Issues.Prompt
+	if strings.TrimSpace(prompt) == "" {
+		prompt = DefaultIssuePrompt
+	}
+	return strings.NewReplacer("{url}", url, "{number}", fmt.Sprint(number), "{title}", title, "{repo}", repo).Replace(prompt)
 }
 
 // Files configures the files panel (prefix+f). The panel runs on the
@@ -243,7 +267,7 @@ type Toolbar struct {
 }
 
 // ToolbarTools are the tools a toolbar can hold, in their default order.
-var ToolbarTools = []string{"files", "agents", "sessions", "browser", "context"}
+var ToolbarTools = []string{"files", "agents", "sessions", "issues", "browser", "context"}
 
 // ToolbarItems is the tools the sidebar shows, none when it is off.
 func (c Config) ToolbarItems() []string {
@@ -770,7 +794,7 @@ grouped = false
 # agents, browser and context. items picks which, in order.
 # [ui.toolbar]
 # enabled = true
-# items = ["files", "agents", "sessions", "browser", "context"]
+# items = ["files", "agents", "sessions", "issues", "browser", "context"]
 
 [ui.theme]
 # A named theme: catppuccin, catppuccin-latte, terminal, tokyo-night,
@@ -844,6 +868,14 @@ version_check = true
 enabled = false
 # done = "~/sounds/done.wav"
 # request = "~/sounds/request.wav"
+
+[issues]
+# Starting work on a GitHub issue (the issues panel, w) makes a worktree for
+# it and starts an agent there. Which agent: empty is the one in the pane you
+# are on, else claude.
+# agent = "claude"
+# What the agent is told; {url}, {number}, {title} and {repo} are the issue's.
+# prompt = "Complete {url}"
 `
 
 // NotifyDelay is how long an agent's news is held before it is said.
