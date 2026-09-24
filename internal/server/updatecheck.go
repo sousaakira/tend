@@ -28,7 +28,7 @@ const updateInterval = 30 * time.Minute
 // UpdateInstall is how an update is installed, as the notice and the notes
 // say. herdr's says to detach, update and attach again; tend's handoff
 // replaces the server under the programs in it, so nothing needs leaving.
-const UpdateInstall = "run `tend update -handoff` in any pane; what is running keeps running"
+const UpdateInstall = "press u in the release notes (menu → update ready), or run `tend update -handoff`; what is running keeps running"
 
 // updateState is what the check knows, under s.mu.
 type updateState struct {

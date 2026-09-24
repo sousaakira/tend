@@ -40,9 +40,12 @@ const (
 // both drawing and a click read.
 type NotesGeometry struct {
 	Box Rect
-	// Close is the " esc close " button; Body is where the notes scroll.
-	Close Rect
-	Body  Rect
+	// Close is the " esc close " button; Update, beside it, " u update now ",
+	// is there while the notes are of a release newer than the one running.
+	// Body is where the notes scroll.
+	Close  Rect
+	Update Rect
+	Body   Rect
 }
 
 // ReleaseNotesLayout is the panel's geometry on a screen of cols by rows.
@@ -58,6 +61,9 @@ func ReleaseNotesLayout(cols, rows int) (NotesGeometry, bool) {
 	const button = " esc close "
 	bw := runewidth.StringWidth(button)
 	g.Close = Rect{X: box.X + box.Cols - 2 - bw, Y: box.Y + 1, Cols: bw, Rows: 1}
+	const update = " u update now "
+	uw := runewidth.StringWidth(update)
+	g.Update = Rect{X: g.Close.X - 1 - uw, Y: box.Y + 1, Cols: uw, Rows: 1}
 	// Two header rows and a blank, then the body; the footer and a blank
 	// above it at the bottom.
 	g.Body = Rect{X: box.X + 1, Y: box.Y + 4, Cols: box.Cols - 3, Rows: box.Rows - 7}
@@ -90,9 +96,11 @@ func notesBody(v *ReleaseNotesView, width int, theme Theme) []notesLine {
 	if v.Newer {
 		out = append(out,
 			notesLine{spans: []notesSpan{{" ", theme.Notes}, {"●", theme.NotesAccent}, {" update ready", withBold(theme.Notes)}}, fill: theme.Notes},
-			notesLine{spans: append([]notesSpan{{" ", theme.Notes}}, inlineCode(v.Install, theme)...), fill: theme.Notes},
-			notesLine{fill: theme.Notes},
 		)
+		// How to install it wraps as the notes do: it is a sentence, and
+		// cut at the panel's edge it lost the command it names.
+		out = append(out, wrapNotes(notesLine{spans: append([]notesSpan{{" ", theme.Notes}}, inlineCode(v.Install, theme)...), fill: theme.Notes}, width)...)
+		out = append(out, notesLine{fill: theme.Notes})
 	}
 	fenced := false
 	for _, raw := range strings.Split(v.Body, "\n") {
@@ -205,13 +213,17 @@ func drawReleaseNotes(dst *vt.Grid, v *ReleaseNotesView, theme Theme) {
 		return
 	}
 	right := box.X + box.Cols - 1
-	writeString(dst, box.X+2, box.Y+1, truncate("v"+strings.TrimPrefix(v.Version, "v"), g.Close.X-box.X-3), withBold(theme.Notes), g.Close.X)
+	writeString(dst, box.X+2, box.Y+1, truncate("v"+strings.TrimPrefix(v.Version, "v"), g.Update.X-box.X-3), withBold(theme.Notes), g.Update.X)
 	subtitle := "what's new in this release"
 	if v.Newer {
 		subtitle = "update ready"
 	}
 	writeString(dst, box.X+2, box.Y+2, truncate(subtitle, box.Cols-4), theme.NotesSub, right)
 	writeString(dst, g.Close.X, g.Close.Y, " esc close ", theme.NotesButton, right)
+	if v.Newer {
+		// tend's own: herdr says how to update; this does it, asked.
+		writeString(dst, g.Update.X, g.Update.Y, " u update now ", theme.NotesButton, right)
+	}
 
 	lines := notesBody(v, g.Body.Cols, theme)
 	top := clampNotesScroll(v.Scroll, len(lines), g.Body.Rows)

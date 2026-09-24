@@ -96,10 +96,14 @@ func (t *tui) notesInput(data []byte) error {
 			t.mu.Lock()
 			cols, rows := t.cols, t.rows
 			t.mu.Unlock()
-			if g, ok := ui.ReleaseNotesLayout(cols, rows); ok && ev.Button == 0 &&
-				ev.Y == g.Close.Y && ev.X >= g.Close.X && ev.X < g.Close.X+g.Close.Cols {
-				t.closeReleaseNotes()
-				return nil
+			if g, ok := ui.ReleaseNotesLayout(cols, rows); ok && ev.Button == 0 {
+				switch {
+				case inRect(g.Close, ev.X, ev.Y):
+					t.closeReleaseNotes()
+					return nil
+				case inRect(g.Update, ev.X, ev.Y):
+					return t.updateNow()
+				}
 			}
 		}
 	}
@@ -108,6 +112,8 @@ func (t *tui) notesInput(data []byte) error {
 		case "\r", "\n", "\x1b", "q":
 			t.closeReleaseNotes()
 			return nil
+		case "u":
+			return t.updateNow()
 		case "\x1b[A", "k":
 			t.scrollNotes(-1)
 		case "\x1b[B", "j":
@@ -136,4 +142,40 @@ func (t *tui) scrollNotes(by int) {
 	t.notes.Scroll = max(t.notes.Scroll+by, 0)
 	t.notes.Scroll = ui.ClampNotesScroll(t.notes, t.cols, t.rows, t.theme)
 	t.dirty = true
+}
+
+// updateScript installs the release published and moves the session onto
+// it — `tend update -handoff`, which downloads it, checks it against the
+// manifest's checksum, puts it in place and hands the server over with the
+// programs in its panes still running — then leaves a shell. It is the
+// server's tend that is updated, the one a pane knows as TEND_BIN_PATH.
+const updateScript = `"${TEND_BIN_PATH:-tend}" update -handoff
+echo
+echo "[tend] detach (prefix+d) and run tend again to use the new client too."
+exec "${SHELL:-/bin/sh}"`
+
+// updateNow runs the update in a tab of its own, for the user to watch,
+// when the notes are of a newer release: asked for, never on its own.
+func (t *tui) updateNow() error {
+	t.mu.Lock()
+	v := t.notes
+	ws := t.workspace
+	t.mu.Unlock()
+	if v == nil || !v.Newer {
+		return nil
+	}
+	t.closeReleaseNotes()
+	tab, _, err := t.client.NewTab(ws, "update", proto.PaneSpec{
+		Command: []string{"/bin/sh", "-c", updateScript},
+		Title:   "update",
+	})
+	if err != nil {
+		t.setMessage("could not start the update: "+err.Error(), true)
+		return nil
+	}
+	t.mu.Lock()
+	t.rememberFocusLocked()
+	t.tab, t.focus, t.zoom = tab, 0, false
+	t.mu.Unlock()
+	return t.refresh()
 }
