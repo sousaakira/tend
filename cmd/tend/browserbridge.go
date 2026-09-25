@@ -9,10 +9,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/sousaakira/tend/internal/api"
 	"github.com/sousaakira/tend/internal/browserext"
@@ -63,7 +66,10 @@ func launchTendBrowser(session, remote, program, url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command(bin, browserext.Args(profile, url)...)
+	// Through the keeper, which outlives this client: the browser ends when
+	// its DevTools pipe closes, and the pipe is how Chrome is given the
+	// extension.
+	cmd := exec.Command(self, append([]string{"browser", "keep", "--", profile.Extension, bin}, browserext.Args(profile, url)...)...)
 	cmd.Env = append(os.Environ(), browserSessionEnv+"="+session, browserRemoteEnv+"="+remote)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	detach(cmd)
@@ -222,4 +228,57 @@ func bridge(in io.Reader, out io.Writer, session, remote string) error {
 		}
 	}()
 	return <-done
+}
+
+// browserKeep is `tend browser keep -- <extension> <browser> <args...>`: it
+// starts the browser with a DevTools pipe on its file descriptors 3 and 4,
+// asks it to load the extension through it (Extensions.loadUnpacked, the
+// way Google left when Chrome stopped reading --load-extension), and holds
+// the pipe until the browser ends — it ends the browser when it closes.
+// A browser that loaded the extension from its command line already, or a
+// second start that only hands a page to the one running, answers however
+// it answers; the keeper waits for the browser either way.
+func browserKeep(args []string) error {
+	if len(args) > 0 && args[0] == "--" {
+		args = args[1:]
+	}
+	if len(args) < 2 {
+		return errors.New("usage: tend browser keep -- <extension> <browser> [args...]")
+	}
+	ext, bin := args[0], args[1]
+	toBrowser, ours, err := os.Pipe() // the browser reads fd 3
+	if err != nil {
+		return err
+	}
+	fromBrowser, theirs, err := os.Pipe() // and writes fd 4
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(bin, args[2:]...)
+	cmd.ExtraFiles = []*os.File{toBrowser, theirs}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	_ = toBrowser.Close()
+	_ = theirs.Close()
+	req, _ := json.Marshal(map[string]any{"id": 1, "method": "Extensions.loadUnpacked", "params": map[string]any{"path": ext}})
+	_, _ = ours.Write(append(req, 0))
+
+	// Asked to stop, the keeper takes the browser with it, and waits: the
+	// pipe closed is the browser told to quit, and it writes its profile
+	// as it goes — a keeper gone first left it writing into a directory
+	// being removed. A browser that has not gone in a few seconds is
+	// ended.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	go func() {
+		<-stop
+		_ = ours.Close()
+		time.AfterFunc(5*time.Second, func() { _ = cmd.Process.Kill() })
+	}()
+	// What the browser says goes nowhere; reading it keeps it from
+	// blocking, and the end of it is the browser ending.
+	_, _ = io.Copy(io.Discard, fromBrowser)
+	_ = ours.Close()
+	return cmd.Wait()
 }

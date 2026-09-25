@@ -83,8 +83,11 @@ func TestTheProfileHasTheExtensionAndItsHost(t *testing.T) {
 
 // TestTheBrowserFoundIsOneThatLoadsTheExtension: the browser named is the
 // one run; otherwise the first of those that load an extension given on the
-// command line, never Google's own Chrome, which does not. If it regresses,
-// tend opens a browser the extension is not in.
+// command line, and Google's Chrome — which loads it only through the
+// DevTools pipe the arguments ask for — when there is nothing else; never
+// Brave, whose bridge never starts.
+// If it regresses, a machine with only Chrome opens the desktop's browser
+// without the extension, as the owner's second machine did.
 func TestTheBrowserFoundIsOneThatLoadsTheExtension(t *testing.T) {
 	have := func(names ...string) func(string) (string, error) {
 		return func(n string) (string, error) {
@@ -102,14 +105,20 @@ func TestTheBrowserFoundIsOneThatLoadsTheExtension(t *testing.T) {
 	if got, _ := Find("", have("google-chrome", "microsoft-edge")); got != "/usr/bin/microsoft-edge" {
 		t.Errorf("then edge: %s", got)
 	}
-	if _, err := Find("", have("google-chrome", "brave-browser")); !errors.Is(err, ErrNoBrowser) {
-		t.Errorf("chrome and brave do not load it: %v", err)
+	if got, _ := Find("", have("google-chrome", "brave-browser")); got != "/usr/bin/google-chrome" {
+		t.Errorf("chrome, when there is only it and brave: %s", got)
+	}
+	if _, err := Find("", have("brave-browser")); !errors.Is(err, ErrNoBrowser) {
+		t.Errorf("brave alone: %v", err)
+	}
+	if _, err := Find("", have("firefox")); !errors.Is(err, ErrNoBrowser) {
+		t.Errorf("none of them: %v", err)
 	}
 	if got, _ := Find("brave-browser", have("brave-browser")); got != "/usr/bin/brave-browser" {
 		t.Errorf("the one named: %s", got)
 	}
 	args := strings.Join(Args(Profile{UserData: "/p", Extension: "/e"}, "https://x.test"), " ")
-	if args != "--user-data-dir=/p --load-extension=/e --no-first-run --no-default-browser-check https://x.test" {
+	if args != "--user-data-dir=/p --load-extension=/e --remote-debugging-pipe --enable-unsafe-extension-debugging --no-first-run --no-default-browser-check https://x.test" {
 		t.Errorf("args: %s", args)
 	}
 }

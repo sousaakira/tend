@@ -22,6 +22,11 @@ func runBrowser(args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: tend browser status|open <url>|select on|off|attach|launch [url]|bridge")
 	}
+	if args[0] == "keep" {
+		// Before the flags: what follows is the browser's own, which
+		// tend's parser would refuse.
+		return browserKeep(args[1:])
+	}
 	fs := flag.NewFlagSet("browser "+args[0], flag.ExitOnError)
 	name := sessionFlag(fs)
 	label := fs.String("name", "terminal", "attach: what to call this browser in status")

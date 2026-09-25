@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -200,56 +201,69 @@ func TestTheBridgeSaysWhenTheServerIsOlderThanTheExtension(t *testing.T) {
 	}
 }
 
-// TestChromiumComesUpWithTheExtensionWorking: the browser tend opens, a real
-// Chromium (headless here), has the extension loaded, which starts the
-// bridge and attaches, and follows the session's open to a page. Skipped
-// where there is no Chromium. If it regresses, the browser opens without
-// the extension, or with it and no way to tend.
-func TestChromiumComesUpWithTheExtensionWorking(t *testing.T) {
-	chromium, err := exec.LookPath("chromium")
-	if err != nil {
-		t.Skip("needs chromium")
-	}
-	bin, env := startRealSession(t, "chromium")
-	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`<title>tend test</title><h1 id="it">picked</h1>`))
-	}))
-	defer page.Close()
-
-	data := t.TempDir()
-	cmd := exec.Command(bin, "browser", "launch", "-s", "chromium")
-	cmd.Env = append(env, "XDG_DATA_HOME="+data, "PATH=/nonexistent") // prepare only: no browser to start
-	_ = cmd.Run()
-	profile := filepath.Join(data, "tend", "browser", "chromium")
-	if _, err := os.Stat(filepath.Join(profile, "extension", "manifest.json")); err != nil {
-		t.Fatalf("launch prepared no profile: %v", err)
-	}
-	port := freePort(t)
-	browser := exec.Command(chromium, "--headless=new", "--user-data-dir="+filepath.Join(profile, "profile"),
-		"--load-extension="+filepath.Join(profile, "extension"), "--no-first-run", "--no-default-browser-check",
-		"--remote-debugging-port="+port, "about:blank")
-	browser.Env = append(env, browserSessionEnv+"=chromium")
-	if err := browser.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = browser.Process.Kill(); _ = browser.Wait() })
-	waitAttached(t, bin, env, "chromium")
-
-	tendOutput(t, bin, env, "browser", "open", "-s", "chromium", page.URL+"/it")
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		resp, err := http.Get("http://127.0.0.1:" + port + "/json/list")
-		if err == nil {
-			raw, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if strings.Contains(string(raw), page.URL+"/it") {
-				return
+// TestEachBrowserComesUpWithTheExtensionWorking: the browser tend opens —
+// Chromium, Google Chrome or Edge, each that this machine has, run headless
+// through the keeper as tend runs it — has the extension loaded, which
+// starts the bridge and attaches, and follows the session's open to a page.
+// Chrome no longer reads --load-extension; it loads it through the keeper's
+// DevTools pipe. (Brave loads it the same way but never starts the bridge,
+// so tend does not choose it.) If it regresses, the browser opens
+// without the extension, as it did on a machine with only Chrome.
+func TestEachBrowserComesUpWithTheExtensionWorking(t *testing.T) {
+	for _, name := range []string{"chromium", "google-chrome", "microsoft-edge"} {
+		t.Run(name, func(t *testing.T) {
+			browser, err := exec.LookPath(name)
+			if err != nil {
+				t.Skip("needs " + name)
 			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the browser never opened the page it was sent")
-		}
-		time.Sleep(200 * time.Millisecond)
+			session := strings.ReplaceAll(name, "-", "")
+			bin, env := startRealSession(t, session)
+			page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`<title>tend test</title><h1 id="it">picked</h1>`))
+			}))
+			defer page.Close()
+
+			data := t.TempDir()
+			cmd := exec.Command(bin, "browser", "launch", "-s", session)
+			cmd.Env = append(env, "XDG_DATA_HOME="+data, "PATH=/nonexistent") // prepare only: no browser to start
+			_ = cmd.Run()
+			profile := filepath.Join(data, "tend", "browser", session)
+			if _, err := os.Stat(filepath.Join(profile, "extension", "manifest.json")); err != nil {
+				t.Fatalf("launch prepared no profile: %v", err)
+			}
+			port := freePort(t)
+			keeper := exec.Command(bin, "browser", "keep", "--", filepath.Join(profile, "extension"), browser,
+				"--headless=new", "--user-data-dir="+filepath.Join(profile, "profile"),
+				"--load-extension="+filepath.Join(profile, "extension"),
+				"--remote-debugging-pipe", "--enable-unsafe-extension-debugging",
+				"--no-first-run", "--no-default-browser-check",
+				"--remote-debugging-port="+port, "about:blank")
+			keeper.Env = append(env, browserSessionEnv+"="+session)
+			if err := keeper.Start(); err != nil {
+				t.Fatal(err)
+			}
+			// Stopped as a keeper is: it takes the browser with it, and
+			// waits, so the profile is not being written as it is removed.
+			t.Cleanup(func() { _ = keeper.Process.Signal(syscall.SIGTERM); _ = keeper.Wait() })
+			waitAttached(t, bin, env, session)
+
+			tendOutput(t, bin, env, "browser", "open", "-s", session, page.URL+"/it")
+			deadline := time.Now().Add(15 * time.Second)
+			for {
+				resp, err := http.Get("http://127.0.0.1:" + port + "/json/list")
+				if err == nil {
+					raw, _ := io.ReadAll(resp.Body)
+					resp.Body.Close()
+					if strings.Contains(string(raw), page.URL+"/it") {
+						return
+					}
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("the browser never opened the page it was sent")
+				}
+				time.Sleep(200 * time.Millisecond)
+			}
+		})
 	}
 }
 

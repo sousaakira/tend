@@ -114,22 +114,27 @@ func writeExtension(dir string) error {
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// candidates are the browsers tried, in order, when none is set: those
-// that load an extension given on their command line. Tried on 2026-09-23,
-// headless, with the extension and the bridge: Chromium 153 and Microsoft
-// Edge 153 load it; Google Chrome 154 and Brave 153 start without it —
-// Google's own Chrome stopped honouring --load-extension in 2025 — so they
-// are not candidates, and naming one in [browser] program opens a browser
-// the extension is not in. Vivaldi and Chrome for Testing are left in on
-// their makers' word, untried.
+// candidates are the browsers tried, in order, when none is set. Google's
+// Chrome stopped honouring --load-extension in 2025, and Brave with it, so
+// they were left out at first — and on the owner's second machine, with
+// only Chrome, the page opened in the desktop's browser without the
+// extension. The extension is now also loaded the way Google left for this,
+// DevTools' Extensions.loadUnpacked over --remote-debugging-pipe (see Args
+// and `tend browser keep`), which Chrome 154, Edge and Chromium took on
+// 2026-09-24, the bridge attaching from each. Brave 153 loaded it too, but
+// never started the bridge — its native messaging hosts are looked for
+// elsewhere — so it is not tried, and naming it gets the extension without
+// its way to tend. The ones that still read --load-extension come first;
+// Vivaldi and Chrome for Testing are in on their makers' word, untried.
 var candidates = []string{
 	"chromium", "chromium-browser", "microsoft-edge", "microsoft-edge-stable",
 	"vivaldi", "google-chrome-for-testing",
+	"google-chrome", "google-chrome-stable",
 }
 
 // ErrNoBrowser is a machine with none of the browsers that can load the
 // extension.
-var ErrNoBrowser = errors.New("no browser that can load tend's extension (chromium, microsoft-edge)")
+var ErrNoBrowser = errors.New("no browser that can load tend's extension (chromium, google-chrome, microsoft-edge)")
 
 // Find is the browser to run: the program given, else the first candidate on
 // the PATH.
@@ -153,11 +158,18 @@ func Find(program string, lookPath func(string) (string, error)) (string, error)
 }
 
 // Args are the browser's arguments: the profile's data directory, the
-// extension loaded, no first-run questions, and the page, if any.
+// extension loaded, no first-run questions, and the page, if any. The
+// extension is given twice: on the command line, for the browsers that
+// still read it, and through DevTools over a pipe — which the keeper
+// (`tend browser keep`) holds, on file descriptors 3 and 4 — for Google's
+// Chrome, which does not. The pipe is the keeper's alone; no port is
+// opened, and the unsafe-extension-debugging switch reaches only it.
 func Args(p Profile, url string) []string {
 	args := []string{
 		"--user-data-dir=" + p.UserData,
 		"--load-extension=" + p.Extension,
+		"--remote-debugging-pipe",
+		"--enable-unsafe-extension-debugging",
 		"--no-first-run",
 		"--no-default-browser-check",
 	}

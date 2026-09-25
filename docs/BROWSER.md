@@ -52,11 +52,17 @@ profile are not touched.
   `browser.status`). Its registration is in the profile's
   `NativeMessagingHosts/`, where a browser started on that profile looks.
 - **Which browser**: `[browser] program` if set, else the first of chromium,
-  chromium-browser, microsoft-edge, vivaldi, google-chrome-for-testing. Tried
-  on 2026-09-23: Chromium 153 and Edge 153 load the extension; Google Chrome
-  154 and Brave 153 do not, since Google's own Chrome stopped honouring
-  `--load-extension`, so they are not tried. With none of them, the page
-  opens in the desktop's browser without the extension, and tend says so.
+  chromium-browser, microsoft-edge, vivaldi, google-chrome-for-testing,
+  google-chrome. It is started by `tend browser keep`, which gives the
+  extension twice: `--load-extension`, which Chromium and Edge read, and
+  DevTools' `Extensions.loadUnpacked` over `--remote-debugging-pipe`, the
+  way Google left when Chrome stopped reading the switch in 2025 — Chrome
+  154 loads it that way. The keeper holds the pipe until the browser ends
+  (the browser ends if it closes); no port is opened. Tried on 2026-09-24,
+  headless, through the keeper, with the bridge attaching: Chromium 153,
+  Google Chrome 154, Edge 153. Brave 153 loads the extension but never
+  starts the bridge, so it is not tried. With none of them, the page opens
+  in the desktop's browser without the extension, and tend says so.
   `[browser] command` opens a browser of your own instead, also without it.
 
 A second page for the same session opens as a tab in the browser already
