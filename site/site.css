@@ -287,6 +287,17 @@ main {
   font-weight: 500;
 }
 
+.issues-mock {
+  margin: 0;
+  padding: 0.7rem 0.9rem 0.9rem;
+  overflow-x: auto;
+  font-family: inherit;
+  color: var(--term-text);
+}
+.term .chip.on { background: var(--term-accent); color: #1e2228; font-weight: 600; }
+.term .sel { background: #3e4451; color: var(--term-text); font-weight: 600; }
+.term .caret { background: var(--term-text); }
+
 .stage-cap {
   margin: 0.7rem 0 0;
   color: var(--muted);
