@@ -97,6 +97,7 @@
     <nav>
       <a href="#install">install</a>
       <a href="#session">session</a>
+      <a href="#tools">tools</a>
       <a href="#keys">keys</a>
       <a href="https://github.com/sousaakira/tend">source</a>
       <span class="langs"><a href="pt/" data-lang="pt" onclick="try{localStorage.setItem('tend-lang','pt')}catch(e){}">pt</a> · <a href="./" data-lang="en" aria-current="page" onclick="try{localStorage.setItem('tend-lang','en')}catch(e){}">en</a> · <a href="es/" data-lang="es" onclick="try{localStorage.setItem('tend-lang','es')}catch(e){}">es</a> · <a href="ja/" data-lang="ja" onclick="try{localStorage.setItem('tend-lang','ja')}catch(e){}">ja</a> · <a href="zh/" data-lang="zh" onclick="try{localStorage.setItem('tend-lang','zh')}catch(e){}">zh</a></span>
@@ -254,6 +255,37 @@
       </dl>
     </section>
 
+    <section id="tools" class="facts">
+      <h2>Tools, over the spaces</h2>
+      <p class="note">Six buttons at the top of the sidebar, each with a key after the prefix.</p>
+      <dl>
+        <div>
+          <dt>Files <kbd>f</kbd></dt>
+          <dd>A panel beside your panes: the project's tree, a search through it, and its git changes — diff, stage, commit, push. It follows the pane you are working in.</dd>
+        </div>
+        <div>
+          <dt>Agents <kbd>A</kbd></dt>
+          <dd>The agent CLIs tend knows — Claude Code, Codex, Gemini CLI, Cursor, OpenCode and more — which this machine has, and the install command for the rest, run in a tab once you say yes.</dd>
+        </div>
+        <div>
+          <dt>Sessions <kbd>S</kbd></dt>
+          <dd>Every Claude Code conversation on the machine, by its title. Type to search, enter to resume one in a new tab where it was held, mark old ones and delete them.</dd>
+        </div>
+        <div>
+          <dt>GitHub <kbd>I</kbd></dt>
+          <dd>The project's issues and pull requests, through <code>gh</code>. Comment, close, label, merge. <kbd>w</kbd> on an issue makes a worktree for it and starts your agent there, told to complete it.</dd>
+        </div>
+        <div>
+          <dt>Browser and context <kbd>B</kbd> <kbd>C</kbd></dt>
+          <dd>A Chromium, Chrome or Edge window with tend's extension: pick elements on a page, note what you want of each, and send them to the agent, looked over first in the context panel.</dd>
+        </div>
+        <div>
+          <dt>Updates</dt>
+          <dd>tend notices a new release and says so. <kbd>u</kbd> in its notes installs it and moves the running session onto it, without stopping the programs in its panes.</dd>
+        </div>
+      </dl>
+    </section>
+
     <section id="keys">
       <h2>Prefix is ctrl+b</h2>
       <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lists every key inside the session.</p>
@@ -261,12 +293,13 @@
         <tbody>
           <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>split beside, below</td></tr>
           <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>move focus</td></tr>
-          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>resize</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>swap panes</td></tr>
+          <tr><th><kbd>r</kbd></th><td>resize (then h j k l, esc)</td></tr>
           <tr><th><kbd>z</kbd></th><td>zoom a pane to the window</td></tr>
           <tr><th><kbd>[</kbd></th><td>scroll back through its history</td></tr>
           <tr><th><kbd>x</kbd></th><td>close a pane</td></tr>
           <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>tabs: new, next, previous, by number</td></tr>
-          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>spaces: new, previous, next</td></tr>
+          <tr><th><kbd>N</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>spaces: new, previous, next</td></tr>
           <tr><th><kbd>a</kbd></th><td>show every agent, grouped</td></tr>
           <tr><th><kbd>g</kbd></th><td>pick one and jump to it</td></tr>
           <tr><th><kbd>d</kbd></th><td>detach, leaving everything running</td></tr>

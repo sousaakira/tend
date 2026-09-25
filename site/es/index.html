@@ -97,6 +97,7 @@
     <nav>
       <a href="#install">instalar</a>
       <a href="#session">sesión</a>
+      <a href="#tools">herramientas</a>
       <a href="#keys">teclas</a>
       <a href="https://github.com/sousaakira/tend">código</a>
       <span class="langs"><a href="../pt/" data-lang="pt" onclick="try{localStorage.setItem('tend-lang','pt')}catch(e){}">pt</a> · <a href="../" data-lang="en" onclick="try{localStorage.setItem('tend-lang','en')}catch(e){}">en</a> · <a href="./" data-lang="es" aria-current="page" onclick="try{localStorage.setItem('tend-lang','es')}catch(e){}">es</a> · <a href="../ja/" data-lang="ja" onclick="try{localStorage.setItem('tend-lang','ja')}catch(e){}">ja</a> · <a href="../zh/" data-lang="zh" onclick="try{localStorage.setItem('tend-lang','zh')}catch(e){}">zh</a></span>
@@ -254,6 +255,37 @@
       </dl>
     </section>
 
+    <section id="tools" class="facts">
+      <h2>Herramientas, sobre los spaces</h2>
+      <p class="note">Seis botones arriba de la barra lateral, cada uno con una tecla tras el prefijo.</p>
+      <dl>
+        <div>
+          <dt>Archivos <kbd>f</kbd></dt>
+          <dd>Un panel junto a los tuyos: el árbol del proyecto, una búsqueda en él y los cambios de git — diff, stage, commit, push. Sigue al panel en el que trabajas.</dd>
+        </div>
+        <div>
+          <dt>Agentes <kbd>A</kbd></dt>
+          <dd>Los CLI de agentes que tend conoce — Claude Code, Codex, Gemini CLI, Cursor, OpenCode y más —, cuáles tiene esta máquina y el comando para instalar el resto, ejecutado en una pestaña cuando confirmas.</dd>
+        </div>
+        <div>
+          <dt>Sesiones <kbd>S</kbd></dt>
+          <dd>Todas las conversaciones de Claude Code en la máquina, por su título. Escribe para buscar, enter reanuda una en una pestaña nueva donde ocurrió, marca las viejas y bórralas.</dd>
+        </div>
+        <div>
+          <dt>GitHub <kbd>I</kbd></dt>
+          <dd>Los issues y pull requests del proyecto, a través de <code>gh</code>. Comenta, cierra, etiqueta, fusiona. <kbd>w</kbd> en un issue crea un worktree para él y abre tu agente allí, con el issue como tarea.</dd>
+        </div>
+        <div>
+          <dt>Navegador y contexto <kbd>B</kbd> <kbd>C</kbd></dt>
+          <dd>Una ventana de Chromium, Chrome o Edge con la extensión de tend: elige elementos en una página, anota lo que quieres de cada uno y envíalos al agente, revisados antes en el panel de contexto.</dd>
+        </div>
+        <div>
+          <dt>Actualizaciones</dt>
+          <dd>tend detecta una nueva versión y lo dice. <kbd>u</kbd> en sus notas la instala y pasa la sesión a ella, sin detener los programas de los paneles.</dd>
+        </div>
+      </dl>
+    </section>
+
     <section id="keys">
       <h2>El prefijo es ctrl+b</h2>
       <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas las teclas dentro de la sesión.</p>
@@ -261,12 +293,13 @@
         <tbody>
           <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>dividir al lado, abajo</td></tr>
           <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>mover el foco</td></tr>
-          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>redimensionar</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>intercambiar paneles</td></tr>
+          <tr><th><kbd>r</kbd></th><td>redimensionar (luego h j k l, esc)</td></tr>
           <tr><th><kbd>z</kbd></th><td>ampliar un panel a la ventana</td></tr>
           <tr><th><kbd>[</kbd></th><td>volver en el historial</td></tr>
           <tr><th><kbd>x</kbd></th><td>cerrar un panel</td></tr>
           <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>pestañas: nueva, siguiente, anterior, por número</td></tr>
-          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>spaces: nuevo, anterior, siguiente</td></tr>
+          <tr><th><kbd>N</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>spaces: nuevo, anterior, siguiente</td></tr>
           <tr><th><kbd>a</kbd></th><td>mostrar todos los agentes, agrupados</td></tr>
           <tr><th><kbd>g</kbd></th><td>elegir uno e ir a él</td></tr>
           <tr><th><kbd>d</kbd></th><td>desconectar, dejando todo en marcha</td></tr>

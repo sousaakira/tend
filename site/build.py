@@ -22,6 +22,7 @@ LANGS = {
         "title": "tend — terminal runtime for coding agents",
         "description": "tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.",
         "nav_session": "session",
+        "nav_tools": "tools",
         "nav_keys": "keys",
         "nav_install": "install",
         "nav_source": "source",
@@ -46,11 +47,26 @@ LANGS = {
         "fact2_d": "A pane is working, blocked, or idle. The mark is what the screen is showing — a spinner, a permission prompt, a shell waiting — not a guess about the process name.",
         "fact3_t": "The layout",
         "fact3_d": "A space holds tabs. A tab holds panes. Split beside or below, zoom one pane, scroll its history, jump to the agent that stopped.",
+        "k_swap": "swap panes",
+        "tools_h": "Tools, over the spaces",
+        "tools_note": "Six buttons at the top of the sidebar, each with a key after the prefix.",
+        "tool1_t": "Files <kbd>f</kbd>",
+        "tool1_d": "A panel beside your panes: the project's tree, a search through it, and its git changes — diff, stage, commit, push. It follows the pane you are working in.",
+        "tool2_t": "Agents <kbd>A</kbd>",
+        "tool2_d": "The agent CLIs tend knows — Claude Code, Codex, Gemini CLI, Cursor, OpenCode and more — which this machine has, and the install command for the rest, run in a tab once you say yes.",
+        "tool3_t": "Sessions <kbd>S</kbd>",
+        "tool3_d": "Every Claude Code conversation on the machine, by its title. Type to search, enter to resume one in a new tab where it was held, mark old ones and delete them.",
+        "tool4_t": "GitHub <kbd>I</kbd>",
+        "tool4_d": "The project's issues and pull requests, through <code>gh</code>. Comment, close, label, merge. <kbd>w</kbd> on an issue makes a worktree for it and starts your agent there, told to complete it.",
+        "tool5_t": "Browser and context <kbd>B</kbd> <kbd>C</kbd>",
+        "tool5_d": "A Chromium, Chrome or Edge window with tend's extension: pick elements on a page, note what you want of each, and send them to the agent, looked over first in the context panel.",
+        "tool6_t": "Updates",
+        "tool6_d": "tend notices a new release and says so. <kbd>u</kbd> in its notes installs it and moves the running session onto it, without stopping the programs in its panes.",
         "keys_h": "Prefix is ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lists every key inside the session.",
         "k_split": "split beside, below",
         "k_focus": "move focus",
-        "k_resize": "resize",
+        "k_resize": "resize (then h j k l, esc)",
         "k_zoom": "zoom a pane to the window",
         "k_scroll": "scroll back through its history",
         "k_close": "close a pane",
@@ -81,6 +97,7 @@ LANGS = {
         "title": "tend — runtime de terminal para agentes de código",
         "description": "O tend mantém os terminais dos agentes rodando depois que você sai, e marca cada painel como working, blocked ou idle.",
         "nav_session": "sessão",
+        "nav_tools": "ferramentas",
         "nav_keys": "teclas",
         "nav_install": "instalar",
         "nav_source": "código",
@@ -105,11 +122,26 @@ LANGS = {
         "fact2_d": "Um painel está working, blocked ou idle. A marca é o que a tela mostra — um spinner, um pedido de permissão, um shell à espera — não um chute pelo nome do processo.",
         "fact3_t": "O layout",
         "fact3_d": "Um space guarda abas. Uma aba guarda painéis. Divida ao lado ou abaixo, amplie um painel, role o histórico, salte para o agente que parou.",
+        "k_swap": "trocar painéis de lugar",
+        "tools_h": "Ferramentas, acima dos spaces",
+        "tools_note": "Seis botões no topo da barra lateral, cada um com uma tecla depois do prefixo.",
+        "tool1_t": "Arquivos <kbd>f</kbd>",
+        "tool1_d": "Um painel ao lado dos seus: a árvore do projeto, uma busca nela e as mudanças do git — diff, stage, commit, push. Ele segue o painel em que você está trabalhando.",
+        "tool2_t": "Agentes <kbd>A</kbd>",
+        "tool2_d": "Os CLIs de agentes que o tend conhece — Claude Code, Codex, Gemini CLI, Cursor, OpenCode e outros —, quais esta máquina tem e o comando para instalar os outros, rodado numa aba quando você confirma.",
+        "tool3_t": "Sessões <kbd>S</kbd>",
+        "tool3_d": "Todas as conversas do Claude Code na máquina, pelo título. Digite para buscar, enter retoma uma numa aba nova onde ela aconteceu, marque as antigas e apague.",
+        "tool4_t": "GitHub <kbd>I</kbd>",
+        "tool4_d": "As issues e os pull requests do projeto, pelo <code>gh</code>. Comente, feche, ponha rótulos, faça merge. <kbd>w</kbd> numa issue cria um worktree para ela e abre seu agente lá, com a issue como tarefa.",
+        "tool5_t": "Navegador e contexto <kbd>B</kbd> <kbd>C</kbd>",
+        "tool5_d": "Uma janela do Chromium, Chrome ou Edge com a extensão do tend: escolha elementos numa página, anote o que quer de cada um e mande para o agente, revisando antes no painel de contexto.",
+        "tool6_t": "Atualizações",
+        "tool6_d": "O tend percebe um release novo e avisa. <kbd>u</kbd> nas notas instala e passa a sessão para a versão nova, sem parar os programas dos painéis.",
         "keys_h": "O prefixo é ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas as teclas dentro da sessão.",
         "k_split": "dividir ao lado, abaixo",
         "k_focus": "mover o foco",
-        "k_resize": "redimensionar",
+        "k_resize": "redimensionar (depois h j k l, esc)",
         "k_zoom": "ampliar um painel na janela",
         "k_scroll": "voltar no histórico",
         "k_close": "fechar um painel",
@@ -140,6 +172,7 @@ LANGS = {
         "title": "tend — runtime de terminal para agentes de código",
         "description": "tend mantiene los terminales de los agentes tras desconectarte, y marca cada panel como working, blocked o idle.",
         "nav_session": "sesión",
+        "nav_tools": "herramientas",
         "nav_keys": "teclas",
         "nav_install": "instalar",
         "nav_source": "código",
@@ -164,11 +197,26 @@ LANGS = {
         "fact2_d": "Un panel está working, blocked o idle. La marca es lo que muestra la pantalla — un spinner, un permiso, un shell a la espera — no una conjetura por el nombre del proceso.",
         "fact3_t": "El diseño",
         "fact3_d": "Un space guarda pestañas. Una pestaña guarda paneles. Divide al lado o abajo, amplía un panel, recorre el historial, salta al agente que se detuvo.",
+        "k_swap": "intercambiar paneles",
+        "tools_h": "Herramientas, sobre los spaces",
+        "tools_note": "Seis botones arriba de la barra lateral, cada uno con una tecla tras el prefijo.",
+        "tool1_t": "Archivos <kbd>f</kbd>",
+        "tool1_d": "Un panel junto a los tuyos: el árbol del proyecto, una búsqueda en él y los cambios de git — diff, stage, commit, push. Sigue al panel en el que trabajas.",
+        "tool2_t": "Agentes <kbd>A</kbd>",
+        "tool2_d": "Los CLI de agentes que tend conoce — Claude Code, Codex, Gemini CLI, Cursor, OpenCode y más —, cuáles tiene esta máquina y el comando para instalar el resto, ejecutado en una pestaña cuando confirmas.",
+        "tool3_t": "Sesiones <kbd>S</kbd>",
+        "tool3_d": "Todas las conversaciones de Claude Code en la máquina, por su título. Escribe para buscar, enter reanuda una en una pestaña nueva donde ocurrió, marca las viejas y bórralas.",
+        "tool4_t": "GitHub <kbd>I</kbd>",
+        "tool4_d": "Los issues y pull requests del proyecto, a través de <code>gh</code>. Comenta, cierra, etiqueta, fusiona. <kbd>w</kbd> en un issue crea un worktree para él y abre tu agente allí, con el issue como tarea.",
+        "tool5_t": "Navegador y contexto <kbd>B</kbd> <kbd>C</kbd>",
+        "tool5_d": "Una ventana de Chromium, Chrome o Edge con la extensión de tend: elige elementos en una página, anota lo que quieres de cada uno y envíalos al agente, revisados antes en el panel de contexto.",
+        "tool6_t": "Actualizaciones",
+        "tool6_d": "tend detecta una nueva versión y lo dice. <kbd>u</kbd> en sus notas la instala y pasa la sesión a ella, sin detener los programas de los paneles.",
         "keys_h": "El prefijo es ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas las teclas dentro de la sesión.",
         "k_split": "dividir al lado, abajo",
         "k_focus": "mover el foco",
-        "k_resize": "redimensionar",
+        "k_resize": "redimensionar (luego h j k l, esc)",
         "k_zoom": "ampliar un panel a la ventana",
         "k_scroll": "volver en el historial",
         "k_close": "cerrar un panel",
@@ -199,6 +247,7 @@ LANGS = {
         "title": "tend — コーディングエージェント向けターミナルランタイム",
         "description": "tend はデタッチ後もエージェントのターミナルを動かし続け、各ペインを working / blocked / idle と表示します。",
         "nav_session": "セッション",
+        "nav_tools": "ツール",
         "nav_keys": "キー",
         "nav_install": "インストール",
         "nav_source": "ソース",
@@ -223,16 +272,31 @@ LANGS = {
         "fact2_d": "ペインは working・blocked・idle のいずれかです。印は画面が示しているもの — スピナー、許可プロンプト、待機中のシェル — であり、プロセス名からの推測ではありません。",
         "fact3_t": "レイアウト",
         "fact3_d": "space はタブを持ち、タブはペインを持ちます。横や下に分割し、ズームし、履歴をスクロールし、止まったエージェントへジャンプします。",
+        "k_swap": "ペインを入れ替える",
+        "tools_h": "スペースの上にあるツール",
+        "tools_note": "サイドバー上部の6つのボタン。それぞれプレフィックスの後のキーでも開けます。",
+        "tool1_t": "ファイル <kbd>f</kbd>",
+        "tool1_d": "ペインの横のパネル：プロジェクトのツリー、その中の検索、git の変更 — diff、stage、commit、push。作業中のペインに追従します。",
+        "tool2_t": "エージェント <kbd>A</kbd>",
+        "tool2_d": "tend が知っているエージェント CLI — Claude Code、Codex、Gemini CLI、Cursor、OpenCode など — のうち、このマシンにあるものと、残りのインストールコマンド。確認するとタブで実行します。",
+        "tool3_t": "セッション <kbd>S</kbd>",
+        "tool3_d": "マシン上の Claude Code の会話をタイトルで一覧。入力して検索、enter で元のディレクトリの新しいタブで再開、古いものはマークして削除。",
+        "tool4_t": "GitHub <kbd>I</kbd>",
+        "tool4_d": "プロジェクトの issue と pull request を <code>gh</code> 経由で。コメント、クローズ、ラベル、マージ。issue で <kbd>w</kbd> を押すと worktree を作り、そこでエージェントに issue を完了させます。",
+        "tool5_t": "ブラウザとコンテキスト <kbd>B</kbd> <kbd>C</kbd>",
+        "tool5_d": "tend の拡張機能入りの Chromium、Chrome、Edge：ページの要素を選び、それぞれにメモを付け、コンテキストパネルで確認してからエージェントへ送ります。",
+        "tool6_t": "アップデート",
+        "tool6_d": "新しいリリースを検知して知らせます。リリースノートで <kbd>u</kbd> を押すとインストールし、ペインのプログラムを止めずにセッションを移行します。",
         "keys_h": "プレフィックスは ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> でセッション内の全キーを一覧します。",
         "k_split": "横・下に分割",
         "k_focus": "フォーカス移動",
-        "k_resize": "リサイズ",
+        "k_resize": "サイズ変更（続けて h j k l、esc）",
         "k_zoom": "ペインをウィンドウいっぱいに",
         "k_scroll": "履歴をスクロール",
         "k_close": "ペインを閉じる",
         "k_tabs": "タブ: 新規・次・前・番号",
-        "k_spaces": "space: 新規・前・次",
+        "k_spaces": "スペース：新規、前、次",
         "k_agents": "エージェント一覧（グループ表示）",
         "k_jump": "選んでジャンプ",
         "k_detach": "デタッチ（実行はそのまま）",
@@ -258,6 +322,7 @@ LANGS = {
         "title": "tend — 面向编程智能体的终端运行时",
         "description": "tend 在你离开后仍保持智能体终端运行，并为每个窗格标出 working、blocked 或 idle。",
         "nav_session": "会话",
+        "nav_tools": "工具",
         "nav_keys": "快捷键",
         "nav_install": "安装",
         "nav_source": "源码",
@@ -282,16 +347,31 @@ LANGS = {
         "fact2_d": "窗格是 working、blocked 或 idle。标记来自屏幕上的内容 — 转圈、权限提示、等待中的 shell — 不是根据进程名猜测。",
         "fact3_t": "布局",
         "fact3_d": "space 容纳标签。标签容纳窗格。左右或上下分割，放大一个窗格，滚动历史，跳到停下来的智能体。",
+        "k_swap": "交换窗格",
+        "tools_h": "空间上方的工具",
+        "tools_note": "侧边栏顶部的六个按钮，每个都可在前缀后用一个键打开。",
+        "tool1_t": "文件 <kbd>f</kbd>",
+        "tool1_d": "窗格旁的面板：项目的文件树、在其中搜索，以及 git 改动 — diff、暂存、提交、推送。它跟随你正在工作的窗格。",
+        "tool2_t": "代理 <kbd>A</kbd>",
+        "tool2_d": "tend 认识的代理 CLI — Claude Code、Codex、Gemini CLI、Cursor、OpenCode 等 — 这台机器装了哪些，以及其余的安装命令，确认后在标签页中运行。",
+        "tool3_t": "会话 <kbd>S</kbd>",
+        "tool3_d": "本机所有 Claude Code 对话，按标题列出。输入即可搜索，回车在原目录的新标签页中恢复，标记旧会话并删除。",
+        "tool4_t": "GitHub <kbd>I</kbd>",
+        "tool4_d": "通过 <code>gh</code> 查看项目的 issue 和 pull request。评论、关闭、打标签、合并。在 issue 上按 <kbd>w</kbd> 会为它创建 worktree，并在其中启动你的代理去完成它。",
+        "tool5_t": "浏览器与上下文 <kbd>B</kbd> <kbd>C</kbd>",
+        "tool5_d": "带 tend 扩展的 Chromium、Chrome 或 Edge 窗口：在页面上选取元素，为每个写下要求，先在上下文面板中查看，再发送给代理。",
+        "tool6_t": "更新",
+        "tool6_d": "tend 会发现新版本并提示。在更新说明中按 <kbd>u</kbd> 即可安装，并在不停止窗格中程序的情况下把会话迁移过去。",
         "keys_h": "前缀是 ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> 列出会话内的全部快捷键。",
         "k_split": "左右、上下分割",
         "k_focus": "移动焦点",
-        "k_resize": "调整大小",
+        "k_resize": "调整大小（然后 h j k l，esc）",
         "k_zoom": "将窗格放大到窗口",
         "k_scroll": "回看历史",
         "k_close": "关闭窗格",
         "k_tabs": "标签：新建、下一个、上一个、按数字",
-        "k_spaces": "space：新建、上一个、下一个",
+        "k_spaces": "空间：新建、上一个、下一个",
         "k_agents": "显示全部智能体（分组）",
         "k_jump": "选一个并跳转",
         "k_detach": "断开，保持一切运行",
@@ -531,6 +611,7 @@ def page(code: str, t: dict) -> str:
     <nav>
       <a href="#install">{t["nav_install"]}</a>
       <a href="#session">{t["nav_session"]}</a>
+      <a href="#tools">{t["nav_tools"]}</a>
       <a href="#keys">{t["nav_keys"]}</a>
       <a href="https://github.com/sousaakira/tend">{t["nav_source"]}</a>
       <span class="langs">{langs}</span>
@@ -605,6 +686,37 @@ def page(code: str, t: dict) -> str:
       </dl>
     </section>
 
+    <section id="tools" class="facts">
+      <h2>{t["tools_h"]}</h2>
+      <p class="note">{t["tools_note"]}</p>
+      <dl>
+        <div>
+          <dt>{t["tool1_t"]}</dt>
+          <dd>{t["tool1_d"]}</dd>
+        </div>
+        <div>
+          <dt>{t["tool2_t"]}</dt>
+          <dd>{t["tool2_d"]}</dd>
+        </div>
+        <div>
+          <dt>{t["tool3_t"]}</dt>
+          <dd>{t["tool3_d"]}</dd>
+        </div>
+        <div>
+          <dt>{t["tool4_t"]}</dt>
+          <dd>{t["tool4_d"]}</dd>
+        </div>
+        <div>
+          <dt>{t["tool5_t"]}</dt>
+          <dd>{t["tool5_d"]}</dd>
+        </div>
+        <div>
+          <dt>{t["tool6_t"]}</dt>
+          <dd>{t["tool6_d"]}</dd>
+        </div>
+      </dl>
+    </section>
+
     <section id="keys">
       <h2>{t["keys_h"]}</h2>
       <p class="note">{t["keys_note"]}</p>
@@ -612,12 +724,13 @@ def page(code: str, t: dict) -> str:
         <tbody>
           <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>{t["k_split"]}</td></tr>
           <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>{t["k_focus"]}</td></tr>
-          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>{t["k_resize"]}</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>{t["k_swap"]}</td></tr>
+          <tr><th><kbd>r</kbd></th><td>{t["k_resize"]}</td></tr>
           <tr><th><kbd>z</kbd></th><td>{t["k_zoom"]}</td></tr>
           <tr><th><kbd>[</kbd></th><td>{t["k_scroll"]}</td></tr>
           <tr><th><kbd>x</kbd></th><td>{t["k_close"]}</td></tr>
           <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>{t["k_tabs"]}</td></tr>
-          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>{t["k_spaces"]}</td></tr>
+          <tr><th><kbd>N</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>{t["k_spaces"]}</td></tr>
           <tr><th><kbd>a</kbd></th><td>{t["k_agents"]}</td></tr>
           <tr><th><kbd>g</kbd></th><td>{t["k_jump"]}</td></tr>
           <tr><th><kbd>d</kbd></th><td>{t["k_detach"]}</td></tr>
