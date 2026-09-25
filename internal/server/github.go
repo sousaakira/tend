@@ -247,3 +247,39 @@ func (s *Server) GitHubPRChecks(p proto.GitHubIssuesParams) (proto.GitHubPRCheck
 	}
 	return out, nil
 }
+
+// GitHubRepoOptions is github.repo.options: what the pickers offer.
+func (s *Server) GitHubRepoOptions(p proto.GitHubRepoOptionsParams) (proto.GitHubRepoOptions, error) {
+	repo, err := repoOf(proto.GitHubIssueParams{Repo: p.Repo}, false)
+	if err != nil {
+		return proto.GitHubRepoOptions{}, err
+	}
+	var names []string
+	switch p.Kind {
+	case "labels":
+		names, err = github.Labels(repo)
+	case "assignees":
+		names, err = github.Assignable(repo)
+	default:
+		return proto.GitHubRepoOptions{}, fmt.Errorf("a repository offers labels or assignees, not %q", p.Kind)
+	}
+	if err != nil {
+		return proto.GitHubRepoOptions{}, err
+	}
+	if names == nil {
+		names = []string{}
+	}
+	return proto.GitHubRepoOptions{Names: names}, nil
+}
+
+// GitHubIssueEdit is github.issue.edit.
+func (s *Server) GitHubIssueEdit(p proto.GitHubIssueEditParams) error {
+	repo, err := repoOf(proto.GitHubIssueParams{Repo: p.Repo, Number: p.Number}, true)
+	if err != nil {
+		return err
+	}
+	return github.EditIssue(repo, p.Number, github.Edit{
+		Title: p.Title, AddLabels: p.AddLabels, RemoveLabels: p.RemoveLabels,
+		AddAssignees: p.AddAssignees, RemoveAssignees: p.RemoveAssignees,
+	})
+}

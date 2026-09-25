@@ -344,6 +344,62 @@ func Create(repo Repo, title, body string) (int, string, error) {
 	return number, url, nil
 }
 
+// Labels is the repository's labels, by name, for the label picker.
+func Labels(repo Repo) ([]string, error) {
+	return names("repos/"+repo.Slug()+"/labels?per_page=100", ".[].name")
+}
+
+// Assignable is who an issue in the repository can be assigned to.
+func Assignable(repo Repo) ([]string, error) {
+	return names("repos/"+repo.Slug()+"/assignees?per_page=100", ".[].login")
+}
+
+// names reads one field of every item of a paginated list, one a line.
+func names(path, jq string) ([]string, error) {
+	out, err := run("api", "--paginate", "--cache", "60s", path, "--jq", jq)
+	if err != nil {
+		return nil, err
+	}
+	var list []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			list = append(list, line)
+		}
+	}
+	return list, nil
+}
+
+// Edit is what an edit of an issue changes: a new title when not empty,
+// and the labels and assignees to add and to take off.
+type Edit struct {
+	Title                         string
+	AddLabels, RemoveLabels       []string
+	AddAssignees, RemoveAssignees []string
+}
+
+// EditIssue changes an issue, Orca's way: one gh issue edit with only
+// what changed, so labels somebody else added meanwhile stay.
+func EditIssue(repo Repo, number int, e Edit) error {
+	args := []string{"issue", "edit", fmt.Sprint(number), "--repo", repo.Slug()}
+	if t := strings.TrimSpace(e.Title); t != "" {
+		args = append(args, "--title", t)
+	}
+	for _, pair := range []struct {
+		flag  string
+		names []string
+	}{{"--add-label", e.AddLabels}, {"--remove-label", e.RemoveLabels},
+		{"--add-assignee", e.AddAssignees}, {"--remove-assignee", e.RemoveAssignees}} {
+		for _, n := range pair.names {
+			args = append(args, pair.flag, n)
+		}
+	}
+	if len(args) == 5 {
+		return nil // nothing changed
+	}
+	_, err := run(args...)
+	return err
+}
+
 // branchTitleMax is how much of a title goes into a branch's name.
 const branchTitleMax = 40
 

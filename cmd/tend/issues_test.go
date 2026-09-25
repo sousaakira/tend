@@ -302,3 +302,77 @@ esac
 	a.send(t, "\x1b")
 	a.waitForScreen(t, "back to the issue", func(s string) bool { return strings.Contains(s, "Make it green.") })
 }
+
+// TestAnIssuesLabelsAndTitleAreEdited: on an open issue, l lists the
+// repository's labels with the issue's marked, enter marks and unmarks,
+// ctrl+s sends only what changed; e changes the title. gh is a script
+// answering as GitHub does. If it regresses, saving labels resends every
+// label, or a title edit is lost.
+func TestAnIssuesLabelsAndTitleAreEdited(t *testing.T) {
+	project := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@github.com:acme/shop.git"}} {
+		if out, err := exec.Command("git", append([]string{"-C", project}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	bin := t.TempDir()
+	asked := filepath.Join(bin, "asked")
+	gh := `#!/bin/sh
+printf '%s\n' "$*" >> ` + asked + `
+case "$*" in
+*labels?per_page*) printf 'bug\nenhancement\nhelp wanted\n' ;;
+"issue edit"*) ;;
+"issue view"*) cat <<'JSON'
+{"number":42,"title":"Checkout button is grey","state":"OPEN","url":"https://github.com/acme/shop/issues/42","body":"Make it green.",
+ "author":{"login":"ana"},"labels":[{"name":"bug"}],"assignees":[],"comments":[],"createdAt":"2026-09-20T10:00:00Z","updatedAt":"2026-09-21T10:00:00Z"}
+JSON
+;;
+"api graphql"*) echo '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"nodes":[]}}}}}' ;;
+"pr list"*) echo '[]' ;;
+*) echo '{"total_count":1,"items":[{"number":42,"title":"Checkout button is grey","state":"open","html_url":"https://github.com/acme/shop/issues/42","user":{"login":"ana"},"labels":[{"name":"bug"}],"assignees":[],"comments":0,"updated_at":"2026-09-21T10:00:00Z"}]}' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(gh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh", "PATH="+bin+":"+os.Getenv("PATH"))
+	tend := buildBinary(t)
+	p, err := pty.Start(tend, []string{"attach", "-s", "edit"}, pty.Options{Size: pty.Size{Cols: 120, Rows: 36}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(120, 36, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "edit") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "cd "+project+"\r", "the shell in the project", func(s string) bool { return strings.Contains(s, filepath.Base(project)) })
+
+	a.send(t, "\x02I")
+	a.waitForScreen(t, "the list", func(s string) bool { return strings.Contains(s, "GITHUB ISSUES") && strings.Contains(s, "1 of 1") })
+	a.send(t, "\r")
+	a.waitForScreen(t, "the issue", func(s string) bool { return strings.Contains(s, "Make it green.") })
+
+	a.send(t, "l")
+	a.waitForScreen(t, "the labels, the issue's marked", func(s string) bool {
+		return strings.Contains(s, "[✓] bug") && strings.Contains(s, "[ ] enhancement") && strings.Contains(s, "[ ] help wanted")
+	})
+	a.send(t, "\r") // unmark bug
+	a.send(t, "help")
+	a.waitForScreen(t, "filtered", func(s string) bool {
+		return strings.Contains(s, "[ ] help wanted") && !strings.Contains(s, "enhancement")
+	})
+	a.send(t, "\r") // mark help wanted
+	a.waitForScreen(t, "marked", func(s string) bool { return strings.Contains(s, "[✓] help wanted") })
+	a.send(t, "\x13")
+	a.waitForScreen(t, "saved", func(s string) bool { return strings.Contains(s, "#42: labels saved") })
+	waitForFileContent(t, asked, "issue edit 42 --repo acme/shop --add-label help wanted --remove-label bug")
+
+	a.send(t, "e")
+	a.waitForScreen(t, "the title box", func(s string) bool { return strings.Contains(s, "title of #42") })
+	a.send(t, "\x15Checkout button should be green")
+	a.send(t, "\r")
+	a.waitForScreen(t, "the title saved", func(s string) bool { return strings.Contains(s, "#42: title saved") })
+	waitForFileContent(t, asked, "issue edit 42 --repo acme/shop --title Checkout button should be green")
+}

@@ -185,6 +185,7 @@ func (t *tui) issuesInput(data []byte) error {
 		t.mu.Lock()
 		v := t.issues
 		composing := v != nil && v.Compose != nil
+		picking := v != nil && v.Picker != nil
 		confirming := v != nil && v.Confirm != ""
 		pr := v != nil && v.PR != nil
 		detail := v != nil && v.Detail != nil
@@ -193,6 +194,8 @@ func (t *tui) issuesInput(data []byte) error {
 		switch {
 		case composing:
 			t.issueComposeKey(key)
+		case picking:
+			t.issuePickerKey(key)
 		case confirming:
 			t.issueConfirmKey(key)
 		case pr:
@@ -363,6 +366,12 @@ func (t *tui) issueDetailKey(key string) bool {
 		return t.startIssueWork()
 	case "p":
 		t.openLinkedPR()
+	case "e":
+		t.startTitleEdit()
+	case "l":
+		t.openIssuePicker("labels")
+	case "a":
+		t.openIssuePicker("assignees")
 	}
 	return false
 }
@@ -651,7 +660,7 @@ func (t *tui) issueComposeKey(key string) {
 		return
 	}
 	field := &c.Body
-	if c.NewIssue && !c.InBody {
+	if (c.NewIssue && !c.InBody) || c.EditTitle {
 		field = &c.Title
 	}
 	send := false
@@ -663,12 +672,15 @@ func (t *tui) issueComposeKey(key string) {
 			c.InBody = !c.InBody
 		}
 	case "\r":
-		if c.NewIssue && !c.InBody {
+		if c.NewIssue && !c.InBody && !c.EditTitle {
 			c.InBody = true
 		} else {
 			send = true
 		}
 	case "\n": // ctrl+j
+		if c.EditTitle {
+			break // a title is one line
+		}
 		if field == &c.Body {
 			*field += "\n"
 		} else {
@@ -701,6 +713,11 @@ func (t *tui) sendIssueCompose() {
 		return
 	}
 	c := *v.Compose
+	if c.EditTitle {
+		t.mu.Unlock()
+		t.saveIssueTitle(c.Title)
+		return
+	}
 	if strings.TrimSpace(c.Body) == "" && !c.NewIssue {
 		v.Message = "a comment needs some text"
 		t.mu.Unlock()
@@ -998,4 +1015,202 @@ func workspaceOf(result map[string]any) uint64 {
 	id, _ := w["workspace_id"].(string)
 	n, _ := strconv.ParseUint(strings.TrimPrefix(id, "w_"), 10, 64)
 	return n
+}
+
+// startTitleEdit opens the box on the open issue's title, to change it.
+func (t *tui) startTitleEdit() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	v := t.issues
+	if v == nil || v.Detail == nil || v.Detail.Loading {
+		return
+	}
+	v.Compose = &ui.IssueCompose{EditTitle: true, Title: v.Detail.Title}
+	t.dirty = true
+}
+
+// saveIssueTitle sends the title written, when it changed.
+func (t *tui) saveIssueTitle(title string) {
+	t.mu.Lock()
+	v := t.issues
+	if v == nil || v.Detail == nil || v.Compose == nil {
+		t.mu.Unlock()
+		return
+	}
+	title = strings.TrimSpace(title)
+	if title == "" || title == v.Detail.Title {
+		v.Compose = nil
+		t.dirty = true
+		t.mu.Unlock()
+		return
+	}
+	v.Compose.Sending = true
+	repo, number := v.Repo, v.Detail.Number
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+	go t.editIssue(proto.GitHubIssueEditParams{Repo: repo, Number: number, Title: title}, "title saved")
+}
+
+// editIssue sends an edit, says how it went, and reads the issue and the
+// list again.
+func (t *tui) editIssue(p proto.GitHubIssueEditParams, done string) {
+	err := t.client.GitHubIssueEdit(p)
+	t.mu.Lock()
+	v := t.issues
+	if v == nil {
+		t.mu.Unlock()
+		return
+	}
+	if err != nil {
+		// What was chosen or written stays, to be sent again.
+		if v.Compose != nil {
+			v.Compose.Sending = false
+		}
+		if v.Picker != nil {
+			v.Picker.Saving = false
+		}
+		v.Message = "GitHub said: " + ghError(err)
+		t.dirty = true
+		t.mu.Unlock()
+		t.wakeUp()
+		return
+	}
+	v.Compose, v.Picker = nil, nil
+	v.Message = fmt.Sprintf("#%d: %s", p.Number, done)
+	seq := t.askIssuesLocked()
+	t.dirty = true
+	t.mu.Unlock()
+	t.reloadIssue()
+	t.loadIssues(seq)
+}
+
+// openIssuePicker opens the labels, or the assignees, of the open issue
+// with what the repository offers.
+func (t *tui) openIssuePicker(kind string) {
+	t.mu.Lock()
+	v := t.issues
+	if v == nil || v.Detail == nil || v.Detail.Loading {
+		t.mu.Unlock()
+		return
+	}
+	current := v.Detail.Labels
+	if kind == "assignees" {
+		current = v.Detail.Assignees
+	}
+	p := &ui.IssuePicker{Kind: kind, Loading: true, Marked: map[string]bool{}, Had: map[string]bool{}}
+	for _, name := range current {
+		p.Marked[name], p.Had[name] = true, true
+	}
+	v.Picker = p
+	repo := v.Repo
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+	go func() {
+		names, err := t.client.GitHubRepoOptions(repo, kind)
+		t.mu.Lock()
+		defer func() {
+			t.dirty = true
+			t.mu.Unlock()
+			t.wakeUp()
+		}()
+		v := t.issues
+		if v == nil || v.Picker != p {
+			return
+		}
+		p.Loading = false
+		if err != nil {
+			v.Picker = nil
+			v.Message = "GitHub said: " + ghError(err)
+			return
+		}
+		// What the issue has comes first, and stays offered even when the
+		// repository no longer lists it — somebody who left the project
+		// can still be taken off.
+		seen := map[string]bool{}
+		for _, name := range current {
+			p.Options = append(p.Options, name)
+			seen[name] = true
+		}
+		for _, name := range names {
+			if !seen[name] {
+				p.Options = append(p.Options, name)
+			}
+		}
+	}()
+}
+
+// issuePickerKey is a key in the picker: typing filters, the arrows move,
+// enter marks or unmarks, ctrl+s saves what changed, esc gives up.
+func (t *tui) issuePickerKey(key string) {
+	t.mu.Lock()
+	v := t.issues
+	if v == nil || v.Picker == nil {
+		t.mu.Unlock()
+		return
+	}
+	p := v.Picker
+	if p.Saving {
+		t.mu.Unlock()
+		return
+	}
+	shown := ui.PickerShown(p)
+	save := false
+	switch key {
+	case "\x1b":
+		v.Picker = nil
+	case "\x1b[A", "\x10":
+		p.Cursor = max(p.Cursor-1, 0)
+	case "\x1b[B", "\x0e":
+		p.Cursor = min(p.Cursor+1, max(len(shown)-1, 0))
+	case "\r", "\n", "\t":
+		if p.Cursor < len(shown) {
+			name := shown[p.Cursor]
+			p.Marked[name] = !p.Marked[name]
+		}
+	case "\x13": // ctrl+s
+		save = true
+	case "\x7f", "\x08":
+		_, size := utf8.DecodeLastRuneInString(p.Query)
+		p.Query = p.Query[:len(p.Query)-size]
+		p.Cursor = 0
+	case "\x15":
+		p.Query, p.Cursor = "", 0
+	default:
+		if len(key) == 1 && key[0] >= 0x20 && key[0] != 0x7f {
+			p.Query += key
+			p.Cursor = 0
+		}
+	}
+	t.dirty = true
+	if !save {
+		t.mu.Unlock()
+		return
+	}
+	var add, remove []string
+	for _, name := range p.Options {
+		switch {
+		case p.Marked[name] && !p.Had[name]:
+			add = append(add, name)
+		case !p.Marked[name] && p.Had[name]:
+			remove = append(remove, name)
+		}
+	}
+	if len(add)+len(remove) == 0 {
+		v.Picker = nil
+		t.mu.Unlock()
+		return
+	}
+	p.Saving = true
+	edit := proto.GitHubIssueEditParams{Repo: v.Repo, Number: v.Detail.Number}
+	if p.Kind == "labels" {
+		edit.AddLabels, edit.RemoveLabels = add, remove
+	} else {
+		edit.AddAssignees, edit.RemoveAssignees = add, remove
+	}
+	kind := p.Kind
+	t.mu.Unlock()
+	t.wakeUp()
+	go t.editIssue(edit, kind+" saved")
 }

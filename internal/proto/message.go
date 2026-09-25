@@ -85,6 +85,11 @@ const (
 	MethodGitHubIssuePRs = "github.issue.prs"
 	// MethodGitHubPRChecks fills in a list's checks, after the list.
 	MethodGitHubPRChecks = "github.prs.checks"
+	// MethodGitHubRepoOptions is a repository's labels, or who can be
+	// assigned, for the pickers; MethodGitHubIssueEdit changes an issue's
+	// title, labels and assignees.
+	MethodGitHubRepoOptions = "github.repo.options"
+	MethodGitHubIssueEdit   = "github.issue.edit"
 	// The context buffer (internal/capture): what tools captured — a page's
 	// URL, an element picked in it, text, a file — kept by the server, which
 	// is between every tool and every agent, until it is sent to one.
@@ -205,6 +210,8 @@ var KnownMethods = []string{
 	MethodGitHubPRAction,
 	MethodGitHubIssuePRs,
 	MethodGitHubPRChecks,
+	MethodGitHubRepoOptions,
+	MethodGitHubIssueEdit,
 	MethodContextAdd,
 	MethodContextList,
 	MethodContextRemove,
@@ -675,6 +682,30 @@ type GitHubPRsResult struct {
 // counted — pass, fail, pending — by its number.
 type GitHubPRChecks struct {
 	Checks map[int][3]int `json:"checks"`
+}
+
+// GitHubRepoOptionsParams asks for a repository's labels or assignees.
+type GitHubRepoOptionsParams struct {
+	Repo string `json:"repo"`
+	// Kind is "labels" or "assignees".
+	Kind string `json:"kind"`
+}
+
+// GitHubRepoOptions is github.repo.options' answer.
+type GitHubRepoOptions struct {
+	Names []string `json:"names"`
+}
+
+// GitHubIssueEditParams is what an edit changes: a new title, when not
+// empty, and what is added and taken off.
+type GitHubIssueEditParams struct {
+	Repo            string   `json:"repo"`
+	Number          int      `json:"number"`
+	Title           string   `json:"title,omitempty"`
+	AddLabels       []string `json:"add_labels,omitempty"`
+	RemoveLabels    []string `json:"remove_labels,omitempty"`
+	AddAssignees    []string `json:"add_assignees,omitempty"`
+	RemoveAssignees []string `json:"remove_assignees,omitempty"`
 }
 
 // GitHubCheck is one check on a pull request.

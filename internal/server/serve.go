@@ -78,6 +78,8 @@ var Methods = []string{
 	proto.MethodGitHubPRAction,
 	proto.MethodGitHubIssuePRs,
 	proto.MethodGitHubPRChecks,
+	proto.MethodGitHubRepoOptions,
+	proto.MethodGitHubIssueEdit,
 	proto.MethodContextAdd,
 	proto.MethodContextList,
 	proto.MethodContextRemove,
@@ -614,6 +616,20 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		return c.srv.GitHubPRs(p)
+
+	case proto.MethodGitHubRepoOptions:
+		var p proto.GitHubRepoOptionsParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubRepoOptions(p)
+
+	case proto.MethodGitHubIssueEdit:
+		var p proto.GitHubIssueEditParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return struct{}{}, c.srv.GitHubIssueEdit(p)
 
 	case proto.MethodGitHubPRChecks:
 		var p proto.GitHubIssuesParams

@@ -221,3 +221,39 @@ func TestAnIssuesBranchIsNamedAfterIt(t *testing.T) {
 		}
 	}
 }
+
+// TestAnEditSendsOnlyWhatChanged: an edit is one gh issue edit with the new
+// title and each label and assignee added or taken off, and none at all
+// when nothing changed; the pickers read the repository's labels and who
+// can be assigned. If it regresses, saving a label list puts back labels
+// somebody else took off meanwhile, or an edit with nothing in it errors.
+func TestAnEditSendsOnlyWhatChanged(t *testing.T) {
+	repo := Repo{Owner: "o", Name: "r"}
+	args := fakeGh(t, "bug\ngood first issue\n", "", 0)
+	labels, err := Labels(repo)
+	if err != nil || len(labels) != 2 || labels[1] != "good first issue" {
+		t.Errorf("labels = %q, %v", labels, err)
+	}
+	if got, _ := os.ReadFile(args); !strings.Contains(string(got), "repos/o/r/labels?per_page=100\n--jq\n.[].name") {
+		t.Errorf("labels asked: %q", got)
+	}
+
+	err = EditIssue(repo, 12, Edit{Title: "New title", AddLabels: []string{"bug", "help wanted"}, RemoveLabels: []string{"question"},
+		AddAssignees: []string{"ana"}, RemoveAssignees: []string{"bo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "issue\nedit\n12\n--repo\no/r\n--title\nNew title\n--add-label\nbug\n--add-label\nhelp wanted\n--remove-label\nquestion\n--add-assignee\nana\n--remove-assignee\nbo\n"
+	if got, _ := os.ReadFile(args); string(got) != want {
+		t.Errorf("edit: %q", got)
+	}
+	if err := os.Remove(args); err != nil {
+		t.Fatal(err)
+	}
+	if err := EditIssue(repo, 12, Edit{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(args); !os.IsNotExist(err) {
+		t.Error("an edit with nothing in it ran gh")
+	}
+}

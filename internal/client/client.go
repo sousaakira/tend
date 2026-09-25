@@ -533,6 +533,18 @@ func (c *Client) GitHubPRChecks(p proto.GitHubIssuesParams) (proto.GitHubPRCheck
 	return out, c.Call(proto.MethodGitHubPRChecks, p, &out)
 }
 
+// GitHubRepoOptions is a repository's labels, or who can be assigned.
+func (c *Client) GitHubRepoOptions(repo, kind string) ([]string, error) {
+	var out proto.GitHubRepoOptions
+	err := c.Call(proto.MethodGitHubRepoOptions, proto.GitHubRepoOptionsParams{Repo: repo, Kind: kind}, &out)
+	return out.Names, err
+}
+
+// GitHubIssueEdit changes an issue's title, labels or assignees.
+func (c *Client) GitHubIssueEdit(p proto.GitHubIssueEditParams) error {
+	return c.Call(proto.MethodGitHubIssueEdit, p, nil)
+}
+
 // GitHubPR reads one pull request whole.
 func (c *Client) GitHubPR(repo string, number int) (proto.GitHubPRDetail, error) {
 	var out proto.GitHubPRDetail

@@ -81,6 +81,8 @@ type IssuesView struct {
 	PR           *PRDetailView
 	// Compose is a comment or a new issue being written, nil when none is.
 	Compose *IssueCompose
+	// Picker is the open issue's labels or assignees being chosen.
+	Picker *IssuePicker
 	// Confirm is a question waiting for its answer: "close" asks for the
 	// reason an issue is closed, "reopen" whether to open it again.
 	Confirm string
@@ -91,8 +93,11 @@ type IssueCompose struct {
 	// NewIssue is a new issue, with a title; otherwise a comment on the
 	// issue open.
 	NewIssue bool
-	Title    string
-	Body     string
+	// EditTitle is the open issue's title being changed: the title alone,
+	// and enter saves it.
+	EditTitle bool
+	Title     string
+	Body      string
 	// InBody is where typing goes: the title or the text.
 	InBody  bool
 	Sending bool
@@ -485,6 +490,9 @@ func drawIssuesFoot(dst *vt.Grid, v *IssuesView, g IssuesGeometry, msg, hint str
 	if v.Compose != nil {
 		drawIssueCompose(dst, v, g, theme)
 		hint = "enter sends · ctrl+j new line · esc cancels"
+		if v.Compose.EditTitle {
+			hint = "enter saves · esc cancels"
+		}
 		if v.Compose.NewIssue {
 			hint = "tab title/text · enter in the text files it · ctrl+j new line · esc cancels"
 		}
@@ -538,11 +546,20 @@ func drawIssueCompose(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme
 	if c.NewIssue {
 		head = " new issue in " + v.Repo + " "
 	}
+	if c.EditTitle && v.Detail != nil {
+		head = fmt.Sprintf(" title of #%d ", v.Detail.Number)
+	}
 	if c.Sending {
 		head += "· sending… "
 	}
 	writeString(dst, r.X, r.Y, "──"+head+strings.Repeat("─", max(r.Cols-runewidth.StringWidth(head)-2, 0)), theme.NotesAccent, end)
 	y := r.Y + 1
+	if c.EditTitle {
+		x := writeString(dst, r.X, y, "title ", theme.NotesSub, end)
+		x = writeString(dst, x, y, truncateLeft(c.Title, r.Cols-8), withBold(theme.Notes), end)
+		setCell(dst, x, y, ' ', theme.NotesButton)
+		return
+	}
 	if c.NewIssue {
 		style := theme.Notes
 		if !c.InBody {
@@ -614,14 +631,22 @@ func drawIssueDetail(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme)
 	if d.Loading {
 		writeString(dst, g.Body.X, g.Body.Y, "reading the issue…", theme.NotesSub, g.Body.X+g.Body.Cols)
 	} else {
-		drawScrolled(dst, g.Body, issueBody(v, g.Body.Cols, theme), d.Scroll, theme)
+		if v.Picker != nil {
+			drawIssuePicker(dst, v.Picker, g.Body, theme)
+		} else {
+			drawScrolled(dst, g.Body, issueBody(v, g.Body.Cols, theme), d.Scroll, theme)
+		}
 	}
 
 	toggle := "x close"
 	if d.State == "closed" {
 		toggle = "x reopen"
 	}
-	drawIssuesFoot(dst, v, g, v.Message, "↑↓ scroll · w start work · c comment · "+toggle+" · p its PR · o in browser · esc back", theme)
+	hint := "↑↓ scroll · w start work · c comment · e title · l labels · a assignees · " + toggle + " · p its PR · o browser · esc back"
+	if v.Picker != nil {
+		hint = "type to filter · ↑↓ move · enter marks · ctrl+s saves · esc cancels"
+	}
+	drawIssuesFoot(dst, v, g, v.Message, hint, theme)
 }
 
 // drawIssueSearchAndFilters draws the presets' chips and the search line,
@@ -643,5 +668,78 @@ func drawIssueSearchAndFilters(dst *vt.Grid, v *IssuesView, g IssuesGeometry, th
 	} else {
 		x = writeString(dst, x, g.Search.Y, truncateLeft(v.Query, g.Search.Cols-9), withBold(theme.Notes), end)
 		setCell(dst, x, g.Search.Y, ' ', theme.NotesButton)
+	}
+}
+
+// IssuePicker is the labels, or the assignees, of the open issue being
+// chosen from what the repository offers.
+type IssuePicker struct {
+	// Kind is "labels" or "assignees".
+	Kind    string
+	Options []string
+	// Marked is what the issue will have; Had what it had.
+	Marked, Had map[string]bool
+	Query       string
+	Cursor      int
+	Loading     bool
+	Saving      bool
+}
+
+// PickerShown is the options the filter matches, in the repository's order.
+func PickerShown(p *IssuePicker) []string {
+	q := strings.ToLower(strings.TrimSpace(p.Query))
+	if q == "" {
+		return p.Options
+	}
+	var out []string
+	for _, o := range p.Options {
+		if strings.Contains(strings.ToLower(o), q) {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// drawIssuePicker draws the picker where the issue's text was: a filter,
+// and the options with a mark on what the issue will have.
+func drawIssuePicker(dst *vt.Grid, p *IssuePicker, r Rect, theme Theme) {
+	end := r.X + r.Cols
+	head := " " + p.Kind + " "
+	if p.Saving {
+		head += "· saving… "
+	}
+	writeString(dst, r.X, r.Y, "──"+head+strings.Repeat("─", max(r.Cols-runewidth.StringWidth(head)-2, 0)), theme.NotesAccent, end)
+	x := writeString(dst, r.X, r.Y+1, "filter ", theme.NotesSub, end)
+	x = writeString(dst, x, r.Y+1, truncateLeft(p.Query, r.Cols-9), withBold(theme.Notes), end)
+	setCell(dst, x, r.Y+1, ' ', theme.NotesButton)
+	if p.Loading {
+		writeString(dst, r.X, r.Y+3, "asking GitHub…", theme.NotesSub, end)
+		return
+	}
+	shown := PickerShown(p)
+	if len(shown) == 0 {
+		writeString(dst, r.X, r.Y+3, "nothing matches", theme.NotesSub, end)
+		return
+	}
+	rows := max(r.Rows-3, 1)
+	top := 0
+	if p.Cursor >= rows {
+		top = p.Cursor - rows + 1
+	}
+	for i := 0; i < rows && top+i < len(shown); i++ {
+		name := shown[top+i]
+		y := r.Y + 3 + i
+		style, mark := theme.Notes, "[ ] "
+		if p.Marked[name] {
+			mark = "[✓] "
+		}
+		if top+i == p.Cursor {
+			style = theme.NotesButton
+			for cx := r.X; cx < end; cx++ {
+				setCell(dst, cx, y, ' ', style)
+			}
+		}
+		cx := writeString(dst, r.X+1, y, mark, style, end)
+		writeString(dst, cx, y, truncate(name, r.Cols-6), style, end)
 	}
 }
