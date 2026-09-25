@@ -521,6 +521,36 @@ func (c *Client) GitHubIssueCreate(repo, title, body string) (proto.GitHubIssueC
 	return out, c.Call(proto.MethodGitHubIssueCreate, proto.GitHubIssueParams{Repo: repo, Title: title, Body: body}, &out)
 }
 
+// GitHubPRs lists the pull requests of the repository a pane's project is on.
+func (c *Client) GitHubPRs(p proto.GitHubIssuesParams) (proto.GitHubPRsResult, error) {
+	var out proto.GitHubPRsResult
+	return out, c.Call(proto.MethodGitHubPRs, p, &out)
+}
+
+// GitHubPRChecks reads the checks of a list's first pull requests.
+func (c *Client) GitHubPRChecks(p proto.GitHubIssuesParams) (proto.GitHubPRChecks, error) {
+	var out proto.GitHubPRChecks
+	return out, c.Call(proto.MethodGitHubPRChecks, p, &out)
+}
+
+// GitHubPR reads one pull request whole.
+func (c *Client) GitHubPR(repo string, number int) (proto.GitHubPRDetail, error) {
+	var out proto.GitHubPRDetail
+	return out, c.Call(proto.MethodGitHubPR, proto.GitHubIssueParams{Repo: repo, Number: number}, &out)
+}
+
+// GitHubPRAction comments on, merges, closes, reopens or readies a pull
+// request.
+func (c *Client) GitHubPRAction(p proto.GitHubPRActionParams) error {
+	return c.Call(proto.MethodGitHubPRAction, p, nil)
+}
+
+// GitHubIssuePRs is the pull requests an issue has.
+func (c *Client) GitHubIssuePRs(repo string, number int, dir string) ([]proto.GitHubPR, error) {
+	var out []proto.GitHubPR
+	return out, c.Call(proto.MethodGitHubIssuePRs, proto.GitHubIssuePRsParams{Repo: repo, Number: number, Dir: dir}, &out)
+}
+
 // GitHubIssue reads one issue with its thread.
 func (c *Client) GitHubIssue(repo string, number int) (proto.GitHubIssueDetail, error) {
 	var out proto.GitHubIssueDetail

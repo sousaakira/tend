@@ -50,11 +50,7 @@ func (t *tui) issuesUp() bool {
 func (t *tui) openIssues() error {
 	t.mu.Lock()
 	if t.issues == nil {
-		names := make([]string, len(github.Filters))
-		for i, f := range github.Filters {
-			names[i] = f.String()
-		}
-		t.issues = &ui.IssuesView{Filters: names, Now: time.Now()}
+		t.issues = &ui.IssuesView{Filters: issueFilterNames(false), Now: time.Now()}
 		t.issueState.pane = t.focus
 	}
 	seq := t.askIssuesLocked()
@@ -63,6 +59,23 @@ func (t *tui) openIssues() error {
 	t.wakeUp()
 	go t.loadIssues(seq)
 	return nil
+}
+
+// issueFilterNames are the presets of the issues' list, or the pull
+// requests'.
+func issueFilterNames(pullRequests bool) []string {
+	if pullRequests {
+		names := make([]string, len(github.PRFilters))
+		for i, f := range github.PRFilters {
+			names[i] = github.PRFilterName(f)
+		}
+		return names
+	}
+	names := make([]string, len(github.Filters))
+	for i, f := range github.Filters {
+		names[i] = f.String()
+	}
+	return names
 }
 
 // askIssuesLocked marks the list as being asked for, and numbers the ask.
@@ -84,7 +97,12 @@ func (t *tui) loadIssues(seq int) {
 		return
 	}
 	params := proto.GitHubIssuesParams{Pane: t.issueState.pane, Remote: v.Remote, Filter: v.Filter, Query: v.Query}
+	pullRequests := v.PullRequests
 	t.mu.Unlock()
+	if pullRequests {
+		t.loadPRs(seq, params)
+		return
+	}
 
 	if !t.client.Supports(proto.MethodGitHubIssues) {
 		t.showIssuesError(seq, "this server is older than the issues panel; "+handoffCommand(t.session)+" moves it to this build")
@@ -168,6 +186,7 @@ func (t *tui) issuesInput(data []byte) error {
 		v := t.issues
 		composing := v != nil && v.Compose != nil
 		confirming := v != nil && v.Confirm != ""
+		pr := v != nil && v.PR != nil
 		detail := v != nil && v.Detail != nil
 		t.mu.Unlock()
 		var done bool
@@ -176,6 +195,8 @@ func (t *tui) issuesInput(data []byte) error {
 			t.issueComposeKey(key)
 		case confirming:
 			t.issueConfirmKey(key)
+		case pr:
+			t.prDetailKey(key)
 		case detail:
 			done = t.issueDetailKey(key)
 		default:
@@ -196,7 +217,7 @@ func (t *tui) issuesMouse(ev ui.MouseEvent) (bool, error) {
 		t.mu.Unlock()
 		return true, nil
 	}
-	detail := v.Detail != nil
+	detail := v.Detail != nil || v.PR != nil
 	t.mu.Unlock()
 	switch ev.Kind {
 	case ui.MouseWheelUp:
@@ -222,6 +243,10 @@ func (t *tui) issuesMouse(ev ui.MouseEvent) (bool, error) {
 	}
 	switch {
 	case !detail:
+		if m, ok := ui.IssueModeAt(v, cols, rows, ev.X, ev.Y); ok {
+			t.setIssueMode(m == 1)
+			return false, nil
+		}
 		if f, ok := ui.IssueFilterAt(v, cols, rows, ev.X, ev.Y); ok {
 			t.setIssueFilter(f)
 			return false, nil
@@ -264,6 +289,10 @@ func (t *tui) issueListKey(key string) bool {
 		t.moveIssueCursor(-1)
 	case "\x1b[B":
 		t.moveIssueCursor(1)
+	case "\x1b[C":
+		t.setIssueMode(true)
+	case "\x1b[D":
+		t.setIssueMode(false)
 	case "\x0e": // ctrl+n
 		t.startIssueCompose(true)
 	case "\x1b[5~":
@@ -332,6 +361,8 @@ func (t *tui) issueDetailKey(key string) bool {
 		t.askIssueState()
 	case "w":
 		return t.startIssueWork()
+	case "p":
+		t.openLinkedPR()
 	}
 	return false
 }
@@ -405,10 +436,17 @@ func (t *tui) moveIssueCursor(by int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	v := t.issues
-	if v == nil || len(v.Issues) == 0 {
+	n := 0
+	if v != nil {
+		n = len(v.Issues)
+		if v.PullRequests {
+			n = len(v.PRs)
+		}
+	}
+	if n == 0 {
 		return
 	}
-	v.Cursor = max(min(v.Cursor+by, len(v.Issues)-1), 0)
+	v.Cursor = max(min(v.Cursor+by, n-1), 0)
 	v.Scroll = ui.IssuesScrollFor(v, t.cols, t.rows)
 	t.dirty = true
 }
@@ -417,11 +455,16 @@ func (t *tui) scrollIssue(by int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	v := t.issues
-	if v == nil || v.Detail == nil {
+	switch {
+	case v == nil:
 		return
+	case v.PR != nil:
+		v.PR.Scroll = max(v.PR.Scroll+by, 0)
+		v.PR.Scroll = ui.ClampIssueScroll(v, t.cols, t.rows, t.theme)
+	case v.Detail != nil:
+		v.Detail.Scroll = max(v.Detail.Scroll+by, 0)
+		v.Detail.Scroll = ui.ClampIssueScroll(v, t.cols, t.rows, t.theme)
 	}
-	v.Detail.Scroll = max(v.Detail.Scroll+by, 0)
-	v.Detail.Scroll = ui.ClampIssueScroll(v, t.cols, t.rows, t.theme)
 	t.dirty = true
 }
 
@@ -429,6 +472,16 @@ func (t *tui) scrollIssue(by int) {
 func (t *tui) openIssue() {
 	t.mu.Lock()
 	v := t.issues
+	if v != nil && v.PullRequests {
+		if v.Cursor < len(v.PRs) {
+			p := v.PRs[v.Cursor]
+			t.mu.Unlock()
+			t.showPR(p, false)
+			return
+		}
+		t.mu.Unlock()
+		return
+	}
 	if v == nil || v.Cursor >= len(v.Issues) {
 		t.mu.Unlock()
 		return
@@ -484,6 +537,7 @@ func (t *tui) showIssue(e ui.IssueEntry, reload bool) {
 		for _, c := range d.Thread {
 			v.Detail.Thread = append(v.Detail.Thread, ui.IssueComment{Author: c.Author, Body: c.Body, Created: time.Unix(c.Created, 0)})
 		}
+		go t.loadLinkedPRs(seq, repo, e.Number)
 	}()
 }
 
@@ -495,9 +549,13 @@ func (t *tui) openIssueInBrowser() {
 	url := ""
 	switch {
 	case v == nil:
+	case v.PR != nil:
+		url = v.PR.URL
 	case v.Detail != nil:
 		url = v.Detail.URL
-	case v.Cursor < len(v.Issues):
+	case v.PullRequests && v.Cursor < len(v.PRs):
+		url = v.PRs[v.Cursor].URL
+	case !v.PullRequests && v.Cursor < len(v.Issues):
 		url = v.Issues[v.Cursor].URL
 	}
 	t.mu.Unlock()
@@ -526,7 +584,11 @@ func (t *tui) issueButton(id string) bool {
 	case ui.IssueButtonBrowser:
 		t.openIssueInBrowser()
 	case ui.IssueButtonBack:
-		t.issueDetailKey("\x1b")
+		if t.prOpen() {
+			t.prDetailKey("\x1b")
+		} else {
+			t.issueDetailKey("\x1b")
+		}
 	case ui.IssueButtonOpen:
 		t.openIssue()
 	case ui.IssueButtonNew:
@@ -534,7 +596,15 @@ func (t *tui) issueButton(id string) bool {
 	case ui.IssueButtonComment:
 		t.startIssueCompose(false)
 	case ui.IssueButtonState:
-		t.askIssueState()
+		if t.prOpen() {
+			t.askPRState()
+		} else {
+			t.askIssueState()
+		}
+	case ui.IssueButtonMerge:
+		t.askPRMerge()
+	case ui.IssueButtonReady:
+		t.readyPR()
 	case ui.IssueButtonStart:
 		return t.startIssueWork()
 	}
@@ -556,7 +626,7 @@ func (t *tui) startIssueCompose(newIssue bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	v := t.issues
-	if v == nil || v.Repo == "" || (!newIssue && v.Detail == nil) {
+	if v == nil || v.Repo == "" || (!newIssue && v.Detail == nil && v.PR == nil) || (newIssue && v.PullRequests) {
 		return
 	}
 	v.Compose = &ui.IssueCompose{NewIssue: newIssue, InBody: !newIssue}
@@ -637,8 +707,11 @@ func (t *tui) sendIssueCompose() {
 		return
 	}
 	v.Compose.Sending = true
-	repo, number := v.Repo, 0
-	if v.Detail != nil {
+	repo, number, onPR := v.Repo, 0, v.PR != nil
+	switch {
+	case onPR:
+		number = v.PR.Number
+	case v.Detail != nil:
 		number = v.Detail.Number
 	}
 	t.dirty = true
@@ -648,9 +721,12 @@ func (t *tui) sendIssueCompose() {
 	go func() {
 		var err error
 		var created proto.GitHubIssueCreated
-		if c.NewIssue {
+		switch {
+		case c.NewIssue:
 			created, err = t.client.GitHubIssueCreate(repo, c.Title, c.Body)
-		} else {
+		case onPR:
+			err = t.client.GitHubPRAction(proto.GitHubPRActionParams{Repo: repo, Number: number, Action: "comment", Body: c.Body})
+		default:
 			err = t.client.GitHubIssueComment(repo, number, c.Body)
 		}
 		t.mu.Lock()
@@ -688,6 +764,10 @@ func (t *tui) sendIssueCompose() {
 		v.Message = fmt.Sprintf("commented on #%d", number)
 		t.dirty = true
 		t.mu.Unlock()
+		if onPR {
+			t.reloadPR()
+			return
+		}
 		t.reloadIssue()
 	}()
 }
@@ -712,13 +792,18 @@ func (t *tui) askIssueState() {
 func (t *tui) issueConfirmKey(key string) {
 	t.mu.Lock()
 	v := t.issues
-	if v == nil || v.Detail == nil {
+	if v == nil || (v.Detail == nil && v.PR == nil) {
 		t.mu.Unlock()
 		return
 	}
 	asked := v.Confirm
 	v.Confirm = ""
 	t.dirty = true
+	if v.PR != nil {
+		t.mu.Unlock()
+		t.prConfirmKey(asked, key)
+		return
+	}
 	state, reason := "", ""
 	switch {
 	case asked == "close" && (key == "\r" || key == "\n"):

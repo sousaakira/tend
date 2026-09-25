@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/github"
@@ -13,23 +14,10 @@ import (
 // pane is working in is on — the directory a new tab from it would start in
 // (followDir) — or, with no pane, the server's own directory.
 func (s *Server) GitHubIssues(p proto.GitHubIssuesParams) (proto.GitHubIssuesResult, error) {
-	spec := PaneSpec{}
-	s.followDir(&spec, session.PaneID(p.Pane))
-	dir := spec.Dir
-	if dir == "" {
-		dir = s.cfg.Dir
-	}
-	out := proto.GitHubIssuesResult{Dir: dir, Issues: []proto.GitHubIssue{}}
-	repos, err := github.ReposFor(dir)
+	out := proto.GitHubIssuesResult{Issues: []proto.GitHubIssue{}}
+	repo, err := s.githubRepo(p, &out.Dir, &out.Remotes)
 	if err != nil {
 		return out, err
-	}
-	repo := repos[0]
-	for _, r := range repos {
-		out.Remotes = append(out.Remotes, r.Remote)
-		if r.Remote == p.Remote {
-			repo = r
-		}
 	}
 	out.Repo, out.Remote = repo.Slug(), repo.Remote
 	filter := github.FilterOpen
@@ -105,4 +93,157 @@ func wireIssue(i github.Issue) proto.GitHubIssue {
 		Labels: i.Labels, Assignees: i.Assignees, Comments: i.Comments,
 		Updated: i.Updated.Unix(), URL: i.URL,
 	}
+}
+
+// githubRepo is the repository a list is of: the one the project a pane
+// is working in is on — the directory a new tab from it would start in
+// (followDir) — or, with no pane, the server's own; through the remote
+// asked for, else the first (upstream before origin). It says the
+// directory, and the GitHub remotes there are.
+func (s *Server) githubRepo(p proto.GitHubIssuesParams, dir *string, remotes *[]string) (github.Repo, error) {
+	spec := PaneSpec{}
+	s.followDir(&spec, session.PaneID(p.Pane))
+	*dir = spec.Dir
+	if *dir == "" {
+		*dir = s.cfg.Dir
+	}
+	repos, err := github.ReposFor(*dir)
+	if err != nil {
+		return github.Repo{}, err
+	}
+	repo := repos[0]
+	for _, r := range repos {
+		*remotes = append(*remotes, r.Remote)
+		if r.Remote == p.Remote {
+			repo = r
+		}
+	}
+	return repo, nil
+}
+
+// GitHubPRs is github.prs: the pull requests of the repository a pane's
+// project is on, as GitHubIssues lists its issues.
+func (s *Server) GitHubPRs(p proto.GitHubIssuesParams) (proto.GitHubPRsResult, error) {
+	out := proto.GitHubPRsResult{PRs: []proto.GitHubPR{}}
+	repo, err := s.githubRepo(p, &out.Dir, &out.Remotes)
+	if err != nil {
+		return out, err
+	}
+	out.Repo, out.Remote = repo.Slug(), repo.Remote
+	filter := github.PRFilterOpen
+	if p.Filter >= 0 && p.Filter < len(github.PRFilters) {
+		filter = github.PRFilters[p.Filter]
+	}
+	prs, err := github.ListPRs(repo, filter, p.Query)
+	if err != nil {
+		return out, err
+	}
+	for _, pr := range prs {
+		out.PRs = append(out.PRs, wirePR(pr))
+	}
+	return out, nil
+}
+
+// GitHubPR is github.pr: one pull request whole.
+func (s *Server) GitHubPR(p proto.GitHubIssueParams) (proto.GitHubPRDetail, error) {
+	repo, err := repoOf(p, true)
+	if err != nil {
+		return proto.GitHubPRDetail{}, err
+	}
+	d, err := github.GetPR(repo, p.Number)
+	if err != nil {
+		return proto.GitHubPRDetail{}, err
+	}
+	out := proto.GitHubPRDetail{GitHubPR: wirePR(d.PR), Body: d.Body, Created: d.Created.Unix(),
+		Additions: d.Additions, Deletions: d.Deletions, Files: d.Files, Mergeable: d.Mergeable}
+	for _, c := range d.CheckList {
+		out.Checks = append(out.Checks, proto.GitHubCheck{Name: c.Name, State: c.State})
+	}
+	for _, c := range d.Thread {
+		out.Thread = append(out.Thread, proto.GitHubComment{Author: c.Author, Body: c.Body, Created: c.Created.Unix()})
+	}
+	return out, nil
+}
+
+// GitHubPRAction is github.pr.action.
+func (s *Server) GitHubPRAction(p proto.GitHubPRActionParams) error {
+	repo, err := repoOf(proto.GitHubIssueParams{Repo: p.Repo, Number: p.Number}, true)
+	if err != nil {
+		return err
+	}
+	switch p.Action {
+	case "comment":
+		return github.PRComment(repo, p.Number, p.Body)
+	case "merge":
+		return github.MergePR(repo, p.Number, p.Method)
+	case "close":
+		return github.ClosePR(repo, p.Number)
+	case "reopen":
+		return github.ReopenPR(repo, p.Number)
+	case "ready":
+		return github.ReadyPR(repo, p.Number)
+	}
+	return fmt.Errorf("a pull request is commented, merged, closed, reopened or made ready, not %q", p.Action)
+}
+
+// GitHubIssuePRs is github.issue.prs: the pull requests GitHub says close
+// an issue, and those on the project's branches made for it (issue-<n>-…),
+// which say nothing of it in their text when an agent opened them.
+func (s *Server) GitHubIssuePRs(p proto.GitHubIssuePRsParams) ([]proto.GitHubPR, error) {
+	repo, err := repoOf(proto.GitHubIssueParams{Repo: p.Repo, Number: p.Number}, true)
+	if err != nil {
+		return nil, err
+	}
+	var branches []string
+	if p.Dir != "" {
+		if out, err := exec.Command("git", "-C", p.Dir, "for-each-ref", "--format=%(refname:short)", "refs/heads").Output(); err == nil {
+			for _, b := range strings.Fields(string(out)) {
+				if github.IsIssueBranch(b, p.Number) {
+					branches = append(branches, b)
+				}
+			}
+		}
+	}
+	prs, err := github.PRsForIssue(repo, p.Number, branches)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]proto.GitHubPR, 0, len(prs))
+	for _, pr := range prs {
+		out = append(out, wirePR(pr))
+	}
+	return out, nil
+}
+
+func wirePR(p github.PR) proto.GitHubPR {
+	return proto.GitHubPR{
+		Number: p.Number, Title: p.Title, State: p.State, Draft: p.Draft, Author: p.Author,
+		Labels: p.Labels, Head: p.Head, Base: p.Base, Review: p.Review,
+		Pass: p.Checks.Pass, Fail: p.Checks.Fail, Pending: p.Checks.Pending,
+		Updated: p.Updated.Unix(), URL: p.URL,
+	}
+}
+
+// GitHubPRChecks is github.prs.checks: the checks of the first pull
+// requests the same list finds, as pass, fail and pending counts.
+func (s *Server) GitHubPRChecks(p proto.GitHubIssuesParams) (proto.GitHubPRChecks, error) {
+	var dir string
+	var remotes []string
+	repo, err := s.githubRepo(p, &dir, &remotes)
+	if err != nil {
+		return proto.GitHubPRChecks{}, err
+	}
+	filter := github.PRFilterOpen
+	if p.Filter >= 0 && p.Filter < len(github.PRFilters) {
+		filter = github.PRFilters[p.Filter]
+	}
+	checks, err := github.PRChecks(repo, filter, p.Query)
+	if err != nil {
+		return proto.GitHubPRChecks{}, err
+	}
+	out := proto.GitHubPRChecks{Checks: make(map[int][3]int, len(checks))}
+	for n, c := range checks {
+		out.Checks[n] = [3]int{c.Pass, c.Fail, c.Pending}
+	}
+	return out, nil
 }

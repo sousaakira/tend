@@ -211,3 +211,94 @@ esac
 		t.Errorf("worktrees for #42: %d\n%s", n, out)
 	}
 }
+
+// TestPullRequestsAreListedOpenedAndMerged: → shows the project's pull
+// requests, their checks filled in after the list; enter opens one with
+// what it changes, and m then s merges it by squash; an issue shows the
+// pull request GitHub links to it, and p opens it. gh is a script answering
+// as GitHub does. If it regresses, the list waits on every check of every
+// pull request, a merge is made the wrong way, or an issue never shows the
+// work done on it.
+func TestPullRequestsAreListedOpenedAndMerged(t *testing.T) {
+	project := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@github.com:acme/shop.git"}} {
+		if out, err := exec.Command("git", append([]string{"-C", project}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	bin := t.TempDir()
+	asked := filepath.Join(bin, "asked")
+	gh := `#!/bin/sh
+printf '%s\n' "$*" >> ` + asked + `
+case "$1 $2" in
+"pr list")
+  case "$*" in
+  *statusCheckRollup*) echo '[{"number":9,"statusCheckRollup":[{"__typename":"CheckRun","status":"COMPLETED","conclusion":"FAILURE"}]}]' ;;
+  *) echo '[{"number":9,"title":"Make checkout green","state":"OPEN","isDraft":false,"author":{"login":"bo"},"labels":[],"headRefName":"issue-42-checkout","baseRefName":"main","updatedAt":"2026-09-21T10:00:00Z","url":"https://github.com/acme/shop/pull/9","reviewDecision":"APPROVED"}]' ;;
+  esac ;;
+"pr view") cat <<'JSON'
+{"number":9,"title":"Make checkout green","state":"OPEN","isDraft":false,"author":{"login":"bo"},"labels":[],"headRefName":"issue-42-checkout",
+ "baseRefName":"main","updatedAt":"2026-09-21T10:00:00Z","url":"https://github.com/acme/shop/pull/9","reviewDecision":"APPROVED",
+ "statusCheckRollup":[{"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"FAILURE"}],
+ "body":"Fixes the colour.","createdAt":"2026-09-20T10:00:00Z","additions":10,"deletions":2,"changedFiles":1,"mergeable":"MERGEABLE",
+ "comments":[],"latestReviews":[{"author":{"login":"ana"},"body":"Looks good.","state":"APPROVED","submittedAt":"2026-09-21T09:00:00Z"}]}
+JSON
+;;
+"pr merge") ;;
+"api graphql") echo '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"nodes":[{"number":9}]}}}}}' ;;
+"issue view") cat <<'JSON'
+{"number":42,"title":"Checkout button is grey","state":"OPEN","url":"https://github.com/acme/shop/issues/42","body":"Make it green.",
+ "author":{"login":"ana"},"labels":[],"assignees":[],"comments":[],"createdAt":"2026-09-20T10:00:00Z","updatedAt":"2026-09-21T10:00:00Z"}
+JSON
+;;
+*) echo '{"total_count":1,"items":[{"number":42,"title":"Checkout button is grey","state":"open","html_url":"https://github.com/acme/shop/issues/42","user":{"login":"ana"},"labels":[],"assignees":[],"comments":0,"updated_at":"2026-09-21T10:00:00Z"}]}' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(gh), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "SHELL=/bin/sh", "PATH="+bin+":"+os.Getenv("PATH"))
+	tend := buildBinary(t)
+	p, err := pty.Start(tend, []string{"attach", "-s", "pulls"}, pty.Options{Size: pty.Size{Cols: 120, Rows: 36}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(120, 36, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "pulls") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "cd "+project+"\r", "the shell in the project", func(s string) bool { return strings.Contains(s, filepath.Base(project)) })
+
+	a.send(t, "\x02I")
+	a.waitForScreen(t, "the issues", func(s string) bool { return strings.Contains(s, "GITHUB ISSUES") && strings.Contains(s, "1 of 1") })
+	a.send(t, "\x1b[C")
+	a.waitForScreen(t, "the pull requests, checks filled in", func(s string) bool {
+		return strings.Contains(s, "GITHUB PULL REQUESTS") && strings.Contains(s, "Make checkout green") &&
+			strings.Contains(s, "✗1") && strings.Contains(s, "approved")
+	})
+	a.send(t, "\r")
+	a.waitForScreen(t, "the pull request", func(s string) bool {
+		return strings.Contains(s, "#9 open · by bo · issue-42-checkout → main") && strings.Contains(s, "+10 −2 in 1 files") &&
+			strings.Contains(s, "✗ lint") && strings.Contains(s, "ana · approved") && strings.Contains(s, "Looks good.")
+	})
+	a.send(t, "m")
+	a.waitForScreen(t, "the question", func(s string) bool { return strings.Contains(s, "merge #9 into main?") })
+	a.send(t, "s")
+	a.waitForScreen(t, "it merged", func(s string) bool { return strings.Contains(s, "merged #9 (squash)") })
+	waitForFileContent(t, asked, "pr merge 9 --repo acme/shop --squash")
+
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "back to the list", func(s string) bool { return strings.Contains(s, "[ Open ] [ In browser ]") })
+	a.send(t, "\x1b[D")
+	a.waitForScreen(t, "the issues again", func(s string) bool { return strings.Contains(s, "GITHUB ISSUES") && strings.Contains(s, "1 of 1") })
+	a.send(t, "\r")
+	a.waitForScreen(t, "the issue with its pull request", func(s string) bool {
+		return strings.Contains(s, "PULL REQUESTS") && strings.Contains(s, "#9 open") && strings.Contains(s, "Make checkout green")
+	})
+	a.send(t, "p")
+	a.waitForScreen(t, "the pull request, from the issue", func(s string) bool { return strings.Contains(s, "#9 open · by bo") })
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "back to the issue", func(s string) bool { return strings.Contains(s, "Make it green.") })
+}

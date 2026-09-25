@@ -90,7 +90,9 @@ project you are in, through `gh`: pick a filter with tab, type to search
 (GitHub's syntax works: `label:bug`), enter to read one with its comments;
 there `c` comments, `x` closes it, and `w` starts work on it — a worktree on
 `issue-<n>-…` and your agent in it, told to complete the issue. `ctrl+n` files
-a new one.
+a new one. `→` shows the pull requests, with their checks and reviews;
+open one to merge it (`m`), comment, close it or mark a draft ready. An issue
+lists its pull requests, and `p` opens the first.
 Browser (or `ctrl+b B`) opens a page in tend's
 browser: Chromium (or Edge) in a profile of the session's own, with tend's
 extension already in it. Its icon, or Alt+Shift+T, lets you pick elements on

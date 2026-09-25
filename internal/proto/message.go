@@ -77,6 +77,14 @@ const (
 	MethodGitHubIssueComment = "github.issue.comment"
 	MethodGitHubIssueState   = "github.issue.state"
 	MethodGitHubIssueCreate  = "github.issue.create"
+	// Pull requests: the list, one whole, what is done to one, and the
+	// ones an issue has.
+	MethodGitHubPRs      = "github.prs"
+	MethodGitHubPR       = "github.pr"
+	MethodGitHubPRAction = "github.pr.action"
+	MethodGitHubIssuePRs = "github.issue.prs"
+	// MethodGitHubPRChecks fills in a list's checks, after the list.
+	MethodGitHubPRChecks = "github.prs.checks"
 	// The context buffer (internal/capture): what tools captured — a page's
 	// URL, an element picked in it, text, a file — kept by the server, which
 	// is between every tool and every agent, until it is sent to one.
@@ -192,6 +200,11 @@ var KnownMethods = []string{
 	MethodGitHubIssueComment,
 	MethodGitHubIssueState,
 	MethodGitHubIssueCreate,
+	MethodGitHubPRs,
+	MethodGitHubPR,
+	MethodGitHubPRAction,
+	MethodGitHubIssuePRs,
+	MethodGitHubPRChecks,
 	MethodContextAdd,
 	MethodContextList,
 	MethodContextRemove,
@@ -628,6 +641,77 @@ type GitHubIssueParams struct {
 	Body   string `json:"body,omitempty"`
 	State  string `json:"state,omitempty"`
 	Reason string `json:"reason,omitempty"`
+}
+
+// GitHubPR is one pull request in a list.
+type GitHubPR struct {
+	Number int      `json:"number"`
+	Title  string   `json:"title"`
+	State  string   `json:"state"`
+	Draft  bool     `json:"draft,omitempty"`
+	Author string   `json:"author,omitempty"`
+	Labels []string `json:"labels,omitempty"`
+	Head   string   `json:"head"`
+	Base   string   `json:"base"`
+	Review string   `json:"review,omitempty"`
+	// Pass, Fail and Pending count its checks.
+	Pass    int    `json:"pass"`
+	Fail    int    `json:"fail"`
+	Pending int    `json:"pending"`
+	Updated int64  `json:"updated"`
+	URL     string `json:"url"`
+}
+
+// GitHubPRsResult is github.prs' answer, as github.issues' is.
+type GitHubPRsResult struct {
+	Repo    string     `json:"repo"`
+	Remote  string     `json:"remote"`
+	Remotes []string   `json:"remotes"`
+	Dir     string     `json:"dir"`
+	PRs     []GitHubPR `json:"prs"`
+}
+
+// GitHubPRChecks is github.prs.checks' answer: each pull request's checks,
+// counted — pass, fail, pending — by its number.
+type GitHubPRChecks struct {
+	Checks map[int][3]int `json:"checks"`
+}
+
+// GitHubCheck is one check on a pull request.
+type GitHubCheck struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
+// GitHubPRDetail is a pull request whole.
+type GitHubPRDetail struct {
+	GitHubPR
+	Body      string          `json:"body"`
+	Created   int64           `json:"created"`
+	Additions int             `json:"additions"`
+	Deletions int             `json:"deletions"`
+	Files     int             `json:"files"`
+	Mergeable string          `json:"mergeable"`
+	Checks    []GitHubCheck   `json:"checks"`
+	Thread    []GitHubComment `json:"thread"`
+}
+
+// GitHubPRActionParams is what is done to a pull request: comment (with
+// Body), merge (by Method: squash, merge, rebase), close, reopen, ready.
+type GitHubPRActionParams struct {
+	Repo   string `json:"repo"`
+	Number int    `json:"number"`
+	Action string `json:"action"`
+	Body   string `json:"body,omitempty"`
+	Method string `json:"method,omitempty"`
+}
+
+// GitHubIssuePRsParams asks for an issue's pull requests; Dir is the
+// project, whose branches made for the issue are looked for.
+type GitHubIssuePRsParams struct {
+	Repo   string `json:"repo"`
+	Number int    `json:"number"`
+	Dir    string `json:"dir,omitempty"`
 }
 
 // GitHubIssueCreated is github.issue.create's answer.

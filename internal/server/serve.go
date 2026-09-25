@@ -73,6 +73,11 @@ var Methods = []string{
 	proto.MethodGitHubIssueComment,
 	proto.MethodGitHubIssueState,
 	proto.MethodGitHubIssueCreate,
+	proto.MethodGitHubPRs,
+	proto.MethodGitHubPR,
+	proto.MethodGitHubPRAction,
+	proto.MethodGitHubIssuePRs,
+	proto.MethodGitHubPRChecks,
 	proto.MethodContextAdd,
 	proto.MethodContextList,
 	proto.MethodContextRemove,
@@ -602,6 +607,41 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		return c.srv.GitHubIssueWrite(req.Method, p)
+
+	case proto.MethodGitHubPRs:
+		var p proto.GitHubIssuesParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubPRs(p)
+
+	case proto.MethodGitHubPRChecks:
+		var p proto.GitHubIssuesParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubPRChecks(p)
+
+	case proto.MethodGitHubPR:
+		var p proto.GitHubIssueParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubPR(p)
+
+	case proto.MethodGitHubPRAction:
+		var p proto.GitHubPRActionParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return struct{}{}, c.srv.GitHubPRAction(p)
+
+	case proto.MethodGitHubIssuePRs:
+		var p proto.GitHubIssuePRsParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.GitHubIssuePRs(p)
 
 	case proto.MethodAgentSessionsDelete:
 		var p proto.AgentSessionsDeleteParams

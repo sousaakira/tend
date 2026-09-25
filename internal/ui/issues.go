@@ -44,6 +44,8 @@ type IssueDetailView struct {
 	Thread  []IssueComment
 	Loading bool
 	Scroll  int
+	// Linked are the pull requests the issue has, found after it is read.
+	Linked []PREntry
 }
 
 // IssuesView is the panel while it is up.
@@ -72,6 +74,11 @@ type IssuesView struct {
 	Now time.Time
 	// Detail is the issue open over the list, nil for the list.
 	Detail *IssueDetailView
+	// PullRequests is the pull requests' list rather than the issues';
+	// PRs are its entries and PR the one open.
+	PullRequests bool
+	PRs          []PREntry
+	PR           *PRDetailView
 	// Compose is a comment or a new issue being written, nil when none is.
 	Compose *IssueCompose
 	// Confirm is a question waiting for its answer: "close" asks for the
@@ -113,6 +120,16 @@ type IssueButton struct {
 // issueButtons are the buttons the panel shows as it is: the list's, or the
 // open issue's, and Close at the right of both.
 func issueButtons(v *IssuesView) []IssueButton {
+	if v.PR != nil {
+		return prButtons(v.PR)
+	}
+	if v.PullRequests && v.Detail == nil {
+		return []IssueButton{
+			{ID: IssueButtonOpen, Label: "[ Open ]"},
+			{ID: IssueButtonBrowser, Label: "[ In browser ]"},
+			{ID: IssueButtonClose, Label: "[ Close ]"},
+		}
+	}
 	if v.Detail != nil {
 		state := "[ Close issue ]"
 		if v.Detail.State == "closed" {
@@ -164,7 +181,13 @@ type IssuesGeometry struct {
 	Compose Rect
 	// Buttons are on the bottom line.
 	Buttons []IssueButton
+	// Modes are the Issues and Pull requests chips, at the right of the
+	// presets.
+	Modes [2]Rect
 }
+
+// issueModes are the two lists' names, as their chips show them.
+var issueModes = [2]string{" Issues ", " Pull requests "}
 
 // IssuesLayout is the panel's geometry on a screen of cols by rows, for a
 // view with these preset names.
@@ -178,6 +201,13 @@ func IssuesLayout(v *IssuesView, cols, rows int) IssuesGeometry {
 		r := Rect{X: x, Y: box.Y + 2, Cols: runewidth.StringWidth(label), Rows: 1}
 		g.Filters = append(g.Filters, r)
 		x += r.Cols + 1
+	}
+	mx := box.X + box.Cols - 2
+	for i := len(issueModes) - 1; i >= 0; i-- {
+		w := runewidth.StringWidth(issueModes[i])
+		mx -= w
+		g.Modes[i] = Rect{X: mx, Y: box.Y + 2, Cols: w, Rows: 1}
+		mx--
 	}
 	g.Search = Rect{X: box.X + 2, Y: box.Y + 3, Cols: max(box.Cols-4, 0), Rows: 1}
 	// The column names at Y+5, the issues under them; a blank, a message,
@@ -210,11 +240,32 @@ func IssuesLayout(v *IssuesView, cols, rows int) IssuesGeometry {
 // IssueAt is the issue on a line of the list, by its place in Issues.
 func IssueAt(v *IssuesView, cols, rows, x, y int) (int, bool) {
 	g := IssuesLayout(v, cols, rows)
-	if v.Detail != nil || x < g.List.X || x >= g.List.X+g.List.Cols || y < g.List.Y || y >= g.List.Y+g.List.Rows {
+	if v.Detail != nil || v.PR != nil || x < g.List.X || x >= g.List.X+g.List.Cols || y < g.List.Y || y >= g.List.Y+g.List.Rows {
 		return 0, false
 	}
 	i := clampIssuesScroll(v, g) + y - g.List.Y
-	return i, i < len(v.Issues)
+	return i, i < issuesListLen(v)
+}
+
+// IssueModeAt is the Issues (0) or Pull requests (1) chip under a point.
+func IssueModeAt(v *IssuesView, cols, rows, x, y int) (int, bool) {
+	if v.Detail != nil || v.PR != nil {
+		return 0, false
+	}
+	for i, r := range IssuesLayout(v, cols, rows).Modes {
+		if y == r.Y && x >= r.X && x < r.X+r.Cols {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// issuesListLen is how long the list shown is.
+func issuesListLen(v *IssuesView) int {
+	if v.PullRequests {
+		return len(v.PRs)
+	}
+	return len(v.Issues)
 }
 
 // IssueFilterAt is the preset chip under a point.
@@ -241,17 +292,20 @@ func IssuesScrollFor(v *IssuesView, cols, rows int) int {
 }
 
 func clampIssuesScroll(v *IssuesView, g IssuesGeometry) int {
-	return max(min(v.Scroll, len(v.Issues)-g.List.Rows), 0)
+	return max(min(v.Scroll, issuesListLen(v)-g.List.Rows), 0)
 }
 
 // ClampIssueScroll is the detail's scroll as it will be drawn, for the
 // client to keep its own in step.
 func ClampIssueScroll(v *IssuesView, cols, rows int, theme Theme) int {
-	if v.Detail == nil {
-		return 0
-	}
 	g := IssuesLayout(v, cols, rows)
-	return max(min(v.Detail.Scroll, len(issueBody(v, g.Body.Cols, theme))-g.Body.Rows), 0)
+	switch {
+	case v.PR != nil:
+		return max(min(v.PR.Scroll, len(prBody(v, g.Body.Cols, theme))-g.Body.Rows), 0)
+	case v.Detail != nil:
+		return max(min(v.Detail.Scroll, len(issueBody(v, g.Body.Cols, theme))-g.Body.Rows), 0)
+	}
+	return 0
 }
 
 // issueBody is the detail's scrolling part: the issue's text, then each
@@ -259,20 +313,53 @@ func ClampIssueScroll(v *IssuesView, cols, rows int, theme Theme) int {
 func issueBody(v *IssuesView, width int, theme Theme) []notesLine {
 	d := v.Detail
 	var out []notesLine
-	body := strings.TrimSpace(d.Body)
+	if len(d.Linked) > 0 {
+		// Its pull requests first: whether the work on it is done is the
+		// question an issue is opened to answer.
+		out = append(out, notesLine{spans: []notesSpan{{" PULL REQUESTS", theme.NotesAccent}, {"  p opens the first", theme.NotesSub}}, fill: theme.Notes})
+		for _, p := range d.Linked {
+			out = append(out, notesLine{spans: append([]notesSpan{{" ", theme.Notes}}, prLineSpans(p, theme)...), fill: theme.Notes})
+		}
+		out = append(out, notesLine{fill: theme.Notes})
+	}
+	out = append(out, threadLines(v, d.Body, d.Thread, width, theme)...)
+	return out
+}
+
+// threadLines is a text and the comments under it, each under a rule with
+// who wrote it and when.
+func threadLines(v *IssuesView, text string, thread []IssueComment, width int, theme Theme) []notesLine {
+	var out []notesLine
+	body := strings.TrimSpace(hideComments(text))
 	if body == "" {
 		out = append(out, notesLine{spans: []notesSpan{{" no description", theme.NotesSub}}, fill: theme.Notes})
 	} else {
 		out = append(out, markdownLines(body, width, theme)...)
 	}
-	for _, c := range d.Thread {
+	for _, c := range thread {
 		head := fmt.Sprintf(" %s · %s ", c.Author, SessionAge(v.Now, c.Created))
 		rule := strings.Repeat("─", max(width-runewidth.StringWidth(head)-2, 0))
 		out = append(out, notesLine{fill: theme.Notes},
 			notesLine{spans: []notesSpan{{"──", theme.NotesSub}, {head, withBold(theme.NotesAccent)}, {rule, theme.NotesSub}}, fill: theme.Notes})
-		out = append(out, markdownLines(strings.TrimSpace(c.Body), width, theme)...)
+		out = append(out, markdownLines(strings.TrimSpace(hideComments(c.Body)), width, theme)...)
 	}
 	return out
+}
+
+// hideComments takes out what GitHub does not show: HTML comments, which
+// bots fill with metadata.
+func hideComments(s string) string {
+	for {
+		start := strings.Index(s, "<!--")
+		if start < 0 {
+			return s
+		}
+		end := strings.Index(s[start:], "-->")
+		if end < 0 {
+			return s[:start]
+		}
+		s = s[:start] + s[start+end+3:]
+	}
 }
 
 func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
@@ -289,6 +376,9 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 	}
 	right := box.X + box.Cols - 1
 	title := "GITHUB ISSUES"
+	if v.PullRequests || v.PR != nil {
+		title = "GITHUB PULL REQUESTS"
+	}
 	if v.Repo != "" {
 		title += " · " + v.Repo
 		if len(v.Remotes) > 1 {
@@ -296,30 +386,30 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 		}
 	}
 	writeString(dst, box.X+2, box.Y+1, truncate(title, box.Cols-24), withBold(theme.NotesAccent), right)
-	if v.Detail != nil {
+	switch {
+	case v.PR != nil:
+		drawPRDetail(dst, v, g, theme)
+		return
+	case v.Detail != nil:
 		drawIssueDetail(dst, v, g, theme)
+		return
+	}
+	for i, r := range g.Modes {
+		style := theme.NotesSub
+		if (i == 1) == v.PullRequests {
+			style = withBold(theme.NotesAccent)
+		}
+		writeString(dst, r.X, r.Y, issueModes[i], style, right)
+	}
+	if v.PullRequests {
+		drawPRList(dst, v, g, theme)
 		return
 	}
 	if v.Total > 0 || len(v.Issues) > 0 {
 		count := fmt.Sprintf("%d of %d", len(v.Issues), v.Total)
 		writeString(dst, right-1-runewidth.StringWidth(count), box.Y+1, count, theme.NotesSub, right)
 	}
-	for i, r := range g.Filters {
-		style := theme.NotesSub
-		if i == v.Filter {
-			style = theme.NotesButton
-		}
-		writeString(dst, r.X, r.Y, " "+v.Filters[i]+" ", style, right)
-	}
-	end := g.Search.X + g.Search.Cols
-	x := writeString(dst, g.Search.X, g.Search.Y, "search ", theme.NotesSub, end)
-	if v.Query == "" {
-		setCell(dst, x, g.Search.Y, ' ', theme.NotesButton)
-		writeString(dst, x+2, g.Search.Y, "words, or GitHub's own: label:bug author:someone", theme.NotesSub, end)
-	} else {
-		x = writeString(dst, x, g.Search.Y, truncateLeft(v.Query, g.Search.Cols-9), withBold(theme.Notes), end)
-		setCell(dst, x, g.Search.Y, ' ', theme.NotesButton)
-	}
+	drawIssueSearchAndFilters(dst, v, g, theme)
 
 	// The columns: number, title, labels, author, age, comments.
 	listEnd := g.List.X + g.List.Cols
@@ -404,6 +494,12 @@ func drawIssuesFoot(dst *vt.Grid, v *IssuesView, g IssuesGeometry, msg, hint str
 		msg, hint = fmt.Sprintf("close #%d?", v.Detail.Number), "enter as completed · n as not planned · esc cancels"
 	case "reopen":
 		msg, hint = fmt.Sprintf("reopen #%d?", v.Detail.Number), "enter reopens · esc cancels"
+	case "merge":
+		msg, hint = fmt.Sprintf("merge #%d into %s?", v.PR.Number, v.PR.Base), "s squash · m merge commit · r rebase · esc cancels"
+	case "closepr":
+		msg, hint = fmt.Sprintf("close #%d without merging?", v.PR.Number), "enter closes · esc cancels"
+	case "reopenpr":
+		msg, hint = fmt.Sprintf("reopen #%d?", v.PR.Number), "enter reopens · esc cancels"
 	}
 	msgY, hintY := box.Y+box.Rows-4, box.Y+box.Rows-3
 	if msg != "" {
@@ -435,6 +531,9 @@ func drawIssueCompose(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme
 	head := " comment "
 	if v.Detail != nil {
 		head = fmt.Sprintf(" comment on #%d ", v.Detail.Number)
+	}
+	if v.PR != nil {
+		head = fmt.Sprintf(" comment on #%d ", v.PR.Number)
 	}
 	if c.NewIssue {
 		head = " new issue in " + v.Repo + " "
@@ -515,31 +614,34 @@ func drawIssueDetail(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme)
 	if d.Loading {
 		writeString(dst, g.Body.X, g.Body.Y, "reading the issue…", theme.NotesSub, g.Body.X+g.Body.Cols)
 	} else {
-		lines := issueBody(v, g.Body.Cols, theme)
-		top := max(min(d.Scroll, len(lines)-g.Body.Rows), 0)
-		for i := 0; i < g.Body.Rows && top+i < len(lines); i++ {
-			y := g.Body.Y + i
-			lx := g.Body.X
-			for _, sp := range lines[top+i].spans {
-				lx = writeString(dst, lx, y, sp.text, sp.style, g.Body.X+g.Body.Cols)
-			}
-		}
-		if len(lines) > g.Body.Rows && g.Body.Rows > 0 {
-			thumb := max(g.Body.Rows*g.Body.Rows/len(lines), 1)
-			at := (g.Body.Rows - thumb) * top / max(len(lines)-g.Body.Rows, 1)
-			for i := 0; i < g.Body.Rows; i++ {
-				r, style := '│', theme.NotesSub
-				if i >= at && i < at+thumb {
-					r, style = '▐', theme.NotesAccent
-				}
-				setCell(dst, g.Body.X+g.Body.Cols, g.Body.Y+i, r, style)
-			}
-		}
+		drawScrolled(dst, g.Body, issueBody(v, g.Body.Cols, theme), d.Scroll, theme)
 	}
 
 	toggle := "x close"
 	if d.State == "closed" {
 		toggle = "x reopen"
 	}
-	drawIssuesFoot(dst, v, g, v.Message, "↑↓ scroll · w start work · c comment · "+toggle+" · o in browser · esc back", theme)
+	drawIssuesFoot(dst, v, g, v.Message, "↑↓ scroll · w start work · c comment · "+toggle+" · p its PR · o in browser · esc back", theme)
+}
+
+// drawIssueSearchAndFilters draws the presets' chips and the search line,
+// which both lists have.
+func drawIssueSearchAndFilters(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme) {
+	right := g.Box.X + g.Box.Cols - 1
+	for i, r := range g.Filters {
+		style := theme.NotesSub
+		if i == v.Filter {
+			style = theme.NotesButton
+		}
+		writeString(dst, r.X, r.Y, " "+v.Filters[i]+" ", style, right)
+	}
+	end := g.Search.X + g.Search.Cols
+	x := writeString(dst, g.Search.X, g.Search.Y, "search ", theme.NotesSub, end)
+	if v.Query == "" {
+		setCell(dst, x, g.Search.Y, ' ', theme.NotesButton)
+		writeString(dst, x+2, g.Search.Y, "words, or GitHub's own: label:bug author:someone", theme.NotesSub, end)
+	} else {
+		x = writeString(dst, x, g.Search.Y, truncateLeft(v.Query, g.Search.Cols-9), withBold(theme.Notes), end)
+		setCell(dst, x, g.Search.Y, ' ', theme.NotesButton)
+	}
 }
