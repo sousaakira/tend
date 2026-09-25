@@ -276,6 +276,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 tend is a port of herdr to Go, and the porting is ongoing.
 
+- [CONTRIBUTING.md](CONTRIBUTING.md) — setting up, the gate, tests, commits
+  and pull requests. Start here.
 - [AGENTS.md](AGENTS.md) — how to work here: the rules, the gate, the traps.
   Written for AI agents; it is the right first read for anyone.
 - [docs/PORTING.md](docs/PORTING.md) — what has been ported, what has not, and
