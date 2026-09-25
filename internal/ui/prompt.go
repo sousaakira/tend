@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/mattn/go-runewidth"
 
 	"github.com/sousaakira/tend/internal/vt"
@@ -26,9 +28,18 @@ func promptRect(f Frame, cols, rows int) Rect {
 		// a path cut down to its last few characters says little.
 		width = max(width, runewidth.StringWidth(f.PromptHint)+len(" · enter · esc ")+2)
 	}
+	for _, c := range f.PromptChoices {
+		// Each is numbered, "1 " before it.
+		width = max(width, runewidth.StringWidth(c)+2)
+	}
 	width = max(width, promptMinWidth)
 
-	r := Rect{Cols: min(width+6, cols), Rows: min(5, rows)}
+	height := 5
+	if len(f.PromptChoices) > 0 {
+		// A blank, "recent", and one line each.
+		height += len(f.PromptChoices) + 1
+	}
+	r := Rect{Cols: min(width+6, cols), Rows: min(height, rows)}
 	r.X = (cols - r.Cols) / 2
 	r.Y = (rows - r.Rows) / 2
 	return r
@@ -59,7 +70,12 @@ func drawPrompt(dst *vt.Grid, f Frame, theme Theme) {
 	at := writeString(dst, r.X+2, r.Y+2, truncate(f.PromptText, r.Cols-5), style, limit)
 	writeString(dst, at, r.Y+2, "▏", theme.OverlayTitle, limit)
 
+	drawPromptChoices(dst, f, r, theme)
+
 	footer := " enter · esc "
+	if len(f.PromptChoices) > 0 {
+		footer = " ↑↓ recent · click opens · enter · esc "
+	}
 	if f.PromptHint != "" {
 		// Cut from the left: the end of a path is the part that changes as
 		// it is typed, and the part worth seeing.
@@ -82,4 +98,43 @@ func PromptCursor(f Frame, cols, rows int) (x, y int, ok bool) {
 	r := promptRect(f, cols, rows)
 	at := r.X + 2 + runewidth.StringWidth(truncate(f.PromptText, r.Cols-5))
 	return min(at, r.X+r.Cols-2), r.Y + 2, true
+}
+
+// promptChoicesTop is the line the first answer given before is on.
+func promptChoicesTop(r Rect) int { return r.Y + 4 }
+
+// drawPromptChoices lists the answers given before under a "recent" label,
+// numbered, the one the arrows are on marked.
+func drawPromptChoices(dst *vt.Grid, f Frame, r Rect, theme Theme) {
+	if len(f.PromptChoices) == 0 {
+		return
+	}
+	limit := r.X + r.Cols - 1
+	writeString(dst, r.X+2, r.Y+3, "recent", theme.OverlayTitle, limit)
+	for i, c := range f.PromptChoices {
+		y := promptChoicesTop(r) + i
+		if y >= r.Y+r.Rows-1 {
+			return
+		}
+		style := theme.Overlay
+		if i == f.PromptChoice {
+			style = theme.OverlayTitle
+		}
+		x := writeString(dst, r.X+2, y, fmt.Sprintf("%d ", i+1), theme.OverlayTitle, limit)
+		writeString(dst, x, y, truncate(c, r.Cols-6), style, limit)
+	}
+}
+
+// PromptChoiceAt is the answer given before under a point, by its place in
+// PromptChoices.
+func PromptChoiceAt(f Frame, cols, rows, x, y int) (int, bool) {
+	if f.Prompt == "" || len(f.PromptChoices) == 0 {
+		return 0, false
+	}
+	r := promptRect(f, cols, rows)
+	i := y - promptChoicesTop(r)
+	if x <= r.X || x >= r.X+r.Cols-1 || i < 0 || i >= len(f.PromptChoices) || y >= r.Y+r.Rows-1 {
+		return 0, false
+	}
+	return i, true
 }

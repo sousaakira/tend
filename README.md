@@ -94,7 +94,8 @@ labels and assignees, and `w` starts work on it — a worktree on
 a new one. `→` shows the pull requests, with their checks and reviews;
 open one to merge it (`m`), comment, close it or mark a draft ready. An issue
 lists its pull requests, and `p` opens the first.
-Browser (or `ctrl+b B`) opens a page in tend's
+Browser (or `ctrl+b B`) asks for a page — the last five opened are listed
+under the field, a click or the arrows away — and opens it in tend's
 browser: Chromium (or Edge) in a profile of the session's own, with tend's
 extension already in it. Its icon, or Alt+Shift+T, lets you pick elements on
 the page — outlined as you point, numbered as you take them — and write a

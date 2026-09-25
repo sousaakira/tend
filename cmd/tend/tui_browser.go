@@ -4,10 +4,12 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/sousaakira/tend/internal/browserext"
 	"github.com/sousaakira/tend/internal/proto"
+	"github.com/sousaakira/tend/internal/transport"
 )
 
 // The browser, tend's own (server/browser.go, internal/browserext). A page
@@ -24,14 +26,24 @@ import (
 // openInBrowser opens a page.
 func (t *tui) openInBrowser(url string) {
 	url = strings.TrimSpace(url)
+	// The prompt starts at "https://" with the cursor after it, so an
+	// address pasted there whole came out https://https://…
+	for _, seed := range []string{"https://", "http://"} {
+		if rest, ok := strings.CutPrefix(url, seed); ok && strings.Contains(rest, "://") {
+			url = rest
+		}
+	}
 	if !strings.Contains(url, "://") {
 		url = "https://" + url
 	}
 	t.mu.Lock()
 	t.lastURL = url
+	t.urlHistory = rememberURL(t.urlHistory, url)
+	history := append([]string(nil), t.urlHistory...)
 	command, program := t.config.Browser.Command, t.config.Browser.Program
 	session, host := t.session, t.host
 	t.mu.Unlock()
+	saveURLHistory(history)
 
 	if t.serverKnows(proto.MethodBrowserOpen) {
 		if n, err := t.client.BrowserOpen(url); err == nil && n > 0 {
@@ -85,4 +97,64 @@ func openURLWith(command, url string) error {
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+// urlHistoryMax is how many pages the prompt offers again: the owner's five.
+const urlHistoryMax = 5
+
+// urlHistoryFile is where the pages last opened are kept, so they are
+// offered after a restart too. This client's, on this machine — what one
+// person opened is nobody else's — beside tend's other state.
+func urlHistoryFile() string {
+	dir, err := transport.StateDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "browser-history")
+}
+
+// loadURLHistory reads the pages last opened, the last first.
+func loadURLHistory() []string {
+	path := urlHistoryFile()
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if line = strings.TrimSpace(line); line != "" && !seen[line] && len(out) < urlHistoryMax {
+			seen[line] = true
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// rememberURL puts a page first among those last opened, once, and keeps
+// the five most recent.
+func rememberURL(history []string, url string) []string {
+	out := []string{url}
+	for _, u := range history {
+		if u != url && len(out) < urlHistoryMax {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// saveURLHistory writes the pages last opened. Not being able to is not
+// worth a word: the page opens all the same.
+func saveURLHistory(history []string) {
+	path := urlHistoryFile()
+	if path == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	_ = os.WriteFile(path, []byte(strings.Join(history, "\n")+"\n"), 0o600)
 }

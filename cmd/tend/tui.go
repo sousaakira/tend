@@ -276,7 +276,13 @@ type tui struct {
 	contextItems []proto.ContextItem
 	// lastURL is the page last opened in the browser, the prompt's seed.
 	lastURL string
-	zoom    bool
+	// urlHistory is the pages last opened, the last first, which the
+	// prompt offers again (tui_browser.go); promptChoice is the one of them
+	// the arrows are on, or -1.
+	urlHistory   []string
+	urlLoaded    bool
+	promptChoice int
+	zoom         bool
 	// hostLight is whether the outer terminal is light, as it last said;
 	// hostExplicit whether it said so itself rather than by its background
 	// colour; hostAsked whether it was asked, so the reports are turned off
@@ -1117,6 +1123,9 @@ func (t *tui) buildFrame() ui.Frame {
 		frame.PromptText = t.promptText
 		frame.PromptSelected = t.promptPristine
 		frame.PromptHint = t.promptHintLocked()
+		if t.prompt == promptOpenURL {
+			frame.PromptChoices, frame.PromptChoice = t.urlHistory, t.promptChoice
+		}
 	}
 	if t.scrollPane != 0 {
 		frame.Scroll = t.scrollOffset

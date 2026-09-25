@@ -447,6 +447,11 @@ type Frame struct {
 	// PromptHint is shown along the prompt's bottom edge: what the answer
 	// being typed will do, such as where a worktree's checkout will go.
 	PromptHint string
+	// PromptChoices are answers given before, listed under the field to be
+	// picked with a click or the arrows — the pages last opened, for the
+	// browser's prompt — and PromptChoice the one the arrows are on, or -1.
+	PromptChoices []string
+	PromptChoice  int
 	// Highlight marks every visible match of a copy-mode search, or nil.
 	Highlight *Highlight
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sousaakira/tend/internal/ui"
 	"github.com/sousaakira/tend/internal/worktree"
 )
 
@@ -60,7 +61,14 @@ func (t *tui) startPrompt(kind promptKind) {
 			t.promptText = w.Name
 		}
 	case promptOpenURL:
+		if !t.urlLoaded {
+			t.urlHistory, t.urlLoaded = loadURLHistory(), true
+		}
+		t.promptChoice = -1
 		t.promptText = t.lastURL
+		if t.promptText == "" && len(t.urlHistory) > 0 {
+			t.promptText = t.urlHistory[0]
+		}
 		if t.promptText == "" {
 			t.promptText = "https://"
 			t.promptPristine = false // typed after, not over
@@ -114,19 +122,28 @@ func (t *tui) cancelPrompt() {
 }
 
 // promptKeys collects the name. It reports whether the input was consumed.
+//
+// It goes key by key, not byte by byte: an arrow is an escape sequence, and
+// read a byte at a time its escape cancelled the prompt.
 func (t *tui) promptKeys(data []byte) (bool, error) {
 	if len(data) == 0 {
 		return false, nil
 	}
 
-	for _, b := range data {
-		switch b {
-		case '\r', '\n':
+	for _, key := range splitKeys(data) {
+		switch key {
+		case "\r", "\n":
 			return true, t.commitPrompt()
-		case 0x1b, 0x03: // escape, ctrl+c
+		case "\x1b", "\x03": // escape, ctrl+c
 			t.cancelPrompt()
 			return true, nil
-		case 0x7f, 0x08: // backspace
+		case "\x1b[A":
+			t.stepPromptChoice(-1)
+			continue
+		case "\x1b[B":
+			t.stepPromptChoice(1)
+			continue
+		case "\x7f", "\x08": // backspace
 			t.mu.Lock()
 			if t.promptPristine {
 				// Backspace on the seed keeps it and starts editing, rather
@@ -144,24 +161,71 @@ func (t *tui) promptKeys(data []byte) (bool, error) {
 			}
 			t.dirty = true
 			t.mu.Unlock()
-		default:
-			if b < 0x20 {
-				continue // other control keys have no meaning here
-			}
-			t.mu.Lock()
-			if t.promptPristine {
-				t.promptText = ""
-				t.promptPristine = false
-			}
-			if len(t.promptText) < 64 {
-				t.promptText += string(b)
-			}
-			t.dirty = true
-			t.mu.Unlock()
+			continue
 		}
+		if len(key) != 1 || key[0] < 0x20 {
+			continue // other control keys and sequences have no meaning here
+		}
+		t.mu.Lock()
+		if t.promptPristine {
+			t.promptText = ""
+			t.promptPristine = false
+		}
+		// A name is short; a page's address is not, and cut at 64 it opened
+		// the wrong page.
+		limit := 64
+		if t.prompt == promptOpenURL {
+			limit = 2048
+		}
+		if len(t.promptText) < limit {
+			t.promptText += key
+		}
+		t.promptChoice = -1
+		t.dirty = true
+		t.mu.Unlock()
 	}
 	t.wakeUp()
 	return true, nil
+}
+
+// stepPromptChoice moves the arrows through the answers given before, each
+// put in the field as it is reached, to be opened with enter or typed over.
+func (t *tui) stepPromptChoice(by int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.prompt != promptOpenURL || len(t.urlHistory) == 0 {
+		return
+	}
+	t.promptChoice = max(min(t.promptChoice+by, len(t.urlHistory)-1), 0)
+	t.promptText = t.urlHistory[t.promptChoice]
+	t.promptPristine = true
+	t.dirty = true
+}
+
+// promptMouse is a press on the prompt's list: a page opened before opens
+// again, at once. It reports whether it took the press.
+func (t *tui) promptMouse(ev ui.MouseEvent) bool {
+	if ev.Kind != ui.MousePress || ev.Button != 0 {
+		return false
+	}
+	t.mu.Lock()
+	if t.prompt != promptOpenURL {
+		t.mu.Unlock()
+		return false
+	}
+	frame := t.buildFrame()
+	i, ok := ui.PromptChoiceAt(frame, t.cols, t.rows, ev.X, ev.Y)
+	if !ok {
+		t.mu.Unlock()
+		return false
+	}
+	url := t.urlHistory[i]
+	t.prompt, t.promptText, t.promptPristine = promptNone, "", false
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+	go t.openInBrowser(url)
+	return true
 }
 
 func (t *tui) commitPrompt() error {
