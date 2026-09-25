@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>tend — runtime de terminal para agentes de código</title>
   <meta name="description" content="O tend mantém os terminais dos agentes rodando depois que você sai, e marca cada painel como working, blocked ou idle.">
+  <meta property="og:title" content="tend — runtime de terminal para agentes de código">
+  <meta property="og:description" content="O tend mantém os terminais dos agentes rodando depois que você sai, e marca cada painel como working, blocked ou idle.">
+  <meta property="og:image" content="https://sousaakira.github.io/tend/session.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
   <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
   <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
@@ -13,6 +17,9 @@
   <link rel="alternate" hreflang="zh" href="https://sousaakira.github.io/tend/zh/">
   <link rel="alternate" hreflang="x-default" href="https://sousaakira.github.io/tend/">
   <link rel="stylesheet" href="../site.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
   <script>(function(){
   if (location.protocol === 'file:') return;
   var KEY = 'tend-lang';
@@ -137,35 +144,91 @@
     </section>
 
     <section id="session" class="stage" aria-label="Uma sessão do tend">
-      <div class="frame">
-        <aside class="side">
-          <p class="side-h">spaces</p>
-          <p class="row on"><span class="dot"></span> main</p>
-          <p class="row dim">master</p>
-          <p class="rule" aria-hidden="true"></p>
-          <p class="side-h">agents <span>flat</span></p>
-          <p class="row on"><span class="dot work"></span> claude</p>
-          <p class="row"><span class="dot block"></span> codex</p>
-        </aside>
-        <div class="panes">
-          <article class="pane focus">
-            <header><span class="id">1</span> claude <span class="st work" title="working">●</span></header>
-            <pre>⠋ Pondering the refactor…
-
-The panes belong to the server.
-Closing this window does not
-stop them.</pre>
-          </article>
-          <article class="pane">
-            <header><span class="id">2</span> codex <span class="st block" title="blocked">▲</span></header>
-            <pre>Do you want to proceed?
-
- ❯ 1. Yes
-   2. No</pre>
-          </article>
+      <div class="term">
+        <div class="term-chrome" aria-hidden="true">
+          <span class="term-dots"><i></i><i></i><i></i></span>
+          <span class="term-title">tend — work</span>
         </div>
+        <div class="frame">
+          <aside class="side">
+            <p class="tools"><span>F</span><span class="on">A</span><span>S</span><span>I</span><span>B</span><span>C</span></p>
+            <p class="rule" aria-hidden="true"></p>
+            <p class="side-h">spaces</p>
+            <p class="entry on"><span class="name"><span class="dot"></span>tend</span><span class="sub">main</span></p>
+            <p class="entry"><span class="name"><span class="dot idle"></span>website</span><span class="sub">feat/hero</span></p>
+            <p class="entry"><span class="name"><span class="dot idle"></span>docs</span><span class="sub">readme</span></p>
+            <p class="rule" aria-hidden="true"></p>
+            <p class="side-h">agents <span>flat</span></p>
+            <p class="entry on"><span class="name"><span class="dot work"></span>claude</span><span class="sub">working</span></p>
+            <p class="entry"><span class="name"><span class="dot block"></span>codex</span><span class="sub">blocked</span></p>
+            <p class="entry"><span class="name"><span class="dot idle"></span>cursor</span><span class="sub">idle</span></p>
+            <p class="hide" aria-hidden="true">«</p>
+          </aside>
+          <div class="workspace">
+            <div class="tabs" aria-hidden="true">
+              <span class="tab on">agents</span>
+              <span class="tab">website</span>
+              <span class="tab add">+</span>
+              <span class="tabs-right">21:14</span>
+            </div>
+            <div class="panes">
+              <article class="pane focus">
+                <header><span class="id">1</span> claude <span class="st work" title="working">●</span></header>
+                <pre><span class="logo"> ▐▛███▜▌
+▝▜█████▛▘
+  ▘▘ ▝▝</span>
+<span class="dim">Claude Code</span>  <span class="accent">~/src/tend</span>
+
+<span class="prompt">❯</span> keep the agents running after I detach
+
+<span class="ok">●</span> The session is a background server.
+  Closing this window does not stop them.
+
+<span class="ok">●</span> Detach with ctrl+b d. Attach again
+  and the same panes are there, still
+  marked working, blocked or idle.
+
+<span class="spin">⠋</span> <span class="work">Writing the status line…</span>
+<span class="dim">   esc to interrupt</span></pre>
+              </article>
+              <article class="pane">
+                <header><span class="id">2</span> codex <span class="st block" title="blocked">▲</span></header>
+                <pre><span class="dim">codex</span>  <span class="accent">~/src/tend</span>
+
+<span class="block">Do you want to proceed?</span>
+
+  Run <span class="str">make check</span> before the commit
+
+  <span class="dim">internal/ui/draw.go
+  cmd/tend/tui.go</span>
+
+<span class="prompt">❯</span> <span class="pick">1. Yes</span>
+  2. No
+
+<span class="dim">~/src/tend  feat/hero</span></pre>
+              </article>
+              <aside class="files" aria-label="Files panel">
+                <p class="files-h">FILES <span>⚙</span></p>
+                <p class="files-git">tend · main <span>⟳</span></p>
+                <p class="rule" aria-hidden="true"></p>
+                <pre> cmd/
+   tend/
+ internal/
+   server/
+   ui/
+ <span class="accent">site/</span>
+   index.html
+   site.css
+ AGENTS.md
+ <span class="work">README.md  M</span></pre>
+              </aside>
+            </div>
+          </div>
+        </div>
+        <p class="status"><span>work · tend · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
       </div>
-      <p class="status"><span>work · main · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+
+      <p class="stage-cap">Uma sessão. O servidor continua quando ninguém está olhando.</p>
     </section>
 
     <section class="usage">

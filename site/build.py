@@ -38,6 +38,7 @@ LANGS = {
         "windows_p2": "On Windows, run the Linux installer inside WSL, or clone and <code>make install</code> on a Unix machine.",
         "deck": "A terminal runtime for coding agents. The server stays up when you leave. Each pane is marked working, blocked, or idle.",
         "stage_label": "A tend session",
+        "stage_cap": "A session. The server is still there when nobody is looking.",
         "facts_h": "What stays when you detach",
         "fact1_t": "The programs",
         "fact1_d": "A session is a background server. <kbd>ctrl</kbd><kbd>b</kbd> then <kbd>d</kbd> leaves the agents running. Opening tend again attaches to the same panes.",
@@ -96,6 +97,7 @@ LANGS = {
         "windows_p2": "No Windows, rode o instalador Linux no WSL, ou clone e <code>make install</code> numa máquina Unix.",
         "deck": "Um runtime de terminal para agentes de código. O servidor continua quando você sai. Cada painel fica marcado como working, blocked ou idle.",
         "stage_label": "Uma sessão do tend",
+        "stage_cap": "Uma sessão. O servidor continua quando ninguém está olhando.",
         "facts_h": "O que fica quando você desconecta",
         "fact1_t": "Os programas",
         "fact1_d": "Uma sessão é um servidor em segundo plano. <kbd>ctrl</kbd><kbd>b</kbd> e depois <kbd>d</kbd> deixa os agentes rodando. Abrir o tend de novo volta aos mesmos painéis.",
@@ -154,6 +156,7 @@ LANGS = {
         "windows_p2": "En Windows, ejecuta el instalador Linux en WSL, o clona y <code>make install</code> en una máquina Unix.",
         "deck": "Un runtime de terminal para agentes de código. El servidor sigue cuando te vas. Cada panel queda marcado como working, blocked o idle.",
         "stage_label": "Una sesión de tend",
+        "stage_cap": "Una sesión. El servidor sigue ahí cuando nadie mira.",
         "facts_h": "Qué queda al desconectarte",
         "fact1_t": "Los programas",
         "fact1_d": "Una sesión es un servidor en segundo plano. <kbd>ctrl</kbd><kbd>b</kbd> y luego <kbd>d</kbd> deja los agentes en marcha. Abrir tend otra vez vuelve a los mismos paneles.",
@@ -212,6 +215,7 @@ LANGS = {
         "windows_p2": "Windows では WSL 上で Linux 用インストーラを使うか、Unix でクローンして <code>make install</code> してください。",
         "deck": "コーディングエージェント向けのターミナルランタイム。離れてもサーバーは動き続け、各ペインは working・blocked・idle と示されます。",
         "stage_label": "tend のセッション",
+        "stage_cap": "セッション。誰も見ていなくてもサーバーは動き続けます。",
         "facts_h": "デタッチしても残るもの",
         "fact1_t": "プログラム",
         "fact1_d": "セッションはバックグラウンドのサーバーです。<kbd>ctrl</kbd><kbd>b</kbd> のあと <kbd>d</kbd> でエージェントは動き続けます。tend を開き直すと同じペインに戻ります。",
@@ -270,6 +274,7 @@ LANGS = {
         "windows_p2": "在 Windows 上，请在 WSL 中运行 Linux 安装命令，或在 Unix 机器上克隆后执行 <code>make install</code>。",
         "deck": "面向编程智能体的终端运行时。你离开后服务器仍在运行。每个窗格标为 working、blocked 或 idle。",
         "stage_label": "一个 tend 会话",
+        "stage_cap": "一次会话。没人看着的时候，服务器也还在。",
         "facts_h": "断开后仍会留下的",
         "fact1_t": "程序",
         "fact1_d": "会话是后台服务器。<kbd>ctrl</kbd><kbd>b</kbd> 再按 <kbd>d</kbd> 后智能体继续运行。再次打开 tend 会回到同样的窗格。",
@@ -300,6 +305,96 @@ LANGS = {
         "footer": "Apache-2.0。独立的 Go 实现；详见仓库中的 NOTICE。",
     },
 }
+
+# Staged session: the chrome is what tend draws (toolbar, two-line sidebar
+# entries, tabs, files panel, status). The pane text is invented so the
+# public site does not leak a live session. English on purpose — it is what
+# the program prints, not marketing copy.
+SESSION_MOCK = """\
+      <div class="term">
+        <div class="term-chrome" aria-hidden="true">
+          <span class="term-dots"><i></i><i></i><i></i></span>
+          <span class="term-title">tend — work</span>
+        </div>
+        <div class="frame">
+          <aside class="side">
+            <p class="tools"><span>F</span><span class="on">A</span><span>S</span><span>I</span><span>B</span><span>C</span></p>
+            <p class="rule" aria-hidden="true"></p>
+            <p class="side-h">spaces</p>
+            <p class="entry on"><span class="name"><span class="dot"></span>tend</span><span class="sub">main</span></p>
+            <p class="entry"><span class="name"><span class="dot idle"></span>website</span><span class="sub">feat/hero</span></p>
+            <p class="entry"><span class="name"><span class="dot idle"></span>docs</span><span class="sub">readme</span></p>
+            <p class="rule" aria-hidden="true"></p>
+            <p class="side-h">agents <span>flat</span></p>
+            <p class="entry on"><span class="name"><span class="dot work"></span>claude</span><span class="sub">working</span></p>
+            <p class="entry"><span class="name"><span class="dot block"></span>codex</span><span class="sub">blocked</span></p>
+            <p class="entry"><span class="name"><span class="dot idle"></span>cursor</span><span class="sub">idle</span></p>
+            <p class="hide" aria-hidden="true">«</p>
+          </aside>
+          <div class="workspace">
+            <div class="tabs" aria-hidden="true">
+              <span class="tab on">agents</span>
+              <span class="tab">website</span>
+              <span class="tab add">+</span>
+              <span class="tabs-right">21:14</span>
+            </div>
+            <div class="panes">
+              <article class="pane focus">
+                <header><span class="id">1</span> claude <span class="st work" title="working">●</span></header>
+                <pre><span class="logo"> ▐▛███▜▌
+▝▜█████▛▘
+  ▘▘ ▝▝</span>
+<span class="dim">Claude Code</span>  <span class="accent">~/src/tend</span>
+
+<span class="prompt">❯</span> keep the agents running after I detach
+
+<span class="ok">●</span> The session is a background server.
+  Closing this window does not stop them.
+
+<span class="ok">●</span> Detach with ctrl+b d. Attach again
+  and the same panes are there, still
+  marked working, blocked or idle.
+
+<span class="spin">⠋</span> <span class="work">Writing the status line…</span>
+<span class="dim">   esc to interrupt</span></pre>
+              </article>
+              <article class="pane">
+                <header><span class="id">2</span> codex <span class="st block" title="blocked">▲</span></header>
+                <pre><span class="dim">codex</span>  <span class="accent">~/src/tend</span>
+
+<span class="block">Do you want to proceed?</span>
+
+  Run <span class="str">make check</span> before the commit
+
+  <span class="dim">internal/ui/draw.go
+  cmd/tend/tui.go</span>
+
+<span class="prompt">❯</span> <span class="pick">1. Yes</span>
+  2. No
+
+<span class="dim">~/src/tend  feat/hero</span></pre>
+              </article>
+              <aside class="files" aria-label="Files panel">
+                <p class="files-h">FILES <span>⚙</span></p>
+                <p class="files-git">tend · main <span>⟳</span></p>
+                <p class="rule" aria-hidden="true"></p>
+                <pre> cmd/
+   tend/
+ internal/
+   server/
+   ui/
+ <span class="accent">site/</span>
+   index.html
+   site.css
+ AGENTS.md
+ <span class="work">README.md  M</span></pre>
+              </aside>
+            </div>
+          </div>
+        </div>
+        <p class="status"><span>work · tend · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+      </div>
+"""
 
 
 # Runs in <head> so a first visit is redirected before the English page paints.
@@ -413,6 +508,10 @@ def page(code: str, t: dict) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{t["title"]}</title>
   <meta name="description" content="{t["description"]}">
+  <meta property="og:title" content="{t["title"]}">
+  <meta property="og:description" content="{t["description"]}">
+  <meta property="og:image" content="https://sousaakira.github.io/tend/session.png">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
   <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
   <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
@@ -421,6 +520,9 @@ def page(code: str, t: dict) -> str:
   <link rel="alternate" hreflang="zh" href="https://sousaakira.github.io/tend/zh/">
   <link rel="alternate" hreflang="x-default" href="https://sousaakira.github.io/tend/">
   <link rel="stylesheet" href="{css}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
   <script>{LANG_JS}</script>
 </head>
 <body>
@@ -476,35 +578,8 @@ def page(code: str, t: dict) -> str:
     </section>
 
     <section id="session" class="stage" aria-label="{t["stage_label"]}">
-      <div class="frame">
-        <aside class="side">
-          <p class="side-h">spaces</p>
-          <p class="row on"><span class="dot"></span> main</p>
-          <p class="row dim">master</p>
-          <p class="rule" aria-hidden="true"></p>
-          <p class="side-h">agents <span>flat</span></p>
-          <p class="row on"><span class="dot work"></span> claude</p>
-          <p class="row"><span class="dot block"></span> codex</p>
-        </aside>
-        <div class="panes">
-          <article class="pane focus">
-            <header><span class="id">1</span> claude <span class="st work" title="working">●</span></header>
-            <pre>⠋ Pondering the refactor…
-
-The panes belong to the server.
-Closing this window does not
-stop them.</pre>
-          </article>
-          <article class="pane">
-            <header><span class="id">2</span> codex <span class="st block" title="blocked">▲</span></header>
-            <pre>Do you want to proceed?
-
- ❯ 1. Yes
-   2. No</pre>
-          </article>
-        </div>
-      </div>
-      <p class="status"><span>work · main · agents</span><span>1:claude ●</span><span>2:codex ▲</span></p>
+{SESSION_MOCK}
+      <p class="stage-cap">{t["stage_cap"]}</p>
     </section>
 
     <section class="usage">
