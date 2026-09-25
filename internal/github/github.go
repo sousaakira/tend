@@ -14,8 +14,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -40,6 +43,8 @@ const callTimeout = 30 * time.Second
 type Repo struct {
 	Owner, Name string
 	Remote      string
+	// Dir is the checkout it was found in, where work on it starts.
+	Dir string
 }
 
 // Slug is owner/name, as gh's --repo takes it.
@@ -101,8 +106,71 @@ func ReposFor(dir string) ([]Repo, error) {
 	return repos, nil
 }
 
+// Scope is what a list is of: the repository a project is in, through each
+// of its remotes, or — for a folder of repositories, which is not one
+// itself — each repository under it.
+type Scope struct {
+	// Multi is a folder of repositories; Repos is then one each, else the
+	// one repository through each remote, upstream first.
+	Multi bool
+	Repos []Repo
+}
+
+// maxRepoDepth is how far below a folder repositories are looked for, the
+// files panel's rule (internal/explorer): a folder of projects, and a
+// folder of folders of them.
+const maxRepoDepth = 2
+
+// ScopeFor is what a list from dir is of. A checkout is its repository; a
+// folder that is none — a project made of several, the owner's mvno with
+// its api, app and panel side by side — is every GitHub repository in it.
+func ScopeFor(dir string) (Scope, error) {
+	if top, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output(); err == nil {
+		repos, err := ReposFor(dir)
+		for i := range repos {
+			repos[i].Dir = strings.TrimSpace(string(top))
+		}
+		return Scope{Repos: repos}, err
+	}
+	var out []Repo
+	var walk func(dir string, depth int)
+	walk = func(dir string, depth int) {
+		if depth > maxRepoDepth {
+			return
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if !e.IsDir() || strings.HasPrefix(name, ".") || name == "node_modules" {
+				continue
+			}
+			path := filepath.Join(dir, name)
+			if _, err := os.Stat(filepath.Join(path, ".git")); err != nil {
+				walk(path, depth+1)
+				continue
+			}
+			if repos, err := ReposFor(path); err == nil {
+				r := repos[0]
+				r.Dir = path
+				out = append(out, r)
+			}
+		}
+	}
+	walk(dir, 1)
+	if len(out) == 0 {
+		return Scope{}, fmt.Errorf("%w (%s is not a git checkout, and none under it is on GitHub)", ErrNoRepo, dir)
+	}
+	sort.Slice(out, func(a, b int) bool { return strings.ToLower(out[a].Name) < strings.ToLower(out[b].Name) })
+	return Scope{Multi: true, Repos: out}, nil
+}
+
 // Issue is one issue as the list shows it.
 type Issue struct {
+	// Repo is owner/name, the repository it is in.
+	Repo      string
 	Number    int
 	Title     string
 	State     string
@@ -155,10 +223,15 @@ func (f Filter) query() string {
 // listLimit is how many the list reads: one page of GitHub's search.
 const listLimit = 100
 
-// SearchQuery is the search a list runs: the repository, issues only, the
-// preset, and what was typed, in GitHub's own syntax.
-func SearchQuery(repo Repo, filter Filter, typed string) string {
-	q := "repo:" + repo.Slug() + " is:issue " + filter.query()
+// SearchQuery is the search a list runs: the repositories — GitHub's search
+// takes several, as any of them — issues only, the preset, and what was
+// typed, in GitHub's own syntax.
+func SearchQuery(repos []Repo, filter Filter, typed string) string {
+	q := ""
+	for _, r := range repos {
+		q += "repo:" + r.Slug() + " "
+	}
+	q += "is:issue " + filter.query()
 	if typed = strings.TrimSpace(typed); typed != "" {
 		q += " " + typed
 	}
@@ -167,9 +240,9 @@ func SearchQuery(repo Repo, filter Filter, typed string) string {
 
 // List is the issues a search finds, the last updated first, and how many
 // it found in all.
-func List(repo Repo, filter Filter, typed string) ([]Issue, int, error) {
+func List(repos []Repo, filter Filter, typed string) ([]Issue, int, error) {
 	path := fmt.Sprintf("search/issues?q=%s&sort=updated&order=desc&per_page=%d",
-		url.QueryEscape(SearchQuery(repo, filter, typed)), listLimit)
+		url.QueryEscape(SearchQuery(repos, filter, typed)), listLimit)
 	out, err := run("api", "--cache", "60s", path)
 	if err != nil {
 		return nil, 0, err
@@ -208,10 +281,16 @@ type wireIssue struct {
 	Comments    int             `json:"comments"`
 	Updated     time.Time       `json:"updated_at"`
 	PullRequest json.RawMessage `json:"pull_request"`
+	// RepositoryURL is https://api.github.com/repos/owner/name.
+	RepositoryURL string `json:"repository_url"`
 }
 
 func (w wireIssue) issue() Issue {
-	i := Issue{Number: w.Number, Title: w.Title, State: w.State, Author: w.User.Login,
+	repo := w.RepositoryURL
+	if i := strings.Index(repo, "/repos/"); i >= 0 {
+		repo = repo[i+len("/repos/"):]
+	}
+	i := Issue{Repo: repo, Number: w.Number, Title: w.Title, State: w.State, Author: w.User.Login,
 		Comments: w.Comments, Updated: w.Updated, URL: w.URL}
 	for _, l := range w.Labels {
 		i.Labels = append(i.Labels, l.Name)
@@ -274,7 +353,7 @@ func Get(repo Repo, number int) (Detail, error) {
 		return Detail{}, fmt.Errorf("reading GitHub's answer: %w", err)
 	}
 	d := Detail{
-		Issue: Issue{Number: w.Number, Title: w.Title, State: strings.ToLower(w.State), URL: w.URL,
+		Issue: Issue{Repo: repo.Slug(), Number: w.Number, Title: w.Title, State: strings.ToLower(w.State), URL: w.URL,
 			Author: w.Author.Login, Comments: len(w.Comments), Updated: w.Updated},
 		Body: w.Body, Created: w.Created,
 	}

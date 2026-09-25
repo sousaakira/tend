@@ -53,11 +53,12 @@ func (t *tui) loadPRs(seq int, params proto.GitHubIssuesParams) {
 	}
 	v.Loading, v.Now = false, time.Now()
 	if err != nil {
-		v.Error, v.PRs = ghError(err), nil
+		v.Error, v.PRs = t.issueListError(err), nil
 		return
 	}
 	v.Error = ""
 	v.Repo, v.Remote, v.Remotes = res.Repo, res.Remote, res.Remotes
+	t.takeChoicesLocked(res.Multi, res.Choices, res.Repo)
 	var at int
 	if v.Cursor < len(v.PRs) {
 		at = v.PRs[v.Cursor].Number
@@ -97,7 +98,7 @@ func (t *tui) loadPRChecks(seq int, params proto.GitHubIssuesParams) {
 		return
 	}
 	for i := range v.PRs {
-		if c, ok := res.Checks[v.PRs[i].Number]; ok {
+		if c, ok := res.Checks[github.CheckKey(t.repoOfLocked(v.PRs[i].Repo), v.PRs[i].Number)]; ok {
 			v.PRs[i].Pass, v.PRs[i].Fail, v.PRs[i].Pending = c[0], c[1], c[2]
 		}
 	}
@@ -105,7 +106,7 @@ func (t *tui) loadPRChecks(seq int, params proto.GitHubIssuesParams) {
 
 func prEntry(p proto.GitHubPR) ui.PREntry {
 	return ui.PREntry{
-		Number: p.Number, Title: p.Title, State: p.State, Draft: p.Draft, Author: p.Author,
+		Repo: p.Repo, Number: p.Number, Title: p.Title, State: p.State, Draft: p.Draft, Author: p.Author,
 		Labels: p.Labels, Head: p.Head, Base: p.Base, Review: p.Review,
 		Pass: p.Pass, Fail: p.Fail, Pending: p.Pending, Updated: time.Unix(p.Updated, 0), URL: p.URL,
 	}
@@ -132,7 +133,7 @@ func (t *tui) showPR(p ui.PREntry, reload bool) {
 		v.Message = p.URL
 	}
 	t.issueState.detailSeq++
-	seq, repo := t.issueState.detailSeq, v.Repo
+	seq, repo := t.issueState.detailSeq, t.repoOfLocked(p.Repo)
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
@@ -287,7 +288,7 @@ func (t *tui) prAction(action, method string) {
 		t.mu.Unlock()
 		return
 	}
-	repo, number := v.Repo, v.PR.Number
+	repo, number := t.repoOfLocked(v.PR.Repo), v.PR.Number
 	v.Message = "asking GitHub…"
 	t.dirty = true
 	t.mu.Unlock()
@@ -326,7 +327,7 @@ func (t *tui) loadLinkedPRs(seq int, repo string, number int) {
 		return
 	}
 	t.mu.Lock()
-	dir := t.issueState.dir
+	dir := t.dirOfLocked(repo)
 	t.mu.Unlock()
 	prs, err := t.client.GitHubIssuePRs(repo, number, dir)
 	t.mu.Lock()
@@ -368,11 +369,15 @@ func (t *tui) openLinkedPR() {
 func (t *tui) goToPRWorktree() {
 	t.mu.Lock()
 	v := t.issues
-	if v == nil || v.PR == nil || t.issueState.dir == "" {
+	if v == nil || v.PR == nil {
 		t.mu.Unlock()
 		return
 	}
-	head, dir, session := v.PR.Head, t.issueState.dir, t.session
+	head, dir, session := v.PR.Head, t.dirOfLocked(t.repoOfLocked(v.PR.Repo)), t.session
+	if dir == "" {
+		t.mu.Unlock()
+		return
+	}
 	t.mu.Unlock()
 	go func() {
 		message := "no worktree here is on " + head

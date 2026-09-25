@@ -298,6 +298,10 @@ const (
 	// FeatureFollowCwd: a pane spec's DirOf is honoured, and a split with
 	// no directory starts where the pane split is working.
 	FeatureFollowCwd = "follow-cwd"
+	// FeatureGitHubFolders: the GitHub lists of a folder that is no
+	// repository are every repository under it (GitHubIssuesResult.Multi),
+	// each issue and pull request saying its own.
+	FeatureGitHubFolders = "github-folders"
 )
 
 // KnownFeatures is every feature this build knows of, for the same reason
@@ -306,7 +310,7 @@ var KnownFeatures = []string{
 	FeaturePaneClipboard, FeatureMouseDetail, FeatureSessionChanged, FeatureGraphics,
 	FeatureLifecycle, FeatureWindowTitle, FeatureTabBarStatus, FeatureDone, FeatureWindowFocus,
 	FeatureFocusRequest, FeatureAgentView, FeatureServerShell, FeaturePopup, FeatureUpdate,
-	FeatureDockUnless, FeatureContext, FeatureContextArrived, FeatureFollowCwd,
+	FeatureDockUnless, FeatureContext, FeatureContextArrived, FeatureFollowCwd, FeatureGitHubFolders,
 }
 
 // --- session ---------------------------------------------------------------
@@ -607,12 +611,17 @@ type AgentSessionsDeleteResult struct {
 type GitHubIssuesParams struct {
 	Pane   uint64 `json:"pane,omitempty"`
 	Remote string `json:"remote,omitempty"`
+	// Repo is one repository of a folder of several, owner/name; empty is
+	// all of them.
+	Repo   string `json:"repo,omitempty"`
 	Filter int    `json:"filter,omitempty"`
 	Query  string `json:"query,omitempty"`
 }
 
 // GitHubIssue is one issue in a list.
 type GitHubIssue struct {
+	// Repo is owner/name: in a folder of repositories, the issue's own.
+	Repo      string   `json:"repo,omitempty"`
 	Number    int      `json:"number"`
 	Title     string   `json:"title"`
 	State     string   `json:"state"`
@@ -629,12 +638,16 @@ type GitHubIssue struct {
 // remote it came through and the others there are, the directory it was
 // found from, the issues, and how many the search found in all.
 type GitHubIssuesResult struct {
-	Repo    string        `json:"repo"`
-	Remote  string        `json:"remote"`
-	Remotes []string      `json:"remotes"`
-	Dir     string        `json:"dir"`
-	Issues  []GitHubIssue `json:"issues"`
-	Total   int           `json:"total"`
+	Repo    string   `json:"repo"`
+	Remote  string   `json:"remote"`
+	Remotes []string `json:"remotes"`
+	Dir     string   `json:"dir"`
+	// Multi is a folder of repositories, and Choices each of them; Repo
+	// is then the one listed, or empty for all.
+	Multi   bool               `json:"multi,omitempty"`
+	Choices []GitHubRepoChoice `json:"choices,omitempty"`
+	Issues  []GitHubIssue      `json:"issues"`
+	Total   int                `json:"total"`
 }
 
 // GitHubIssueParams names an issue: owner/name and its number. What is
@@ -650,8 +663,17 @@ type GitHubIssueParams struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// GitHubRepoChoice is one repository of a folder of several: owner/name,
+// what it is called, and the checkout it is in.
+type GitHubRepoChoice struct {
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+	Dir  string `json:"dir"`
+}
+
 // GitHubPR is one pull request in a list.
 type GitHubPR struct {
+	Repo   string   `json:"repo,omitempty"`
 	Number int      `json:"number"`
 	Title  string   `json:"title"`
 	State  string   `json:"state"`
@@ -671,17 +693,19 @@ type GitHubPR struct {
 
 // GitHubPRsResult is github.prs' answer, as github.issues' is.
 type GitHubPRsResult struct {
-	Repo    string     `json:"repo"`
-	Remote  string     `json:"remote"`
-	Remotes []string   `json:"remotes"`
-	Dir     string     `json:"dir"`
-	PRs     []GitHubPR `json:"prs"`
+	Repo    string             `json:"repo"`
+	Remote  string             `json:"remote"`
+	Remotes []string           `json:"remotes"`
+	Dir     string             `json:"dir"`
+	Multi   bool               `json:"multi,omitempty"`
+	Choices []GitHubRepoChoice `json:"choices,omitempty"`
+	PRs     []GitHubPR         `json:"prs"`
 }
 
 // GitHubPRChecks is github.prs.checks' answer: each pull request's checks,
-// counted — pass, fail, pending — by its number.
+// counted — pass, fail, pending — by owner/name#number.
 type GitHubPRChecks struct {
-	Checks map[int][3]int `json:"checks"`
+	Checks map[string][3]int `json:"checks"`
 }
 
 // GitHubRepoOptionsParams asks for a repository's labels or assignees.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +36,8 @@ type Checks struct {
 
 // PR is one pull request as the list shows it.
 type PR struct {
+	// Repo is owner/name, the repository it is in.
+	Repo   string
 	Number int
 	Title  string
 	// State is open, closed or merged; Draft a draft among the open.
@@ -126,42 +129,96 @@ func prSearch(filter Filter, typed string) string {
 	return search
 }
 
+// CheckKey is how PRChecks names a pull request: owner/name#number, as
+// several repositories' numbers meet in one list.
+func CheckKey(repo string, number int) string { return fmt.Sprintf("%s#%d", repo, number) }
+
 // PRChecks is how the checks stand on the first pull requests a search
-// finds, by number: the list's checks column, filled in after the list.
-func PRChecks(repo Repo, filter Filter, typed string) (map[int]Checks, error) {
-	out, err := run("pr", "list", "--repo", repo.Slug(), "--state", "all", "--limit", fmt.Sprint(checksLimit),
-		"--search", prSearch(filter, typed), "--json", "number,statusCheckRollup")
+// finds in each repository, by CheckKey: the list's checks column, filled
+// in after the list.
+func PRChecks(repos []Repo, filter Filter, typed string) (map[string]Checks, error) {
+	lists, err := eachRepo(repos, func(r Repo) ([]PR, error) {
+		out, err := run("pr", "list", "--repo", r.Slug(), "--state", "all", "--limit", fmt.Sprint(checksLimit),
+			"--search", prSearch(filter, typed), "--json", "number,statusCheckRollup")
+		if err != nil {
+			return nil, err
+		}
+		return decodePRs(out, r)
+	})
 	if err != nil {
 		return nil, err
 	}
-	var wire []wirePR
-	if err := json.Unmarshal(out, &wire); err != nil {
-		return nil, fmt.Errorf("reading GitHub's answer: %w", err)
-	}
-	checks := make(map[int]Checks, len(wire))
-	for _, w := range wire {
-		checks[w.Number] = w.pr().Checks
+	checks := map[string]Checks{}
+	for _, p := range lists {
+		checks[CheckKey(p.Repo, p.Number)] = p.Checks
 	}
 	return checks, nil
 }
 
 // ListPRs is the pull requests a search finds, the last updated first,
-// without their checks.
-func ListPRs(repo Repo, filter Filter, typed string) ([]PR, error) {
-	out, err := run("pr", "list", "--repo", repo.Slug(), "--state", "all", "--limit", fmt.Sprint(listLimit),
-		"--search", prSearch(filter, typed), "--json", prListFields)
+// without their checks: gh's list for one repository, and for several, each
+// one's asked at once and put together by when they were last updated —
+// GitHub's search, which takes several repositories at once, has neither
+// branches nor review decisions.
+func ListPRs(repos []Repo, filter Filter, typed string) ([]PR, error) {
+	prs, err := eachRepo(repos, func(r Repo) ([]PR, error) {
+		out, err := run("pr", "list", "--repo", r.Slug(), "--state", "all", "--limit", fmt.Sprint(listLimit),
+			"--search", prSearch(filter, typed), "--json", prListFields)
+		if err != nil {
+			return nil, err
+		}
+		return decodePRs(out, r)
+	})
 	if err != nil {
 		return nil, err
 	}
+	sort.SliceStable(prs, func(i, j int) bool { return prs[i].Updated.After(prs[j].Updated) })
+	if len(prs) > listLimit {
+		prs = prs[:listLimit]
+	}
+	return prs, nil
+}
+
+func decodePRs(out []byte, r Repo) ([]PR, error) {
 	var wire []wirePR
 	if err := json.Unmarshal(out, &wire); err != nil {
 		return nil, fmt.Errorf("reading GitHub's answer: %w", err)
 	}
 	prs := make([]PR, 0, len(wire))
 	for _, w := range wire {
-		prs = append(prs, w.pr())
+		p := w.pr()
+		p.Repo = r.Slug()
+		prs = append(prs, p)
 	}
 	return prs, nil
+}
+
+// eachRepo asks every repository at once and puts the answers together; the
+// first failure is the answer.
+func eachRepo(repos []Repo, ask func(Repo) ([]PR, error)) ([]PR, error) {
+	type answer struct {
+		prs []PR
+		err error
+	}
+	answers := make([]answer, len(repos))
+	var wg sync.WaitGroup
+	for i, r := range repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			prs, err := ask(r)
+			answers[i] = answer{prs, err}
+		}()
+	}
+	wg.Wait()
+	var out []PR
+	for _, a := range answers {
+		if a.err != nil {
+			return nil, a.err
+		}
+		out = append(out, a.prs...)
+	}
+	return out, nil
 }
 
 type wireCheck struct {
@@ -273,7 +330,9 @@ func GetPR(repo Repo, number int) (PRDetail, error) {
 	if err := json.Unmarshal(out, &w); err != nil {
 		return PRDetail{}, fmt.Errorf("reading GitHub's answer: %w", err)
 	}
-	d := PRDetail{PR: w.pr(), Body: w.Body, Created: w.Created, Additions: w.Additions,
+	pr := w.pr()
+	pr.Repo = repo.Slug()
+	d := PRDetail{PR: pr, Body: w.Body, Created: w.Created, Additions: w.Additions,
 		Deletions: w.Deletions, Files: w.Files, Mergeable: w.Mergeable}
 	for _, c := range w.Rollup {
 		d.CheckList = append(d.CheckList, c.check())
@@ -379,7 +438,9 @@ func PRsForIssue(repo Repo, number int, branches []string) ([]PR, error) {
 		for _, w := range wire {
 			if !seen[w.Number] {
 				seen[w.Number] = true
-				prs = append(prs, w.pr())
+				p := w.pr()
+				p.Repo = repo.Slug()
+				prs = append(prs, p)
 			}
 		}
 	}

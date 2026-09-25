@@ -376,3 +376,111 @@ esac
 	a.waitForScreen(t, "the title saved", func(s string) bool { return strings.Contains(s, "#42: title saved") })
 	waitForFileContent(t, asked, "issue edit 42 --repo acme/shop --title Checkout button should be green")
 }
+
+// TestAFolderOfRepositoriesListsThemAll: from a folder that is not a
+// repository, with two under it, the panel lists both repositories' issues
+// in one search, each with its repository; ctrl+t lists one of them; an
+// issue's work starts in its own repository's checkout; and a new issue
+// goes to the repository ctrl+t picks in its box. gh and claude are
+// scripts; git is real. If it regresses, a project made of several
+// repositories has "no GitHub remote", or work on an issue of one starts
+// in another.
+func TestAFolderOfRepositoriesListsThemAll(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "shop")
+	gitEnv := append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	for _, name := range []string{"api", "web"} {
+		dir := filepath.Join(folder, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"commit", "-q", "--allow-empty", "-m", "first"},
+			{"remote", "add", "origin", "git@github.com:acme/" + name + ".git"}} {
+			cmd := exec.Command("git", args...)
+			cmd.Dir, cmd.Env = dir, gitEnv
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+	}
+	bin := t.TempDir()
+	asked := filepath.Join(bin, "asked")
+	gh := `#!/bin/sh
+printf '%s\n' "$*" >> ` + asked + `
+case "$*" in
+"issue create"*) cat > /dev/null; echo https://github.com/acme/web/issues/9 ;;
+"issue view 7"*) echo '{"number":7,"title":"Checkout is slow","state":"OPEN","url":"https://github.com/acme/web/issues/7","body":"Slow.","author":{"login":"ana"},"labels":[],"assignees":[],"comments":[],"createdAt":"2026-09-20T10:00:00Z","updatedAt":"2026-09-21T10:00:00Z"}' ;;
+"issue view"*) echo '{"number":9,"title":"New","state":"OPEN","url":"https://github.com/acme/web/issues/9","body":"","author":{"login":"me"},"labels":[],"assignees":[],"comments":[],"createdAt":"2026-09-21T10:00:00Z","updatedAt":"2026-09-21T10:00:00Z"}' ;;
+"api graphql"*) echo '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"nodes":[]}}}}}' ;;
+"pr list"*) echo '[]' ;;
+*) echo '{"total_count":2,"items":[
+ {"number":7,"title":"Checkout is slow","state":"open","html_url":"https://github.com/acme/web/issues/7","repository_url":"https://api.github.com/repos/acme/web","user":{"login":"ana"},"labels":[],"assignees":[],"comments":0,"updated_at":"2026-09-21T10:00:00Z"},
+ {"number":3,"title":"Rate limit the login","state":"open","html_url":"https://github.com/acme/api/issues/3","repository_url":"https://api.github.com/repos/acme/api","user":{"login":"bo"},"labels":[],"assignees":[],"comments":0,"updated_at":"2026-09-20T10:00:00Z"}]}' ;;
+esac
+`
+	claude := "#!/bin/sh\necho \"claude in: $(basename \"$(git rev-parse --show-toplevel)\") on $(git branch --show-current)\"\nexec sleep 60\n"
+	for name, body := range map[string]string{"gh": gh, "claude": claude} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	worktrees := t.TempDir()
+	cfg := filepath.Join(t.TempDir(), "tend.toml")
+	if err := os.WriteFile(cfg, []byte(quietSettings+"\n[worktrees]\ndirectory = \""+worktrees+"\"\n\n[issues]\nagent = \"claude\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	t.Setenv("TEND_CONFIG", cfg)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "TEND_CONFIG="+cfg, "SHELL=/bin/sh", "PATH="+bin+":"+os.Getenv("PATH"))
+	tend := buildBinary(t)
+	p, err := pty.Start(tend, []string{"attach", "-s", "folder"}, pty.Options{Size: pty.Size{Cols: 120, Rows: 36}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(120, 36, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "folder") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	a.sendUntil(t, "cd "+folder+"\r", "the shell in the folder", func(s string) bool { return strings.Contains(s, "shop") })
+
+	a.send(t, "\x02I")
+	a.waitForScreen(t, "both repositories' issues", func(s string) bool {
+		return strings.Contains(s, "GITHUB ISSUES · 2 repositories") && strings.Contains(s, " all ") &&
+			strings.Contains(s, "Checkout is slow") && strings.Contains(s, "Rate limit the login") && strings.Contains(s, "repository")
+	})
+	waitForFileContent(t, asked, url.QueryEscape("repo:acme/api repo:acme/web is:issue is:open"))
+
+	// A new issue from all of them: the first, then ctrl+t to the other.
+	a.send(t, "\x0e")
+	a.waitForScreen(t, "the new issue box", func(s string) bool { return strings.Contains(s, "new issue in acme/api (ctrl+t another)") })
+	a.send(t, "\x14")
+	a.waitForScreen(t, "the other repository", func(s string) bool { return strings.Contains(s, "new issue in acme/web") })
+	a.send(t, "Slow search\r\r")
+	waitForFileContent(t, asked, "issue create --repo acme/web --title Slow search")
+	a.waitForScreen(t, "it filed", func(s string) bool { return strings.Contains(s, "filed #9") })
+	a.send(t, "\x1b")
+
+	// One of them: ctrl+t goes from all to the first, api.
+	a.waitForScreen(t, "the list", func(s string) bool { return strings.Contains(s, "[ New issue ]") })
+	a.send(t, "\x14")
+	a.waitForScreen(t, "api alone", func(s string) bool { return strings.Contains(s, "GITHUB ISSUES · acme/api") })
+	waitForFileContent(t, asked, url.QueryEscape("repo:acme/api is:issue is:open"))
+	a.send(t, "\x14\x14") // web, then all again
+	a.waitForScreen(t, "all again", func(s string) bool { return strings.Contains(s, "GITHUB ISSUES · 2 repositories") })
+
+	// Work on web's issue starts in web's checkout.
+	a.waitForScreen(t, "the list again", func(s string) bool { return strings.Contains(s, "Checkout is slow") })
+	a.send(t, "\r")
+	a.waitForScreen(t, "the issue, with its repository", func(s string) bool { return strings.Contains(s, "web #7 open") })
+	a.send(t, "w")
+	a.waitForScreen(t, "claude in web's worktree", func(s string) bool {
+		return strings.Contains(s, "claude in: issue-7-checkout-is-slow on issue-7-checkout-is-slow")
+	})
+	out, _ := exec.Command("git", "-C", filepath.Join(folder, "web"), "worktree", "list").Output()
+	if !strings.Contains(string(out), "[issue-7-checkout-is-slow]") {
+		t.Errorf("web's worktrees:\n%s", out)
+	}
+	if out, _ := exec.Command("git", "-C", filepath.Join(folder, "api"), "worktree", "list").Output(); strings.Contains(string(out), "issue-7") {
+		t.Errorf("the work started in api:\n%s", out)
+	}
+}

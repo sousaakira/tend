@@ -18,6 +18,8 @@ import (
 
 // IssueEntry is one issue in the list.
 type IssueEntry struct {
+	// Repo is owner/name: in a folder of repositories, the issue's own.
+	Repo      string
 	Number    int
 	Title     string
 	State     string
@@ -74,6 +76,10 @@ type IssuesView struct {
 	Now time.Time
 	// Detail is the issue open over the list, nil for the list.
 	Detail *IssueDetailView
+	// Scopes are a folder of repositories' chips — "all", then each by
+	// name — and Scope the one listed; none for one repository.
+	Scopes []string
+	Scope  int
 	// PullRequests is the pull requests' list rather than the issues';
 	// PRs are its entries and PR the one open.
 	PullRequests bool
@@ -96,8 +102,12 @@ type IssueCompose struct {
 	// EditTitle is the open issue's title being changed: the title alone,
 	// and enter saves it.
 	EditTitle bool
-	Title     string
-	Body      string
+	// Repo is where a new issue is filed, and Choose whether ctrl+t moves
+	// it among a folder's repositories.
+	Repo   string
+	Choose bool
+	Title  string
+	Body   string
 	// InBody is where typing goes: the title or the text.
 	InBody  bool
 	Sending bool
@@ -189,6 +199,9 @@ type IssuesGeometry struct {
 	// Modes are the Issues and Pull requests chips, at the right of the
 	// presets.
 	Modes [2]Rect
+	// ScopeChips are a folder of repositories' chips, on a line of their
+	// own over the presets.
+	ScopeChips []Rect
 }
 
 // issueModes are the two lists' names, as their chips show them.
@@ -200,10 +213,22 @@ func IssuesLayout(v *IssuesView, cols, rows int) IssuesGeometry {
 	w, h := max(min(sessionsCols, cols-2), 0), max(min(sessionsRows, rows-2), 0)
 	box := Rect{X: (cols - w) / 2, Y: (rows - h) / 2, Cols: w, Rows: h}
 	g := IssuesGeometry{Box: box}
+	// A folder of repositories has a line of its own, over the presets,
+	// in the lists; everything under it moves down one.
+	off := 0
+	if len(v.Scopes) > 0 && v.Detail == nil && v.PR == nil {
+		off = 1
+		sx := box.X + 2 + runewidth.StringWidth("repository ")
+		for _, name := range v.Scopes {
+			r := Rect{X: sx, Y: box.Y + 2, Cols: runewidth.StringWidth(" " + name + " "), Rows: 1}
+			g.ScopeChips = append(g.ScopeChips, r)
+			sx += r.Cols + 1
+		}
+	}
 	x := box.X + 2
 	for _, name := range v.Filters {
 		label := " " + name + " "
-		r := Rect{X: x, Y: box.Y + 2, Cols: runewidth.StringWidth(label), Rows: 1}
+		r := Rect{X: x, Y: box.Y + 2 + off, Cols: runewidth.StringWidth(label), Rows: 1}
 		g.Filters = append(g.Filters, r)
 		x += r.Cols + 1
 	}
@@ -211,13 +236,13 @@ func IssuesLayout(v *IssuesView, cols, rows int) IssuesGeometry {
 	for i := len(issueModes) - 1; i >= 0; i-- {
 		w := runewidth.StringWidth(issueModes[i])
 		mx -= w
-		g.Modes[i] = Rect{X: mx, Y: box.Y + 2, Cols: w, Rows: 1}
+		g.Modes[i] = Rect{X: mx, Y: box.Y + 2 + off, Cols: w, Rows: 1}
 		mx--
 	}
-	g.Search = Rect{X: box.X + 2, Y: box.Y + 3, Cols: max(box.Cols-4, 0), Rows: 1}
+	g.Search = Rect{X: box.X + 2, Y: box.Y + 3 + off, Cols: max(box.Cols-4, 0), Rows: 1}
 	// The column names at Y+5, the issues under them; a blank, a message,
 	// a hint and the buttons at the bottom.
-	g.List = Rect{X: box.X + 2, Y: box.Y + 6, Cols: max(box.Cols-4, 0), Rows: max(box.Rows-11, 0)}
+	g.List = Rect{X: box.X + 2, Y: box.Y + 6 + off, Cols: max(box.Cols-4, 0), Rows: max(box.Rows-11-off, 0)}
 	// The detail's header takes three lines and a blank.
 	g.Body = Rect{X: box.X + 2, Y: box.Y + 6, Cols: max(box.Cols-5, 0), Rows: max(box.Rows-11, 0)}
 	if v.Compose != nil {
@@ -251,6 +276,30 @@ func IssueAt(v *IssuesView, cols, rows, x, y int) (int, bool) {
 	i := clampIssuesScroll(v, g) + y - g.List.Y
 	return i, i < issuesListLen(v)
 }
+
+// IssueScopeAt is the scope chip under a point: 0 is all, then each of a
+// folder's repositories.
+func IssueScopeAt(v *IssuesView, cols, rows, x, y int) (int, bool) {
+	for i, r := range IssuesLayout(v, cols, rows).ScopeChips {
+		if y == r.Y && x >= r.X && x < r.X+r.Cols {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// repoName is a repository's name without its owner, what a column has
+// room for.
+func repoName(slug string) string {
+	if i := strings.LastIndexByte(slug, '/'); i >= 0 {
+		return slug[i+1:]
+	}
+	return slug
+}
+
+// allRepos is whether the list shows every repository of a folder, and
+// so says which each entry is in.
+func allRepos(v *IssuesView) bool { return len(v.Scopes) > 0 && v.Scope == 0 }
 
 // IssueModeAt is the Issues (0) or Pull requests (1) chip under a point.
 func IssueModeAt(v *IssuesView, cols, rows, x, y int) (int, bool) {
@@ -384,11 +433,14 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 	if v.PullRequests || v.PR != nil {
 		title = "GITHUB PULL REQUESTS"
 	}
-	if v.Repo != "" {
+	switch {
+	case v.Repo != "":
 		title += " · " + v.Repo
 		if len(v.Remotes) > 1 {
 			title += " (" + v.Remote + ")"
 		}
+	case len(v.Scopes) > 1:
+		title += fmt.Sprintf(" · %d repositories", len(v.Scopes)-1)
 	}
 	writeString(dst, box.X+2, box.Y+1, truncate(title, box.Cols-24), withBold(theme.NotesAccent), right)
 	switch {
@@ -398,6 +450,16 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 	case v.Detail != nil:
 		drawIssueDetail(dst, v, g, theme)
 		return
+	}
+	if len(g.ScopeChips) > 0 {
+		writeString(dst, box.X+2, g.ScopeChips[0].Y, "repository", theme.NotesSub, right)
+		for i, r := range g.ScopeChips {
+			style := theme.NotesSub
+			if i == v.Scope {
+				style = theme.NotesButton
+			}
+			writeString(dst, r.X, r.Y, " "+v.Scopes[i]+" ", style, right)
+		}
 	}
 	for i, r := range g.Modes {
 		style := theme.NotesSub
@@ -426,7 +488,11 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 	cols = append(cols, cols[2]+labelW+1)
 	cols = append(cols, cols[3]+authorW+1)
 	head := g.List.Y - 1
-	for i, name := range []string{"#", "title", "labels", "author", "age"} {
+	third := "labels"
+	if allRepos(v) {
+		third = "repository"
+	}
+	for i, name := range []string{"#", "title", third, "author", "age"} {
 		writeString(dst, cols[i], head, name, theme.NotesSub, listEnd)
 	}
 	writeString(dst, listEnd-2, head, "💬", theme.NotesSub, listEnd)
@@ -458,7 +524,11 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 		}
 		writeString(dst, cols[0], y, fmt.Sprintf("%d", e.Number), numStyle, cols[1]-1)
 		writeString(dst, cols[1], y, truncate(e.Title, titleW), base, cols[2]-1)
-		writeString(dst, cols[2], y, truncate(strings.Join(e.Labels, ", "), labelW), sub, cols[3]-1)
+		third := strings.Join(e.Labels, ", ")
+		if allRepos(v) {
+			third = repoName(e.Repo)
+		}
+		writeString(dst, cols[2], y, truncate(third, labelW), sub, cols[3]-1)
 		writeString(dst, cols[3], y, truncate(e.Author, authorW), sub, cols[4]-1)
 		writeString(dst, cols[4], y, SessionAge(v.Now, e.Updated), sub, listEnd)
 		if e.Comments > 0 {
@@ -475,7 +545,10 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 		msg = "asking GitHub…"
 	}
 	hint := "type to search · tab next filter · ↑↓ move · enter open · ctrl+n new issue · ctrl+o in browser · ctrl+r reload · esc"
-	if len(v.Remotes) > 1 {
+	switch {
+	case len(v.Scopes) > 0:
+		hint += " · ctrl+t repository"
+	case len(v.Remotes) > 1:
 		hint += " · ctrl+t " + strings.Join(v.Remotes, "/")
 	}
 	drawIssuesFoot(dst, v, g, msg, hint, theme)
@@ -544,7 +617,10 @@ func drawIssueCompose(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme
 		head = fmt.Sprintf(" comment on #%d ", v.PR.Number)
 	}
 	if c.NewIssue {
-		head = " new issue in " + v.Repo + " "
+		head = " new issue in " + c.Repo + " "
+		if c.Choose {
+			head += "(ctrl+t another) "
+		}
 	}
 	if c.EditTitle && v.Detail != nil {
 		head = fmt.Sprintf(" title of #%d ", v.Detail.Number)
@@ -610,7 +686,11 @@ func drawIssueDetail(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme)
 	if state == "closed" {
 		stateStyle = withBold(theme.NotesSub)
 	}
-	x := writeString(dst, box.X+2, box.Y+2, fmt.Sprintf("#%d ", d.Number), withBold(theme.NotesAccent), right)
+	x := box.X + 2
+	if len(v.Scopes) > 0 {
+		x = writeString(dst, x, box.Y+2, repoName(d.Repo)+" ", theme.NotesSub, right)
+	}
+	x = writeString(dst, x, box.Y+2, fmt.Sprintf("#%d ", d.Number), withBold(theme.NotesAccent), right)
 	x = writeString(dst, x, box.Y+2, state, stateStyle, right)
 	meta := ""
 	if d.Author != "" {

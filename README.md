@@ -87,8 +87,9 @@ conversations your agents keep on this machine (Claude Code's so far): type to
 search them, enter to resume one in a new tab where it was held, and mark old
 ones to delete them. Issues (or `ctrl+b I`) lists the GitHub issues of the
 project you are in, through `gh`: pick a filter with tab, type to search
-(GitHub's syntax works: `label:bug`), enter to read one with its comments;
-there `c` comments, `x` closes it, `e`, `l` and `a` change its title,
+(GitHub's syntax works: `label:bug`), enter to read one with its comments.
+In a folder of several repositories, it lists them all, with a repository
+column, and `ctrl+t` narrows it to one. On an issue, `c` comments, `x` closes it, `e`, `l` and `a` change its title,
 labels and assignees, and `w` starts work on it — a worktree on
 `issue-<n>-…` and your agent in it, told to complete the issue. `ctrl+n` files
 a new one. `→` shows the pull requests, with their checks and reviews;

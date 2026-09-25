@@ -17,6 +17,8 @@ import (
 
 // PREntry is one pull request in a list.
 type PREntry struct {
+	// Repo is owner/name: in a folder of repositories, its own.
+	Repo   string
 	Number int
 	Title  string
 	// State is open, closed or merged; Draft a draft among the open.
@@ -145,7 +147,11 @@ func drawPRList(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme) {
 	for _, w := range []int{titleW, branchW, authorW, ageW, checkW} {
 		cols = append(cols, cols[len(cols)-1]+w+1)
 	}
-	for i, name := range []string{"#", "title", "branch", "author", "age", "checks", "review"} {
+	fourth := "author"
+	if allRepos(v) {
+		fourth = "repository"
+	}
+	for i, name := range []string{"#", "title", "branch", fourth, "age", "checks", "review"} {
 		writeString(dst, cols[i], g.List.Y-1, name, theme.NotesSub, listEnd)
 	}
 	switch {
@@ -182,7 +188,11 @@ func drawPRList(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme) {
 		writeString(dst, cols[0], y, fmt.Sprintf("%d", p.Number), numStyle, cols[1]-1)
 		writeString(dst, cols[1], y, truncate(title, titleW), base, cols[2]-1)
 		writeString(dst, cols[2], y, truncateLeft(p.Head, branchW), sub, cols[3]-1)
-		writeString(dst, cols[3], y, truncate(p.Author, authorW), sub, cols[4]-1)
+		fourth := p.Author
+		if allRepos(v) {
+			fourth = repoName(p.Repo)
+		}
+		writeString(dst, cols[3], y, truncate(fourth, authorW), sub, cols[4]-1)
 		writeString(dst, cols[4], y, SessionAge(v.Now, p.Updated), sub, cols[5]-1)
 		checkStyle := sub
 		if p.Fail > 0 && i != v.Cursor {
@@ -200,7 +210,10 @@ func drawPRList(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme) {
 		msg = "asking GitHub…"
 	}
 	hint := "type to search · tab next filter · ←→ issues/PRs · ↑↓ move · enter open · ctrl+o in browser · ctrl+r reload · esc"
-	if len(v.Remotes) > 1 {
+	switch {
+	case len(v.Scopes) > 0:
+		hint += " · ctrl+t repository"
+	case len(v.Remotes) > 1:
 		hint += " · ctrl+t " + strings.Join(v.Remotes, "/")
 	}
 	drawIssuesFoot(dst, v, g, msg, hint, theme)
@@ -243,7 +256,11 @@ func drawPRDetail(dst *vt.Grid, v *IssuesView, g IssuesGeometry, theme Theme) {
 	if p.State != "open" || p.Draft {
 		stateStyle = withBold(theme.NotesSub)
 	}
-	x := writeString(dst, box.X+2, box.Y+2, fmt.Sprintf("#%d ", p.Number), withBold(theme.NotesAccent), right)
+	x := box.X + 2
+	if len(v.Scopes) > 0 {
+		x = writeString(dst, x, box.Y+2, repoName(p.Repo)+" ", theme.NotesSub, right)
+	}
+	x = writeString(dst, x, box.Y+2, fmt.Sprintf("#%d ", p.Number), withBold(theme.NotesAccent), right)
 	x = writeString(dst, x, box.Y+2, prState(p.PREntry), stateStyle, right)
 	meta := ""
 	if p.Author != "" {

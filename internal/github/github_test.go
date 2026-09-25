@@ -98,7 +98,7 @@ func TestTheListIsGitHubsSearchWithWhatWasTyped(t *testing.T) {
 		{"number":12,"title":"Crash on start","state":"open","html_url":"https://github.com/o/r/issues/12",
 		 "user":{"login":"ana"},"labels":[{"name":"bug"}],"assignees":[{"login":"me"}],"comments":3,"updated_at":"2026-09-20T10:00:00Z"},
 		{"number":13,"title":"A PR","state":"open","pull_request":{"url":"x"},"user":{"login":"bo"},"updated_at":"2026-09-20T10:00:00Z"}]}`, "", 0)
-	issues, total, err := List(Repo{Owner: "o", Name: "r"}, FilterMine, "label:bug crash")
+	issues, total, err := List([]Repo{{Owner: "o", Name: "r"}}, FilterMine, "label:bug crash")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,17 +144,17 @@ func TestAnIssueIsReadWithItsThread(t *testing.T) {
 // list says "exit status 4" where it should say to run gh auth login.
 func TestWhatGhNeedsIsSaid(t *testing.T) {
 	fakeGh(t, "", "To get started with GitHub CLI, please run:  gh auth login", 4)
-	if _, _, err := List(Repo{Owner: "o", Name: "r"}, FilterOpen, ""); !errors.Is(err, ErrNotLoggedIn) {
+	if _, _, err := List([]Repo{{Owner: "o", Name: "r"}}, FilterOpen, ""); !errors.Is(err, ErrNotLoggedIn) {
 		t.Errorf("not logged in: %v", err)
 	}
 	fakeGh(t, "", "HTTP 404: Not Found (https://api.github.com/search/issues)", 1)
-	if _, _, err := List(Repo{Owner: "o", Name: "r"}, FilterOpen, ""); err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+	if _, _, err := List([]Repo{{Owner: "o", Name: "r"}}, FilterOpen, ""); err == nil || !strings.Contains(err.Error(), "HTTP 404") {
 		t.Errorf("404: %v", err)
 	}
 	old := Gh
 	Gh = "tend-no-such-gh"
 	defer func() { Gh = old }()
-	if _, _, err := List(Repo{Owner: "o", Name: "r"}, FilterOpen, ""); !errors.Is(err, ErrNoGh) {
+	if _, _, err := List([]Repo{{Owner: "o", Name: "r"}}, FilterOpen, ""); !errors.Is(err, ErrNoGh) {
 		t.Errorf("no gh: %v", err)
 	}
 }
@@ -255,5 +255,61 @@ func TestAnEditSendsOnlyWhatChanged(t *testing.T) {
 	}
 	if _, err := os.Stat(args); !os.IsNotExist(err) {
 		t.Error("an edit with nothing in it ran gh")
+	}
+}
+
+// TestAFolderOfRepositoriesIsEachOfThem: a folder that is not a checkout,
+// with checkouts under it — a project of several, the owner's mvno — is
+// every one of them on GitHub, each with the checkout it is in, in name
+// order; one not on GitHub, and one under node_modules, are left out; and a
+// checkout is itself, as it was. The search asks for all of them at once.
+// If it regresses, a project made of several repositories has "no GitHub
+// remote".
+func TestAFolderOfRepositoriesIsEachOfThem(t *testing.T) {
+	root := t.TempDir()
+	repo := func(path, remote string) {
+		t.Helper()
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command("git", "-C", path, "init", "-q").CombinedOutput(); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+		if remote != "" {
+			if out, err := exec.Command("git", "-C", path, "remote", "add", "origin", remote).CombinedOutput(); err != nil {
+				t.Fatalf("%v\n%s", err, out)
+			}
+		}
+	}
+	repo(filepath.Join(root, "mvno-painel"), "git@github.com:hot-spot/mvno-painel.git")
+	repo(filepath.Join(root, "mvno-api"), "git@github.com:hot-spot/mvno-api.git")
+	repo(filepath.Join(root, "apps", "mvno-app"), "https://github.com/hot-spot/mvno-app")
+	repo(filepath.Join(root, "local-only"), "")
+	repo(filepath.Join(root, "web", "node_modules", "dep"), "https://github.com/someone/dep")
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	scope, err := ScopeFor(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range scope.Repos {
+		got = append(got, r.Slug()+" "+filepath.Base(r.Dir))
+	}
+	if !scope.Multi || strings.Join(got, ", ") != "hot-spot/mvno-api mvno-api, hot-spot/mvno-app mvno-app, hot-spot/mvno-painel mvno-painel" {
+		t.Errorf("scope: %v %q", scope.Multi, got)
+	}
+	if q := SearchQuery(scope.Repos, FilterOpen, "crash"); q != "repo:hot-spot/mvno-api repo:hot-spot/mvno-app repo:hot-spot/mvno-painel is:issue is:open crash" {
+		t.Errorf("search: %q", q)
+	}
+
+	one, err := ScopeFor(filepath.Join(root, "mvno-api"))
+	if err != nil || one.Multi || len(one.Repos) != 1 || one.Repos[0].Dir != filepath.Join(root, "mvno-api") {
+		t.Errorf("a checkout: %+v %v", one, err)
+	}
+	if _, err := ScopeFor(filepath.Join(root, "docs")); !errors.Is(err, ErrNoRepo) {
+		t.Errorf("a folder of none: %v", err)
 	}
 }

@@ -44,7 +44,7 @@ func TestPullRequestsAreListedAndActedOn(t *testing.T) {
 		"headRefName":"issue-4-fix","baseRefName":"main","updatedAt":"2026-09-20T10:00:00Z","url":"u","reviewDecision":"APPROVED",
 		"statusCheckRollup":[{"__typename":"CheckRun","status":"COMPLETED","conclusion":"SUCCESS"},
 		{"__typename":"CheckRun","status":"COMPLETED","conclusion":"FAILURE"},{"__typename":"StatusContext","state":"PENDING"}]}]`, "", 0)
-	prs, err := ListPRs(repo, PRFilterReview, "label:ui")
+	prs, err := ListPRs([]Repo{repo}, PRFilterReview, "label:ui")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,11 +56,11 @@ func TestPullRequestsAreListedAndActedOn(t *testing.T) {
 		t.Errorf("list: %q", got)
 	}
 	// The checks come apart, for the same search, counted.
-	checks, err := PRChecks(repo, PRFilterReview, "label:ui")
+	checks, err := PRChecks([]Repo{repo}, PRFilterReview, "label:ui")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if checks[9] != (Checks{Pass: 1, Fail: 1, Pending: 1}) {
+	if checks[CheckKey("o/r", 9)] != (Checks{Pass: 1, Fail: 1, Pending: 1}) {
 		t.Errorf("checks: %+v", checks)
 	}
 	if got, _ := os.ReadFile(args); !strings.Contains(string(got), "number,statusCheckRollup") || !strings.Contains(string(got), "--limit\n30\n") {
@@ -84,5 +84,46 @@ func TestPullRequestsAreListedAndActedOn(t *testing.T) {
 	}
 	if err := MergePR(repo, 9, "--admin"); err == nil {
 		t.Error("a merge method gh does not have was passed on")
+	}
+}
+
+// TestSeveralRepositoriesPullRequestsAreOneList: with several
+// repositories, each one's pull requests are asked for and put together,
+// the last updated first, each knowing its repository; their checks are
+// keyed by repository and number, which two repositories share. If it
+// regresses, a project of several repositories lists one's pull requests,
+// or puts one's checks on another's.
+func TestSeveralRepositoriesPullRequestsAreOneList(t *testing.T) {
+	bin := t.TempDir()
+	script := `#!/bin/sh
+case "$*" in
+*"--repo o/a"*statusCheckRollup*) echo '[{"number":1,"statusCheckRollup":[{"__typename":"CheckRun","status":"COMPLETED","conclusion":"FAILURE"}]}]' ;;
+*"--repo o/b"*statusCheckRollup*) echo '[{"number":1,"statusCheckRollup":[{"__typename":"CheckRun","status":"COMPLETED","conclusion":"SUCCESS"}]}]' ;;
+*"--repo o/a"*) echo '[{"number":1,"title":"A one","state":"OPEN","updatedAt":"2026-09-20T10:00:00Z"}]' ;;
+*"--repo o/b"*) echo '[{"number":1,"title":"B one","state":"OPEN","updatedAt":"2026-09-22T10:00:00Z"},{"number":2,"title":"B two","state":"OPEN","updatedAt":"2026-09-19T10:00:00Z"}]' ;;
+esac
+`
+	if err := os.WriteFile(bin+"/gh", []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	repos := []Repo{{Owner: "o", Name: "a"}, {Owner: "o", Name: "b"}}
+	prs, err := ListPRs(repos, PRFilterOpen, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range prs {
+		got = append(got, p.Repo+" "+p.Title)
+	}
+	if strings.Join(got, ", ") != "o/b B one, o/a A one, o/b B two" {
+		t.Errorf("list: %q", got)
+	}
+	checks, err := PRChecks(repos, PRFilterOpen, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checks[CheckKey("o/a", 1)].Fail != 1 || checks[CheckKey("o/b", 1)].Pass != 1 {
+		t.Errorf("checks: %+v", checks)
 	}
 }

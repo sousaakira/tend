@@ -36,8 +36,54 @@ type issuesState struct {
 	seq       int
 	detailSeq int
 	// dir is the directory the list was found from, where a worktree for
-	// an issue is made from.
-	dir string
+	// an issue is made from; choices are the repositories of a folder of
+	// several, each with its checkout, and repo the one of them listed,
+	// empty for all.
+	dir     string
+	choices []proto.GitHubRepoChoice
+	repo    string
+}
+
+// repoOfLocked is the repository an issue or a pull request is in: its
+// own, which in a folder of several is not the list's; else the list's.
+func (t *tui) repoOfLocked(own string) string {
+	if own != "" {
+		return own
+	}
+	if t.issues != nil {
+		return t.issues.Repo
+	}
+	return ""
+}
+
+// dirOfLocked is the checkout a repository is in: its own in a folder of
+// several, else where the list was found from.
+func (t *tui) dirOfLocked(repo string) string {
+	for _, c := range t.issueState.choices {
+		if c.Slug == repo {
+			return c.Dir
+		}
+	}
+	return t.issueState.dir
+}
+
+// takeChoicesLocked keeps a folder's repositories from a list's answer and
+// shows them as the scope chips: all, then each by name.
+func (t *tui) takeChoicesLocked(multi bool, choices []proto.GitHubRepoChoice, listed string) {
+	v := t.issues
+	t.issueState.choices = nil
+	v.Scopes, v.Scope = nil, 0
+	if !multi {
+		return
+	}
+	t.issueState.choices = choices
+	v.Scopes = []string{"all"}
+	for i, c := range choices {
+		v.Scopes = append(v.Scopes, c.Name)
+		if c.Slug == listed {
+			v.Scope = i + 1
+		}
+	}
 }
 
 func (t *tui) issuesUp() bool {
@@ -96,7 +142,7 @@ func (t *tui) loadIssues(seq int) {
 		t.mu.Unlock()
 		return
 	}
-	params := proto.GitHubIssuesParams{Pane: t.issueState.pane, Remote: v.Remote, Filter: v.Filter, Query: v.Query}
+	params := proto.GitHubIssuesParams{Pane: t.issueState.pane, Remote: v.Remote, Repo: t.issueState.repo, Filter: v.Filter, Query: v.Query}
 	pullRequests := v.PullRequests
 	t.mu.Unlock()
 	if pullRequests {
@@ -121,11 +167,12 @@ func (t *tui) loadIssues(seq int) {
 	}
 	v.Loading, v.Now = false, time.Now()
 	if err != nil {
-		v.Error, v.Issues, v.Total = err.Error(), nil, 0
+		v.Error, v.Issues, v.Total = t.issueListError(err), nil, 0
 		return
 	}
 	v.Error = ""
 	v.Repo, v.Remote, v.Remotes, v.Total = res.Repo, res.Remote, res.Remotes, res.Total
+	t.takeChoicesLocked(res.Multi, res.Choices, res.Repo)
 	var at int
 	if v.Cursor < len(v.Issues) {
 		at = v.Issues[v.Cursor].Number
@@ -157,7 +204,7 @@ func (t *tui) showIssuesError(seq int, message string) {
 
 func issueEntry(x proto.GitHubIssue) ui.IssueEntry {
 	return ui.IssueEntry{
-		Number: x.Number, Title: x.Title, State: x.State, Author: x.Author,
+		Repo: x.Repo, Number: x.Number, Title: x.Title, State: x.State, Author: x.Author,
 		Labels: x.Labels, Assignees: x.Assignees, Comments: x.Comments,
 		Updated: time.Unix(x.Updated, 0), URL: x.URL,
 	}
@@ -246,6 +293,10 @@ func (t *tui) issuesMouse(ev ui.MouseEvent) (bool, error) {
 	}
 	switch {
 	case !detail:
+		if n, ok := ui.IssueScopeAt(v, cols, rows, ev.X, ev.Y); ok {
+			t.setIssueScopeTo(n)
+			return false, nil
+		}
 		if m, ok := ui.IssueModeAt(v, cols, rows, ev.X, ev.Y); ok {
 			t.setIssueMode(m == 1)
 			return false, nil
@@ -315,7 +366,7 @@ func (t *tui) issueListKey(key string) bool {
 		t.mu.Unlock()
 		go t.loadIssues(seq)
 	case "\x14": // ctrl+t
-		t.nextIssueRemote()
+		t.nextIssueScope()
 	case "\x15": // ctrl+u
 		t.editIssueQuery(func(string) string { return "" })
 	case "\x7f", "\x08":
@@ -519,7 +570,7 @@ func (t *tui) showIssue(e ui.IssueEntry, reload bool) {
 		v.Message = e.URL
 	}
 	t.issueState.detailSeq++
-	seq, repo := t.issueState.detailSeq, v.Repo
+	seq, repo := t.issueState.detailSeq, t.repoOfLocked(e.Repo)
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
@@ -635,10 +686,19 @@ func (t *tui) startIssueCompose(newIssue bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	v := t.issues
-	if v == nil || v.Repo == "" || (!newIssue && v.Detail == nil && v.PR == nil) || (newIssue && v.PullRequests) {
+	if v == nil || (v.Repo == "" && len(t.issueState.choices) == 0) || (!newIssue && v.Detail == nil && v.PR == nil) || (newIssue && v.PullRequests) {
 		return
 	}
 	v.Compose = &ui.IssueCompose{NewIssue: newIssue, InBody: !newIssue}
+	if newIssue {
+		// Filed in the repository listed; from all of a folder's, in the
+		// first, which ctrl+t changes.
+		v.Compose.Repo = v.Repo
+		if v.Compose.Repo == "" {
+			v.Compose.Repo = t.issueState.choices[0].Slug
+		}
+		v.Compose.Choose = len(t.issueState.choices) > 1 && v.Repo == ""
+	}
 	v.Confirm = ""
 	t.dirty = true
 }
@@ -665,6 +725,15 @@ func (t *tui) issueComposeKey(key string) {
 	}
 	send := false
 	switch key {
+	case "\x14": // ctrl+t: the repository a new issue goes to
+		if c.Choose {
+			for n, ch := range t.issueState.choices {
+				if ch.Slug == c.Repo {
+					c.Repo = t.issueState.choices[(n+1)%len(t.issueState.choices)].Slug
+					break
+				}
+			}
+		}
 	case "\x1b":
 		v.Compose = nil
 	case "\t", "\x1b[Z":
@@ -724,12 +793,12 @@ func (t *tui) sendIssueCompose() {
 		return
 	}
 	v.Compose.Sending = true
-	repo, number, onPR := v.Repo, 0, v.PR != nil
+	repo, number, onPR := c.Repo, 0, v.PR != nil
 	switch {
 	case onPR:
-		number = v.PR.Number
-	case v.Detail != nil:
-		number = v.Detail.Number
+		number, repo = v.PR.Number, t.repoOfLocked(v.PR.Repo)
+	case v.Detail != nil && !c.NewIssue:
+		number, repo = v.Detail.Number, t.repoOfLocked(v.Detail.Repo)
 	}
 	t.dirty = true
 	t.mu.Unlock()
@@ -834,7 +903,7 @@ func (t *tui) issueConfirmKey(key string) {
 		t.mu.Unlock()
 		return
 	}
-	repo, number := v.Repo, v.Detail.Number
+	repo, number := t.repoOfLocked(v.Detail.Repo), v.Detail.Number
 	v.Message = "asking GitHub…"
 	t.mu.Unlock()
 	go func() {
@@ -921,11 +990,12 @@ func (t *tui) startIssueWork() bool {
 	case v.Cursor < len(v.Issues):
 		e = v.Issues[v.Cursor]
 	}
-	if e.Number == 0 || t.issueState.dir == "" {
+	repo := t.repoOfLocked(e.Repo)
+	dir, session := t.dirOfLocked(repo), t.session
+	if e.Number == 0 || dir == "" {
 		t.mu.Unlock()
 		return false
 	}
-	dir, repo, session := t.issueState.dir, v.Repo, t.session
 	agentName := t.issueAgentLocked()
 	prompt := t.config.IssuePrompt(e.URL, e.Number, e.Title, repo)
 	v.Message = fmt.Sprintf("making a worktree for #%d…", e.Number)
@@ -1045,7 +1115,7 @@ func (t *tui) saveIssueTitle(title string) {
 		return
 	}
 	v.Compose.Sending = true
-	repo, number := v.Repo, v.Detail.Number
+	repo, number := t.repoOfLocked(v.Detail.Repo), v.Detail.Number
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
@@ -1103,7 +1173,7 @@ func (t *tui) openIssuePicker(kind string) {
 		p.Marked[name], p.Had[name] = true, true
 	}
 	v.Picker = p
-	repo := v.Repo
+	repo := t.repoOfLocked(v.Detail.Repo)
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
@@ -1203,7 +1273,7 @@ func (t *tui) issuePickerKey(key string) {
 		return
 	}
 	p.Saving = true
-	edit := proto.GitHubIssueEditParams{Repo: v.Repo, Number: v.Detail.Number}
+	edit := proto.GitHubIssueEditParams{Repo: t.repoOfLocked(v.Detail.Repo), Number: v.Detail.Number}
 	if p.Kind == "labels" {
 		edit.AddLabels, edit.RemoveLabels = add, remove
 	} else {
@@ -1213,4 +1283,67 @@ func (t *tui) issuePickerKey(key string) {
 	t.mu.Unlock()
 	t.wakeUp()
 	go t.editIssue(edit, kind+" saved")
+}
+
+// nextIssueScope lists the next of what there is to list: in a folder of
+// repositories, all of them, then each; in one repository, its next
+// GitHub remote — upstream's issues, then origin's, for a fork.
+func (t *tui) nextIssueScope() {
+	t.mu.Lock()
+	choices := t.issueState.choices
+	if len(choices) == 0 {
+		t.mu.Unlock()
+		t.nextIssueRemote()
+		return
+	}
+	at := 0
+	for n, c := range choices {
+		if c.Slug == t.issueState.repo {
+			at = n + 1
+		}
+	}
+	t.issueState.repo = ""
+	if next := (at + 1) % (len(choices) + 1); next > 0 {
+		t.issueState.repo = choices[next-1].Slug
+	}
+	t.mu.Unlock()
+	t.setIssueScopeLocked()
+}
+
+// setIssueScope lists what issueState.repo says, from the top.
+func (t *tui) setIssueScopeLocked() {
+	t.mu.Lock()
+	v := t.issues
+	if v == nil {
+		t.mu.Unlock()
+		return
+	}
+	v.Cursor, v.Scroll = 0, 0
+	seq := t.askIssuesLocked()
+	t.dirty = true
+	t.mu.Unlock()
+	go t.loadIssues(seq)
+}
+
+// setIssueScopeTo lists one chip's scope: 0 is all, then each repository.
+func (t *tui) setIssueScopeTo(n int) {
+	t.mu.Lock()
+	t.issueState.repo = ""
+	if n > 0 && n <= len(t.issueState.choices) {
+		t.issueState.repo = t.issueState.choices[n-1].Slug
+	}
+	t.mu.Unlock()
+	t.setIssueScopeLocked()
+}
+
+// issueListError is why a list could not be made, and when the server is
+// older than lists of a folder of repositories, what brings it along: a
+// server from before them says a folder has no GitHub remote, which the
+// owner read as tend not working.
+func (t *tui) issueListError(err error) string {
+	msg := ghError(err)
+	if !t.serverHas(proto.FeatureGitHubFolders) {
+		msg += " — this server is older than lists of several repositories; run " + handoffCommand(t.session)
+	}
+	return msg
 }
