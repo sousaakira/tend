@@ -1,15 +1,15 @@
 #!/bin/sh
 # install tend — terminal runtime for coding agents
 #
-#   curl -fsSL https://sousaakira.github.io/tend/install.sh | sh
+#   curl -fsSL https://tend.auth.com.br/install.sh | sh
 #
 # Prefers a release binary from GitHub. If none matches this machine, builds
 # from source with Go. Installs to $TEND_INSTALL_DIR, or $GOBIN, or ~/.local/bin.
 
 set -eu
 
-REPO="sousaakira/tend"
-SITE="https://sousaakira.github.io/tend"
+REPO="auth-com-br/tend"
+SITE="https://tend.auth.com.br"
 RAW="https://raw.githubusercontent.com/${REPO}/master"
 
 say() { printf '%s\n' "$*"; }

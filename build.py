@@ -4,7 +4,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-INSTALL = "curl -fsSL https://sousaakira.github.io/tend/install.sh | sh"
+INSTALL = "curl -fsSL https://tend.auth.com.br/install.sh | sh"
 
 # Keys shared by every locale. Pane mock stays English on purpose: it is what
 # the program draws, not marketing copy.
@@ -85,6 +85,7 @@ LANGS = {
         "install_p2": "With no arguments, tend opens a session and starts a server if there is not one. <code>tend new -- claude</code> opens a pane. <code>tend ls</code> lists what is running. <code>-s NAME</code> runs another session beside the first.",
         "install_p3": "Written in Go. One binary. No cgo.",
         "footer": "Apache-2.0. An independent Go implementation; see NOTICE in the repository.",
+        "made_by": "A product of",
     },
     "pt": {
         "html_lang": "pt-BR",
@@ -162,6 +163,7 @@ LANGS = {
         "install_p2": "Sem argumentos, o tend abre uma sessão e sobe um servidor se ainda não houver. <code>tend new -- claude</code> abre um painel. <code>tend ls</code> lista o que está rodando. <code>-s NAME</code> roda outra sessão ao lado da primeira.",
         "install_p3": "Escrito em Go. Um binário. Sem cgo.",
         "footer": "Apache-2.0. Implementação independente em Go; veja NOTICE no repositório.",
+        "made_by": "Um produto da",
     },
     "es": {
         "html_lang": "es",
@@ -239,6 +241,7 @@ LANGS = {
         "install_p2": "Sin argumentos, tend abre una sesión y arranca un servidor si no hay uno. <code>tend new -- claude</code> abre un panel. <code>tend ls</code> lista lo que corre. <code>-s NAME</code> abre otra sesión junto a la primera.",
         "install_p3": "Escrito en Go. Un binario. Sin cgo.",
         "footer": "Apache-2.0. Implementación independiente en Go; ver NOTICE en el repositorio.",
+        "made_by": "Un producto de",
     },
     "ja": {
         "html_lang": "ja",
@@ -316,6 +319,7 @@ LANGS = {
         "install_p2": "引数なしで tend を実行するとセッションを開き、サーバーがなければ起動します。<code>tend new -- claude</code> でペインを開き、<code>tend ls</code> で一覧、<code>-s NAME</code> で別セッションを並べます。",
         "install_p3": "Go 製。単一バイナリ。cgo なし。",
         "footer": "Apache-2.0。独立した Go 実装。詳細はリポジトリの NOTICE を参照。",
+        "made_by": "開発元:",
     },
     "zh": {
         "html_lang": "zh-CN",
@@ -393,6 +397,7 @@ LANGS = {
         "install_p2": "不带参数时，tend 打开会话，若没有服务器则启动一个。<code>tend new -- claude</code> 打开窗格。<code>tend ls</code> 列出正在运行的。<code>-s NAME</code> 在旁边再开一个会话。",
         "install_p3": "用 Go 写成。单一二进制。无 cgo。",
         "footer": "Apache-2.0。独立的 Go 实现；详见仓库中的 NOTICE。",
+        "made_by": "出品方：",
     },
 }
 
@@ -606,8 +611,8 @@ LANG_JS = """
 })();
 """.strip()
 
-BIN_LINUX = "https://github.com/sousaakira/tend/releases/latest/download/tend-linux-amd64"
-RELEASES = "https://github.com/sousaakira/tend/releases/latest"
+BIN_LINUX = "https://github.com/auth-com-br/tend/releases/latest/download/tend-linux-amd64"
+RELEASES = "https://github.com/auth-com-br/tend/releases/latest"
 
 
 def page(code: str, t: dict) -> str:
@@ -642,15 +647,15 @@ def page(code: str, t: dict) -> str:
   <meta name="description" content="{t["description"]}">
   <meta property="og:title" content="{t["title"]}">
   <meta property="og:description" content="{t["description"]}">
-  <meta property="og:image" content="https://sousaakira.github.io/tend/session.png">
+  <meta property="og:image" content="https://tend.auth.com.br/session.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
-  <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
-  <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
-  <link rel="alternate" hreflang="ja" href="https://sousaakira.github.io/tend/ja/">
-  <link rel="alternate" hreflang="zh-CN" href="https://sousaakira.github.io/tend/zh/">
-  <link rel="alternate" hreflang="zh" href="https://sousaakira.github.io/tend/zh/">
-  <link rel="alternate" hreflang="x-default" href="https://sousaakira.github.io/tend/">
+  <link rel="alternate" hreflang="en" href="https://tend.auth.com.br/">
+  <link rel="alternate" hreflang="pt-BR" href="https://tend.auth.com.br/pt/">
+  <link rel="alternate" hreflang="es" href="https://tend.auth.com.br/es/">
+  <link rel="alternate" hreflang="ja" href="https://tend.auth.com.br/ja/">
+  <link rel="alternate" hreflang="zh-CN" href="https://tend.auth.com.br/zh/">
+  <link rel="alternate" hreflang="zh" href="https://tend.auth.com.br/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://tend.auth.com.br/">
   <link rel="stylesheet" href="{css}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -665,7 +670,7 @@ def page(code: str, t: dict) -> str:
       <a href="#session">{t["nav_session"]}</a>
       <a href="#tools">{t["nav_tools"]}</a>
       <a href="#keys">{t["nav_keys"]}</a>
-      <a href="https://github.com/sousaakira/tend">{t["nav_source"]}</a>
+      <a href="https://github.com/auth-com-br/tend">{t["nav_source"]}</a>
       <span class="langs">{langs}</span>
     </nav>
   </header>
@@ -697,7 +702,7 @@ def page(code: str, t: dict) -> str:
         <p class="install-dl">
           <a id="bin-link" href="{BIN_LINUX}">{t["download_prefix"]} tend-linux-amd64</a>
           <span class="sep">·</span>
-          <a id="bin-alt" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-arm64">arm64</a>
+          <a id="bin-alt" href="https://github.com/auth-com-br/tend/releases/latest/download/tend-linux-arm64">arm64</a>
           <span class="sep">·</span>
           <a href="{RELEASES}">{t["all_builds"]}</a>
         </p>
@@ -800,6 +805,7 @@ def page(code: str, t: dict) -> str:
   </main>
 
   <footer>
+    <p>{t["made_by"]} <a href="https://auth.com.br">Auth Tecnologia Ltda</a> · Belo Horizonte, Brasil</p>
     <p>{t["footer"]}</p>
   </footer>
   <script src="{js}" defer></script>
