@@ -70,6 +70,31 @@ latest_tag() {
 	printf '%s' "$loc"
 }
 
+# sha256 of a file, with whichever tool the machine has.
+sha256() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | awk '{print $1}'
+	elif command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | awk '{print $1}'
+	else
+		die "need sha256sum or shasum to check the download"
+	fi
+}
+
+# verify checks a downloaded binary against the release's SHA256SUMS before
+# it goes anywhere, as tend update does. A download cut short or changed on
+# the way stops the install: it is not a reason to fall back to building,
+# and nothing unchecked is ever put on PATH.
+verify() {
+	file=$1
+	name=$2
+	sums=$3
+	want=$(awk -v n="$name" '$2 == n || $2 == "*" n { print $1; exit }' "$sums")
+	[ -n "$want" ] || die "the release's SHA256SUMS has no line for ${name}; nothing was installed"
+	got=$(sha256 "$file")
+	[ "$got" = "$want" ] || die "${name} does not match the release's SHA256SUMS (got ${got}); nothing was installed"
+}
+
 install_binary() {
 	src=$1
 	chmod +x "$src"
@@ -88,6 +113,10 @@ from_release() {
 		say "no release binary for ${os}/${arch}; building from source"
 		return 1
 	fi
+	download "https://github.com/${REPO}/releases/download/${tag}/SHA256SUMS" "${tmpdir}/SHA256SUMS" ||
+		die "could not fetch the release's SHA256SUMS to check ${bin_name}; nothing was installed"
+	verify "${tmpdir}/${bin_name}" "$bin_name" "${tmpdir}/SHA256SUMS"
+	say "checksum ok"
 	install_binary "${tmpdir}/${bin_name}"
 	return 0
 }
