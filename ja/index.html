@@ -97,6 +97,7 @@
     <nav>
       <a href="#install">インストール</a>
       <a href="#session">セッション</a>
+      <a href="#tools">ツール</a>
       <a href="#keys">キー</a>
       <a href="https://github.com/sousaakira/tend">ソース</a>
       <span class="langs"><a href="../pt/" data-lang="pt" onclick="try{localStorage.setItem('tend-lang','pt')}catch(e){}">pt</a> · <a href="../" data-lang="en" onclick="try{localStorage.setItem('tend-lang','en')}catch(e){}">en</a> · <a href="../es/" data-lang="es" onclick="try{localStorage.setItem('tend-lang','es')}catch(e){}">es</a> · <a href="./" data-lang="ja" aria-current="page" onclick="try{localStorage.setItem('tend-lang','ja')}catch(e){}">ja</a> · <a href="../zh/" data-lang="zh" onclick="try{localStorage.setItem('tend-lang','zh')}catch(e){}">zh</a></span>
@@ -254,6 +255,37 @@
       </dl>
     </section>
 
+    <section id="tools" class="facts">
+      <h2>スペースの上にあるツール</h2>
+      <p class="note">サイドバー上部の6つのボタン。それぞれプレフィックスの後のキーでも開けます。</p>
+      <dl>
+        <div>
+          <dt>ファイル <kbd>f</kbd></dt>
+          <dd>ペインの横のパネル：プロジェクトのツリー、その中の検索、git の変更 — diff、stage、commit、push。作業中のペインに追従します。</dd>
+        </div>
+        <div>
+          <dt>エージェント <kbd>A</kbd></dt>
+          <dd>tend が知っているエージェント CLI — Claude Code、Codex、Gemini CLI、Cursor、OpenCode など — のうち、このマシンにあるものと、残りのインストールコマンド。確認するとタブで実行します。</dd>
+        </div>
+        <div>
+          <dt>セッション <kbd>S</kbd></dt>
+          <dd>マシン上の Claude Code の会話をタイトルで一覧。入力して検索、enter で元のディレクトリの新しいタブで再開、古いものはマークして削除。</dd>
+        </div>
+        <div>
+          <dt>GitHub <kbd>I</kbd></dt>
+          <dd>プロジェクトの issue と pull request を <code>gh</code> 経由で。コメント、クローズ、ラベル、マージ。issue で <kbd>w</kbd> を押すと worktree を作り、そこでエージェントに issue を完了させます。</dd>
+        </div>
+        <div>
+          <dt>ブラウザとコンテキスト <kbd>B</kbd> <kbd>C</kbd></dt>
+          <dd>tend の拡張機能入りの Chromium、Chrome、Edge：ページの要素を選び、それぞれにメモを付け、コンテキストパネルで確認してからエージェントへ送ります。</dd>
+        </div>
+        <div>
+          <dt>アップデート</dt>
+          <dd>新しいリリースを検知して知らせます。リリースノートで <kbd>u</kbd> を押すとインストールし、ペインのプログラムを止めずにセッションを移行します。</dd>
+        </div>
+      </dl>
+    </section>
+
     <section id="keys">
       <h2>プレフィックスは ctrl+b</h2>
       <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> でセッション内の全キーを一覧します。</p>
@@ -261,12 +293,13 @@
         <tbody>
           <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>横・下に分割</td></tr>
           <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>フォーカス移動</td></tr>
-          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>リサイズ</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>ペインを入れ替える</td></tr>
+          <tr><th><kbd>r</kbd></th><td>サイズ変更（続けて h j k l、esc）</td></tr>
           <tr><th><kbd>z</kbd></th><td>ペインをウィンドウいっぱいに</td></tr>
           <tr><th><kbd>[</kbd></th><td>履歴をスクロール</td></tr>
           <tr><th><kbd>x</kbd></th><td>ペインを閉じる</td></tr>
           <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>タブ: 新規・次・前・番号</td></tr>
-          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>space: 新規・前・次</td></tr>
+          <tr><th><kbd>N</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>スペース：新規、前、次</td></tr>
           <tr><th><kbd>a</kbd></th><td>エージェント一覧（グループ表示）</td></tr>
           <tr><th><kbd>g</kbd></th><td>選んでジャンプ</td></tr>
           <tr><th><kbd>d</kbd></th><td>デタッチ（実行はそのまま）</td></tr>

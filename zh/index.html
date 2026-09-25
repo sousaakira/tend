@@ -97,6 +97,7 @@
     <nav>
       <a href="#install">安装</a>
       <a href="#session">会话</a>
+      <a href="#tools">工具</a>
       <a href="#keys">快捷键</a>
       <a href="https://github.com/sousaakira/tend">源码</a>
       <span class="langs"><a href="../pt/" data-lang="pt" onclick="try{localStorage.setItem('tend-lang','pt')}catch(e){}">pt</a> · <a href="../" data-lang="en" onclick="try{localStorage.setItem('tend-lang','en')}catch(e){}">en</a> · <a href="../es/" data-lang="es" onclick="try{localStorage.setItem('tend-lang','es')}catch(e){}">es</a> · <a href="../ja/" data-lang="ja" onclick="try{localStorage.setItem('tend-lang','ja')}catch(e){}">ja</a> · <a href="./" data-lang="zh" aria-current="page" onclick="try{localStorage.setItem('tend-lang','zh')}catch(e){}">zh</a></span>
@@ -254,6 +255,37 @@
       </dl>
     </section>
 
+    <section id="tools" class="facts">
+      <h2>空间上方的工具</h2>
+      <p class="note">侧边栏顶部的六个按钮，每个都可在前缀后用一个键打开。</p>
+      <dl>
+        <div>
+          <dt>文件 <kbd>f</kbd></dt>
+          <dd>窗格旁的面板：项目的文件树、在其中搜索，以及 git 改动 — diff、暂存、提交、推送。它跟随你正在工作的窗格。</dd>
+        </div>
+        <div>
+          <dt>代理 <kbd>A</kbd></dt>
+          <dd>tend 认识的代理 CLI — Claude Code、Codex、Gemini CLI、Cursor、OpenCode 等 — 这台机器装了哪些，以及其余的安装命令，确认后在标签页中运行。</dd>
+        </div>
+        <div>
+          <dt>会话 <kbd>S</kbd></dt>
+          <dd>本机所有 Claude Code 对话，按标题列出。输入即可搜索，回车在原目录的新标签页中恢复，标记旧会话并删除。</dd>
+        </div>
+        <div>
+          <dt>GitHub <kbd>I</kbd></dt>
+          <dd>通过 <code>gh</code> 查看项目的 issue 和 pull request。评论、关闭、打标签、合并。在 issue 上按 <kbd>w</kbd> 会为它创建 worktree，并在其中启动你的代理去完成它。</dd>
+        </div>
+        <div>
+          <dt>浏览器与上下文 <kbd>B</kbd> <kbd>C</kbd></dt>
+          <dd>带 tend 扩展的 Chromium、Chrome 或 Edge 窗口：在页面上选取元素，为每个写下要求，先在上下文面板中查看，再发送给代理。</dd>
+        </div>
+        <div>
+          <dt>更新</dt>
+          <dd>tend 会发现新版本并提示。在更新说明中按 <kbd>u</kbd> 即可安装，并在不停止窗格中程序的情况下把会话迁移过去。</dd>
+        </div>
+      </dl>
+    </section>
+
     <section id="keys">
       <h2>前缀是 ctrl+b</h2>
       <p class="note"><kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> 列出会话内的全部快捷键。</p>
@@ -261,12 +293,13 @@
         <tbody>
           <tr><th><kbd>|</kbd> <kbd>-</kbd></th><td>左右、上下分割</td></tr>
           <tr><th><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></th><td>移动焦点</td></tr>
-          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>调整大小</td></tr>
+          <tr><th><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></th><td>交换窗格</td></tr>
+          <tr><th><kbd>r</kbd></th><td>调整大小（然后 h j k l，esc）</td></tr>
           <tr><th><kbd>z</kbd></th><td>将窗格放大到窗口</td></tr>
           <tr><th><kbd>[</kbd></th><td>回看历史</td></tr>
           <tr><th><kbd>x</kbd></th><td>关闭窗格</td></tr>
           <tr><th><kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>1</kbd>–<kbd>9</kbd></th><td>标签：新建、下一个、上一个、按数字</td></tr>
-          <tr><th><kbd>s</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>space：新建、上一个、下一个</td></tr>
+          <tr><th><kbd>N</kbd> <kbd>(</kbd> <kbd>)</kbd></th><td>空间：新建、上一个、下一个</td></tr>
           <tr><th><kbd>a</kbd></th><td>显示全部智能体（分组）</td></tr>
           <tr><th><kbd>g</kbd></th><td>选一个并跳转</td></tr>
           <tr><th><kbd>d</kbd></th><td>断开，保持一切运行</td></tr>
