@@ -326,13 +326,16 @@ func (t *tui) runMenu(m ui.Menu, item ui.MenuItem) error {
 	case ui.MenuSettings:
 		return t.openSettings()
 	case ui.MenuKeybinds:
-		t.toggleOverlay(append(ui.HelpLinesFor(t.keys.Bindings), ui.CustomHelpLines(t.config.Keys.Command)...))
+		t.toggleOverlay(t.helpLines())
 		return nil
 	case ui.MenuReload:
 		t.requestRepaint()
 		return t.reloadSettings()
 	case ui.MenuWhatsNew:
 		return t.openReleaseNotes()
+	case ui.MenuAbout:
+		t.openAbout()
+		return nil
 	case ui.MenuDetach:
 		t.detach = true
 		return nil

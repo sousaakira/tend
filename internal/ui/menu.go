@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/mattn/go-runewidth"
 
 	"github.com/sousaakira/tend/internal/vt"
@@ -54,18 +56,49 @@ const (
 	MenuReload   = "menu-reload"
 	MenuWhatsNew = "menu-whats-new"
 	MenuDetach   = "menu-detach"
+	// MenuAbout opens the about panel (about.go), tend's own: which tend
+	// is running, the server's, who makes it and where it lives.
+	MenuAbout = "menu-about"
 )
+
+// VersionLine says which tend is running: this client's build, and the
+// server's beside it when they differ — which is the server that outlived
+// an update, the thing to know before anything else about what it does.
+func VersionLine(client, server string) string {
+	line := "tend " + DisplayVersion(client)
+	if server != "" && DisplayVersion(server) != DisplayVersion(client) {
+		line += " · server " + DisplayVersion(server)
+	}
+	return line
+}
+
+// DisplayVersion is a build as it is shown: a release with its v, anything
+// else — "development build" — as it is.
+func DisplayVersion(s string) string {
+	if s == "" || strings.HasPrefix(s, "v") || !strings.ContainsAny(s[:1], "0123456789") {
+		return s
+	}
+	return "v" + s
+}
 
 // GlobalMenu is herdr's global menu, which its sidebar's "menu" button
 // opens: settings, keybinds, reload config, the release notes when there
 // are any — "update ready" with a dot while they are a release newer than
-// the one running, "what's new" otherwise — and detach.
-func GlobalMenu(ready, notes bool, x, y int) Menu {
-	items := []MenuItem{
+// the one running, "what's new" otherwise — and detach. tend's opens with
+// "about tend", which says which tend is running — herdr shows that on its
+// command line only — marked with a dot, as update ready is, while the
+// server is another build than this client.
+func GlobalMenu(stale, ready, notes bool, x, y int) Menu {
+	about := "about tend"
+	if stale {
+		about += " ●"
+	}
+	items := []MenuItem{{Label: about, Action: MenuAbout}}
+	items = append(items, []MenuItem{
 		{Label: "settings", Action: MenuSettings},
 		{Label: "keybinds", Action: MenuKeybinds},
 		{Label: "reload config", Action: MenuReload},
-	}
+	}...)
 	switch {
 	case ready:
 		items = append(items, MenuItem{Label: "update ready ●", Action: MenuWhatsNew})

@@ -746,7 +746,7 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		t.mu.Lock()
 		ready, notes := t.updateReadyLocked() != "", t.notesAvailableLocked()
 		t.mu.Unlock()
-		t.openMenu(ui.GlobalMenu(ready, notes, x, y))
+		t.openMenu(ui.GlobalMenu(t.serverStale(), ready, notes, x, y))
 		return true, nil
 	case row.Action == ui.ActionToggleGrouped:
 		t.mu.Lock()

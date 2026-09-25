@@ -263,6 +263,8 @@ type tui struct {
 	agentMgr *ui.AgentManagerView
 	// sessions is the sessions list while it is up, and sessionList what
 	// the server last said, which its search filters.
+	// about is the about panel while it is up (tui_version.go).
+	about       *ui.AboutView
 	sessions    *ui.SessionsView
 	sessionList []proto.AgentSessionInfo
 	// issues is the GitHub issues panel while it is up; issueState what
@@ -1103,6 +1105,7 @@ func (t *tui) buildFrame() ui.Frame {
 		Menu:    t.menu,
 
 		ReleaseNotes: t.notes,
+		About:        t.about,
 		AgentManager: t.agentMgr,
 		Sessions:     t.sessions,
 		Issues:       t.issues,
@@ -1299,6 +1302,9 @@ func (t *tui) handleInput(data []byte) error {
 	// So is the release notes panel while it is up, as herdr's is.
 	if t.notesUp() {
 		return t.notesInput(data)
+	}
+	if t.aboutUp() {
+		return t.aboutInput(data)
 	}
 	if t.agentManagerUp() {
 		return t.agentManagerInput(data)
@@ -1704,7 +1710,7 @@ func (t *tui) command(action ui.Action) error {
 		return nil
 
 	case ui.CommandHelp:
-		t.toggleOverlay(append(ui.HelpLinesFor(t.keys.Bindings), ui.CustomHelpLines(t.config.Keys.Command)...))
+		t.toggleOverlay(t.helpLines())
 		return nil
 
 	case ui.CommandCustom:

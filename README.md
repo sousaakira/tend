@@ -246,7 +246,11 @@ tend looks for a newer release in the background and says so: a notice, and
 "update ready" at the right of the status bar. The sidebar's "menu" → update
 ready shows what is new in it, and `u` there installs it (`tend update
 -handoff`, in a tab of its own) without stopping what is running; the sidebar's "menu" has what
-is new in it. `[update] version_check = false` turns the check off.
+is new in it. `[update] version_check = false` turns the check off. "about tend",
+first in that menu, says which tend is running, who makes it and where it
+lives — and the server's version when an update left the server behind,
+with the `tend handoff` that brings it along (the item is dotted then).
+`ctrl+b ?` has the version at its top too.
 
 Or from a checkout:
 

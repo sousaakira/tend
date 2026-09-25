@@ -418,6 +418,8 @@ type Frame struct {
 	Overlay []string
 	// ReleaseNotes is herdr's release notes panel, when it is up.
 	ReleaseNotes *ReleaseNotesView
+	// About is the about panel, when it is up (about.go).
+	About *AboutView
 	// AgentManager is the agent manager, when it is up (agentmanager.go).
 	AgentManager *AgentManagerView
 	// Sessions is the sessions list, when it is up (sessions.go).
@@ -621,6 +623,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	}
 	if f.ReleaseNotes != nil {
 		drawReleaseNotes(dst, f.ReleaseNotes, theme)
+	}
+	if f.About != nil {
+		drawAbout(dst, f.About, theme)
 	}
 	if f.AgentManager != nil {
 		drawAgentManager(dst, f.AgentManager, theme)

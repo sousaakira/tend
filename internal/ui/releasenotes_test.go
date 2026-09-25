@@ -63,13 +63,35 @@ func TestUpdateReadyIsOnTheStatusBarAndTheMenu(t *testing.T) {
 		}
 		return strings.Join(out, ", ")
 	}
-	if got := labels(GlobalMenu(true, true, 0, 0)); got != "settings, keybinds, reload config, update ready ●, detach" {
+	if got := labels(GlobalMenu(false, true, true, 0, 0)); got != "about tend, settings, keybinds, reload config, update ready ●, detach" {
 		t.Errorf("ready: %s", got)
 	}
-	if got := labels(GlobalMenu(false, true, 0, 0)); got != "settings, keybinds, reload config, what's new, detach" {
+	if got := labels(GlobalMenu(false, false, true, 0, 0)); got != "about tend, settings, keybinds, reload config, what's new, detach" {
 		t.Errorf("notes: %s", got)
 	}
-	if got := labels(GlobalMenu(false, false, 0, 0)); got != "settings, keybinds, reload config, detach" {
+	if got := labels(GlobalMenu(false, false, false, 0, 0)); got != "about tend, settings, keybinds, reload config, detach" {
 		t.Errorf("none: %s", got)
+	}
+}
+
+// TestTheMenuSaysWhichTendIsRunning: the version is shown with its v, a
+// development build as it is, the server's only when it is another; and
+// the global menu's about item carries a dot while the server is another
+// build. If it regresses, nothing in tend says which version is running,
+// or a server left behind by an update goes unseen.
+func TestTheMenuSaysWhichTendIsRunning(t *testing.T) {
+	for _, c := range []struct{ client, server, want string }{
+		{"v0.6.1", "v0.6.1", "tend v0.6.1"},
+		{"v0.6.1", "0.6.1", "tend v0.6.1"},
+		{"v0.6.1", "v0.6.0", "tend v0.6.1 · server v0.6.0"},
+		{"v0.6.1", "", "tend v0.6.1"},
+		{"development build", "development build", "tend development build"},
+	} {
+		if got := VersionLine(c.client, c.server); got != c.want {
+			t.Errorf("VersionLine(%q, %q) = %q, want %q", c.client, c.server, got, c.want)
+		}
+	}
+	if m := GlobalMenu(true, false, false, 0, 0); m.Items[0].Label != "about tend ●" || m.Items[0].Action != MenuAbout {
+		t.Errorf("menu: %+v", m.Items)
 	}
 }

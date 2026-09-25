@@ -3014,3 +3014,35 @@ func TestTheAgentManagerInstallsInATabOfItsOwn(t *testing.T) {
 			strings.Contains(s, "[tend] Amp installed") && !strings.Contains(s, "AGENT MANAGER")
 	})
 }
+
+// TestTheAboutPanelSaysWhichTendIsRunning: the global menu opens with
+// "about tend", dotted while the server is another build; it opens a panel
+// with this build, the server's with the handoff that brings it along, who
+// makes tend and where it lives; esc closes it; and ctrl+b ? has the
+// version at its top. If it regresses, nothing in tend says which version
+// is running, and a server left behind by an update goes unseen.
+func TestTheAboutPanelSaysWhichTendIsRunning(t *testing.T) {
+	a := startSessionConfigured(t, 110, 24, server.Config{Build: "v0.5.0"})
+	a.waitForScreen(t, "the new row", func(s string) bool { return strings.Contains(s, "menu") })
+
+	a.clickAt(t, ui.SidebarWidth-3, a.lineContaining(t, "new"))
+	a.waitForScreen(t, "about first in the menu, dotted", func(s string) bool {
+		return strings.Contains(s, "about tend ●") && strings.Contains(s, "reload config")
+	})
+	row := a.lineContaining(t, "about tend")
+	a.clickAt(t, columnOfString(a.lines()[row-1], "about tend")+3, row)
+	a.waitForScreen(t, "the about panel", func(s string) bool {
+		return strings.Contains(s, "a terminal runtime for coding agents") &&
+			strings.Contains(s, "development build") &&
+			strings.Contains(s, "v0.5.0 — run tend handoff -s tui") &&
+			strings.Contains(s, "Akira Sousa") && strings.Contains(s, "sousaakira.github.io/tend") &&
+			strings.Contains(s, "Apache-2.0")
+	})
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "the panel gone", func(s string) bool { return !strings.Contains(s, "a terminal runtime for coding agents") })
+
+	a.send(t, "\x02?")
+	a.waitForScreen(t, "the version atop the help", func(s string) bool {
+		return strings.Contains(s, "tend development build · server v0.5.0") && strings.Contains(s, "ctrl+b then:")
+	})
+}
