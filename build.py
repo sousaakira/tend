@@ -62,6 +62,7 @@ LANGS = {
         "tool5_d": "A Chromium, Chrome or Edge window with tend's extension: pick elements on a page, note what you want of each, and send them to the agent, looked over first in the context panel.",
         "tool6_t": "Updates",
         "tool6_d": "tend notices a new release and says so. <kbd>u</kbd> in its notes installs it and moves the running session onto it, without stopping the programs in its panes.",
+        "issues_cap": "The issues panel, prefix+I. <kbd>w</kbd> on #42 makes a worktree on <code>issue-42-checkout-button-is-grey</code> and starts your agent in it.",
         "keys_h": "Prefix is ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lists every key inside the session.",
         "k_split": "split beside, below",
@@ -137,6 +138,7 @@ LANGS = {
         "tool5_d": "Uma janela do Chromium, Chrome ou Edge com a extensão do tend: escolha elementos numa página, anote o que quer de cada um e mande para o agente, revisando antes no painel de contexto.",
         "tool6_t": "Atualizações",
         "tool6_d": "O tend percebe um release novo e avisa. <kbd>u</kbd> nas notas instala e passa a sessão para a versão nova, sem parar os programas dos painéis.",
+        "issues_cap": "O painel de issues, prefix+I. <kbd>w</kbd> na #42 cria um worktree em <code>issue-42-checkout-button-is-grey</code> e abre seu agente nele.",
         "keys_h": "O prefixo é ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas as teclas dentro da sessão.",
         "k_split": "dividir ao lado, abaixo",
@@ -212,6 +214,7 @@ LANGS = {
         "tool5_d": "Una ventana de Chromium, Chrome o Edge con la extensión de tend: elige elementos en una página, anota lo que quieres de cada uno y envíalos al agente, revisados antes en el panel de contexto.",
         "tool6_t": "Actualizaciones",
         "tool6_d": "tend detecta una nueva versión y lo dice. <kbd>u</kbd> en sus notas la instala y pasa la sesión a ella, sin detener los programas de los paneles.",
+        "issues_cap": "El panel de issues, prefix+I. <kbd>w</kbd> en #42 crea un worktree en <code>issue-42-checkout-button-is-grey</code> y abre tu agente en él.",
         "keys_h": "El prefijo es ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas las teclas dentro de la sesión.",
         "k_split": "dividir al lado, abajo",
@@ -287,6 +290,7 @@ LANGS = {
         "tool5_d": "tend の拡張機能入りの Chromium、Chrome、Edge：ページの要素を選び、それぞれにメモを付け、コンテキストパネルで確認してからエージェントへ送ります。",
         "tool6_t": "アップデート",
         "tool6_d": "新しいリリースを検知して知らせます。リリースノートで <kbd>u</kbd> を押すとインストールし、ペインのプログラムを止めずにセッションを移行します。",
+        "issues_cap": "issue パネル（prefix+I）。#42 で <kbd>w</kbd> を押すと <code>issue-42-checkout-button-is-grey</code> に worktree を作り、そこでエージェントを起動します。",
         "keys_h": "プレフィックスは ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> でセッション内の全キーを一覧します。",
         "k_split": "横・下に分割",
@@ -362,6 +366,7 @@ LANGS = {
         "tool5_d": "带 tend 扩展的 Chromium、Chrome 或 Edge 窗口：在页面上选取元素，为每个写下要求，先在上下文面板中查看，再发送给代理。",
         "tool6_t": "更新",
         "tool6_d": "tend 会发现新版本并提示。在更新说明中按 <kbd>u</kbd> 即可安装，并在不停止窗格中程序的情况下把会话迁移过去。",
+        "issues_cap": "issue 面板（prefix+I）。在 #42 上按 <kbd>w</kbd>，会在 <code>issue-42-checkout-button-is-grey</code> 上创建 worktree 并在其中启动你的代理。",
         "keys_h": "前缀是 ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> 列出会话内的全部快捷键。",
         "k_split": "左右、上下分割",
@@ -390,6 +395,27 @@ LANGS = {
 # entries, tabs, files panel, status). The pane text is invented so the
 # public site does not leak a live session. English on purpose — it is what
 # the program prints, not marketing copy.
+ISSUES_MOCK = """\
+      <div class="term">
+        <div class="term-chrome" aria-hidden="true">
+          <span class="term-dots"><i></i><i></i><i></i></span>
+          <span class="term-title">tend — issues</span>
+        </div>
+        <pre class="issues-mock"><span class="accent pick">GITHUB ISSUES · acme/shop</span>                              <span class="dim">4 of 4</span>
+<span class="chip on"> open </span> <span class="dim"> assigned to me   created by me   closed </span>   <span class="accent pick">Issues</span> <span class="dim">Pull requests</span>
+<span class="dim">search</span> label:bug<span class="caret"> </span>
+
+<span class="dim">#     title                              labels       author   age</span>
+<span class="sel">42    Checkout button is grey on mobile  bug          ana      3h  </span>
+<span class="accent">41</span>    Footer links overlap the badge     <span class="dim">bug, ui      bo       1d</span>
+<span class="accent">38</span>    Dark mode for the settings page    <span class="dim">enhancement  ana      2d</span>
+<span class="accent">35</span>    Export orders as CSV               <span class="dim">enhancement  carla    5d</span>
+
+<span class="dim">enter open · w start work · c comment · x close · → pull requests · esc</span></pre>
+      </div>
+"""
+
+
 SESSION_MOCK = """\
       <div class="term">
         <div class="term-chrome" aria-hidden="true">
@@ -715,6 +741,10 @@ def page(code: str, t: dict) -> str:
           <dd>{t["tool6_d"]}</dd>
         </div>
       </dl>
+      <div class="stage">
+{ISSUES_MOCK}
+        <p class="stage-cap">{t["issues_cap"]}</p>
+      </div>
     </section>
 
     <section id="keys">
