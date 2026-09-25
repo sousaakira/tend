@@ -63,6 +63,7 @@ LANGS = {
         "tool6_t": "Updates",
         "tool6_d": "tend notices a new release and says so. <kbd>u</kbd> in its notes installs it and moves the running session onto it, without stopping the programs in its panes.",
         "issues_cap": "The issues panel, prefix+I. <kbd>w</kbd> on #42 makes a worktree on <code>issue-42-checkout-button-is-grey</code> and starts your agent in it.",
+        "sessions_cap": "The sessions list, prefix+S. Enter resumes one in a new tab, where it was held; <kbd>ctrl</kbd><kbd>o</kbd> marks what is a month old, <kbd>ctrl</kbd><kbd>d</kbd> deletes it. One open in a pane is never deleted.",
         "keys_h": "Prefix is ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lists every key inside the session.",
         "k_split": "split beside, below",
@@ -139,6 +140,7 @@ LANGS = {
         "tool6_t": "Atualizações",
         "tool6_d": "O tend percebe um release novo e avisa. <kbd>u</kbd> nas notas instala e passa a sessão para a versão nova, sem parar os programas dos painéis.",
         "issues_cap": "O painel de issues, prefix+I. <kbd>w</kbd> na #42 cria um worktree em <code>issue-42-checkout-button-is-grey</code> e abre seu agente nele.",
+        "sessions_cap": "A lista de sessões, prefix+S. Enter retoma uma numa aba nova, onde ela aconteceu; <kbd>ctrl</kbd><kbd>o</kbd> marca as de um mês atrás, <kbd>ctrl</kbd><kbd>d</kbd> apaga. Uma sessão aberta num painel nunca é apagada.",
         "keys_h": "O prefixo é ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas as teclas dentro da sessão.",
         "k_split": "dividir ao lado, abaixo",
@@ -215,6 +217,7 @@ LANGS = {
         "tool6_t": "Actualizaciones",
         "tool6_d": "tend detecta una nueva versión y lo dice. <kbd>u</kbd> en sus notas la instala y pasa la sesión a ella, sin detener los programas de los paneles.",
         "issues_cap": "El panel de issues, prefix+I. <kbd>w</kbd> en #42 crea un worktree en <code>issue-42-checkout-button-is-grey</code> y abre tu agente en él.",
+        "sessions_cap": "La lista de sesiones, prefix+S. Enter reanuda una en una pestaña nueva, donde ocurrió; <kbd>ctrl</kbd><kbd>o</kbd> marca las de hace un mes, <kbd>ctrl</kbd><kbd>d</kbd> las borra. Una sesión abierta en un panel nunca se borra.",
         "keys_h": "El prefijo es ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> lista todas las teclas dentro de la sesión.",
         "k_split": "dividir al lado, abajo",
@@ -291,6 +294,7 @@ LANGS = {
         "tool6_t": "アップデート",
         "tool6_d": "新しいリリースを検知して知らせます。リリースノートで <kbd>u</kbd> を押すとインストールし、ペインのプログラムを止めずにセッションを移行します。",
         "issues_cap": "issue パネル（prefix+I）。#42 で <kbd>w</kbd> を押すと <code>issue-42-checkout-button-is-grey</code> に worktree を作り、そこでエージェントを起動します。",
+        "sessions_cap": "セッション一覧（prefix+S）。enter で元の場所の新しいタブで再開。<kbd>ctrl</kbd><kbd>o</kbd> で1か月前のものをマークし、<kbd>ctrl</kbd><kbd>d</kbd> で削除。ペインで開いているものは削除されません。",
         "keys_h": "プレフィックスは ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> でセッション内の全キーを一覧します。",
         "k_split": "横・下に分割",
@@ -367,6 +371,7 @@ LANGS = {
         "tool6_t": "更新",
         "tool6_d": "tend 会发现新版本并提示。在更新说明中按 <kbd>u</kbd> 即可安装，并在不停止窗格中程序的情况下把会话迁移过去。",
         "issues_cap": "issue 面板（prefix+I）。在 #42 上按 <kbd>w</kbd>，会在 <code>issue-42-checkout-button-is-grey</code> 上创建 worktree 并在其中启动你的代理。",
+        "sessions_cap": "会话列表（prefix+S）。回车在原位置的新标签页中恢复；<kbd>ctrl</kbd><kbd>o</kbd> 标记一个月前的会话，<kbd>ctrl</kbd><kbd>d</kbd> 删除。在窗格中打开的会话永远不会被删除。",
         "keys_h": "前缀是 ctrl+b",
         "keys_note": "<kbd>ctrl</kbd><kbd>b</kbd> <kbd>?</kbd> 列出会话内的全部快捷键。",
         "k_split": "左右、上下分割",
@@ -395,6 +400,27 @@ LANGS = {
 # entries, tabs, files panel, status). The pane text is invented so the
 # public site does not leak a live session. English on purpose — it is what
 # the program prints, not marketing copy.
+SESSIONS_MOCK = """\
+      <div class="term">
+        <div class="term-chrome" aria-hidden="true">
+          <span class="term-dots"><i></i><i></i><i></i></span>
+          <span class="term-title">tend — sessions</span>
+        </div>
+        <pre class="issues-mock"><span class="accent pick">AGENT SESSIONS</span>                               <span class="dim">2 marked · 5 of 38</span>
+<span class="dim">search</span> shop<span class="caret"> </span>
+
+  <span class="accent">●</span> Checkout redesign            <span class="dim">acme/shop       now   4.2M</span>
+    Footer links overlap         <span class="dim">acme/shop        3h   812K</span>
+<span class="sel"><span class="accent">✓</span>   Orders CSV export            acme/shop       34d   1.9M </span>
+<span class="accent">✓</span>   Old payment experiment       <span class="dim">acme/shop       41d    96K</span>
+  <span class="dim">✗ Shop setup as root           root/shop       52d   220K</span>
+
+<span class="dim">type to search · enter resume · tab mark · ^o 30+ days · ^d delete · esc</span>
+<span class="dim">● open in a pane · ✗ cannot be opened here</span></pre>
+      </div>
+"""
+
+
 ISSUES_MOCK = """\
       <div class="term">
         <div class="term-chrome" aria-hidden="true">
@@ -744,6 +770,10 @@ def page(code: str, t: dict) -> str:
       <div class="stage">
 {ISSUES_MOCK}
         <p class="stage-cap">{t["issues_cap"]}</p>
+      </div>
+      <div class="stage">
+{SESSIONS_MOCK}
+        <p class="stage-cap">{t["sessions_cap"]}</p>
       </div>
     </section>
 
