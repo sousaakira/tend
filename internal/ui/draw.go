@@ -424,6 +424,8 @@ type Frame struct {
 	AgentManager *AgentManagerView
 	// Sessions is the sessions list, when it is up (sessions.go).
 	Sessions *SessionsView
+	// Companies is the companies panel, when it is up (companies.go).
+	Companies *CompaniesView
 	// Issues is the GitHub issues panel, when it is up (issues.go).
 	Issues *IssuesView
 	// Errors is the errors panel, when it is up (errors.go).
@@ -635,6 +637,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	if f.Sessions != nil {
 		drawSessions(dst, f.Sessions, theme)
 	}
+	if f.Companies != nil {
+		drawCompanies(dst, f.Companies, theme)
+	}
 	if f.Issues != nil {
 		drawIssues(dst, f.Issues, theme)
 	}
@@ -758,13 +763,15 @@ func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
 	limit := box.X + box.Cols - 2
 	writeString(dst, box.X+3, box.Y+1, truncate(lines[0], box.Cols-6), theme.OverlayTitle, limit)
 	for _, place := range layout.lines {
-		writeString(dst, place.x, place.y, truncate(lines[place.index+1], limit-place.x), theme.Overlay, limit)
+		writeString(dst, place.x, place.y, truncate(lines[place.index+1], min(place.width, limit-place.x)), theme.Overlay, limit)
 	}
 }
 
 // overlayPlaced is where one line of an overlay's body is drawn.
 type overlayPlaced struct {
 	index, x, y int
+	// width is the column's, which a line is cut to.
+	width int
 }
 
 type overlayGeometry struct {
@@ -781,26 +788,45 @@ func overlayLayout(lines []string, cols, rows int) (overlayGeometry, bool) {
 	}
 	title, body := lines[0], lines[1:]
 
+	// As many columns as the height needs, and at least two once one does
+	// not fit. Two was once the most, and on a short terminal the key help
+	// ran past the bottom and lost its last keys — detach among them — the
+	// day one more key was added.
 	columns := [][]string{body}
 	if len(lines)+4 > rows && len(body) > 1 {
-		half := (len(body) + 1) / 2
-		columns = [][]string{body[:half], body[half:]}
+		per := max(rows-5, 1)
+		n := max((len(body)+per-1)/per, 2)
+		size := (len(body) + n - 1) / n
+		columns = nil
+		for i := 0; i < len(body); i += size {
+			columns = append(columns, body[i:min(i+size, len(body))])
+		}
+	}
+	// Each column's width, narrowed alike when together they are wider than
+	// the screen: every line cut short is better than lines not shown.
+	widths := make([]int, len(columns))
+	for i, col := range columns {
+		for _, line := range col {
+			widths[i] = max(widths[i], runewidth.StringWidth(line))
+		}
+	}
+	if len(columns) > 1 {
+		room := (cols - 6 - 2*(len(columns)-1)) / len(columns)
+		for i := range widths {
+			widths[i] = max(min(widths[i], room), 1)
+		}
 	}
 
 	const gap = 2
 	height := 0
 	width := runewidth.StringWidth(title)
 	inner := 0
-	for _, col := range columns {
+	for i, col := range columns {
 		height = max(height, len(col))
-		colWidth := 0
-		for _, line := range col {
-			colWidth = max(colWidth, runewidth.StringWidth(line))
-		}
 		if inner > 0 {
 			inner += gap
 		}
-		inner += colWidth
+		inner += widths[i]
 	}
 	width = max(width, inner)
 
@@ -810,19 +836,15 @@ func overlayLayout(lines []string, cols, rows int) (overlayGeometry, bool) {
 
 	g := overlayGeometry{box: box}
 	x, index := box.X+3, 0
-	for _, col := range columns {
-		colWidth := 0
-		for _, line := range col {
-			colWidth = max(colWidth, runewidth.StringWidth(line))
-		}
+	for c, col := range columns {
 		for i := range col {
 			y := box.Y + 3 + i
 			if y < box.Y+box.Rows-1 {
-				g.lines = append(g.lines, overlayPlaced{index: index + i, x: x, y: y})
+				g.lines = append(g.lines, overlayPlaced{index: index + i, x: x, y: y, width: widths[c]})
 			}
 		}
 		index += len(col)
-		x += colWidth + gap
+		x += widths[c] + gap
 	}
 	return g, true
 }

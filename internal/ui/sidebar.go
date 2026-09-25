@@ -54,6 +54,9 @@ const (
 	// ActionMachine is a machine row's: fold the one being shown, go to
 	// another.
 	ActionMachine = "machine"
+	// ActionCompanies is the mark beside the "spaces" heading: the
+	// companies panel, which chooses what the list shows.
+	ActionCompanies = "companies"
 )
 
 // SidebarRow is one entry. A two-line entry is one row: the detail is drawn

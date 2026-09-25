@@ -86,6 +86,11 @@ var Methods = []string{
 	proto.MethodContextClear,
 	proto.MethodContextSend,
 	proto.MethodBrowserOpen,
+	proto.MethodCompanyCreate,
+	proto.MethodCompanyRename,
+	proto.MethodCompanyDelete,
+	proto.MethodCompanyAssign,
+	proto.MethodCompanyUnassign,
 }
 
 // Serve accepts connections until the listener is closed.
@@ -476,6 +481,14 @@ func (c *clientConn) dispatch(req proto.Request) (any, error) {
 			return nil, err
 		}
 		return nil, c.srv.RenameWorkspace(session.WorkspaceID(p.Workspace), p.Name)
+
+	case proto.MethodCompanyCreate, proto.MethodCompanyRename, proto.MethodCompanyDelete,
+		proto.MethodCompanyAssign, proto.MethodCompanyUnassign:
+		var p proto.CompanyParams
+		if err := decodeParams(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return c.srv.Company(req.Method, p)
 
 	case proto.MethodPaneSplit:
 		var p proto.PaneSplitParams
@@ -922,6 +935,7 @@ func (s *Server) snapshot() proto.SessionSnapshot {
 	snap.AgentView = s.agentView
 	snap.Update = s.updateSnapshotLocked()
 	sess := s.session
+	snap.Companies = companiesSnapshotLocked(sess)
 	if active := sess.ActiveWorkspace(); active != nil {
 		snap.ActiveWorkspace = uint64(active.ID)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -79,8 +80,17 @@ func (t *tui) resolveViewLocked() {
 
 	if _, ok := t.workspaceLocked(); !ok {
 		t.workspace = t.snap.ActiveWorkspace
-		if _, ok := t.workspaceLocked(); !ok {
+		if _, ok := t.workspaceLocked(); !ok || !t.shownLocked(t.workspace) {
+			// Somewhere the list shows, when a company is chosen and has
+			// any: landing on a space the sidebar hides leaves the user
+			// nowhere they can see.
 			t.workspace = t.snap.Workspaces[0].ID
+			for _, w := range t.snap.Workspaces {
+				if t.shownLocked(w.ID) {
+					t.workspace = w.ID
+					break
+				}
+			}
 		}
 	}
 
@@ -115,23 +125,30 @@ func (t *tui) switchWorkspace(forward bool) error {
 		t.mu.Unlock()
 		return t.switchWorkspaceAcross(forward)
 	}
-	if len(t.snap.Workspaces) < 2 {
+	// Among the spaces the list shows: with a company chosen, next space
+	// does not leave it.
+	var spaces []uint64
+	for _, w := range t.snap.Workspaces {
+		if t.shownLocked(w.ID) {
+			spaces = append(spaces, w.ID)
+		}
+	}
+	idx := slices.Index(spaces, t.workspace)
+	if len(spaces) == 0 || (len(spaces) == 1 && idx == 0) {
 		t.mu.Unlock()
 		return nil
 	}
-	idx := 0
-	for i, w := range t.snap.Workspaces {
-		if w.ID == t.workspace {
-			idx = i
-			break
-		}
+	switch {
+	case idx < 0 && forward:
+		idx = 0
+	case idx < 0:
+		idx = len(spaces) - 1
+	case forward:
+		idx = (idx + 1) % len(spaces)
+	default:
+		idx = (idx - 1 + len(spaces)) % len(spaces)
 	}
-	if forward {
-		idx = (idx + 1) % len(t.snap.Workspaces)
-	} else {
-		idx = (idx - 1 + len(t.snap.Workspaces)) % len(t.snap.Workspaces)
-	}
-	t.workspace = t.snap.Workspaces[idx].ID
+	t.workspace = spaces[idx]
 	// The tab and pane belong to the workspace being left, so they are
 	// dropped and resolved afresh against the one being entered.
 	t.rememberFocusLocked()
@@ -205,6 +222,17 @@ func (t *tui) newWorkspaceIn(group string) error {
 	}
 	if group != "" {
 		if err := t.client.GroupWorkspace(ws, group); err != nil {
+			return err
+		}
+	}
+	// Made while a company is chosen, it belongs to that company: the user
+	// is organising that company's work, and a space that appeared nowhere
+	// in the list would be lost the moment it was made.
+	t.mu.Lock()
+	company, chosen := t.companyLocked()
+	t.mu.Unlock()
+	if chosen {
+		if err := t.client.AssignCompany(company.ID, ws, true); err != nil {
 			return err
 		}
 	}
@@ -323,6 +351,7 @@ func (t *tui) jumpToPane(pane uint64) error {
 		return nil
 	}
 	same := t.workspace == ws && t.tab == tab
+	t.revealCompanyLocked(ws)
 	t.rememberFocusLocked()
 	t.workspace, t.tab, t.focus = ws, tab, pane
 	if !same {
@@ -353,6 +382,7 @@ func (t *tui) showTab(tab uint64) error {
 		t.mu.Unlock()
 		return nil
 	}
+	t.revealCompanyLocked(ws)
 	t.rememberFocusLocked()
 	t.workspace, t.tab, t.focus, t.zoom = ws, tab, 0, false
 	t.mu.Unlock()
@@ -366,6 +396,7 @@ func (t *tui) showWorkspace(ws uint64) error {
 		t.mu.Unlock()
 		return nil
 	}
+	t.revealCompanyLocked(ws)
 	t.rememberFocusLocked()
 	t.workspace, t.tab, t.focus, t.zoom = ws, 0, 0, false
 	t.mu.Unlock()
@@ -408,7 +439,7 @@ func (t *tui) newTabHere() error {
 // spacesSectionLocked is the top list: the heading, the tree, and the button
 // that makes another one.
 func (t *tui) spacesSectionLocked() ui.SidebarSection {
-	rows := []ui.SidebarRow{{Kind: ui.SidebarHeading, Label: "spaces"}}
+	rows := []ui.SidebarRow{t.spacesHeadingLocked()}
 	newLabel := "new"
 	if t.multiMachineLocked() {
 		// herdr's: the list is of machines, and a new space goes on the
@@ -436,6 +467,30 @@ func (t *tui) spacesSectionLocked() ui.SidebarSection {
 		}},
 		Scroll: t.spacesScroll,
 	}
+}
+
+// spacesHeadingLocked is the "spaces" heading, with the companies mark at
+// its right: the company shown, and "!" before it when an agent in a space
+// the list hides is waiting, so choosing a company never silences one.
+func (t *tui) spacesHeadingLocked() ui.SidebarRow {
+	row := ui.SidebarRow{Kind: ui.SidebarHeading, Label: "spaces"}
+	if t.multiMachineLocked() || t.client == nil || !t.client.Supports(proto.MethodCompanyCreate) {
+		// A list of machines has no one session to choose within, and an
+		// older server has no companies to choose.
+		return row
+	}
+	name := ""
+	if c, ok := t.companyLocked(); ok {
+		name = c.Name
+	}
+	width := t.sidebarWidthLocked() - len(row.Label) - 7
+	row.Trailing = ui.CompanyLabel(name, len(t.snap.Companies) > 0, width)
+	if t.waitingElsewhereLocked() > 0 {
+		row.Trailing = "! " + row.Trailing
+	}
+	row.TrailingAction = ui.ActionCompanies
+	row.Active = name != ""
+	return row
 }
 
 // agentsSectionLocked is the bottom list: the heading with its toggle, and
@@ -497,7 +552,13 @@ func (t *tui) spaceRowsFrom(src spaceSource) []ui.SidebarRow {
 	seen := make(map[string]bool)
 	here := src.machine == ""
 
+	// With a company chosen, the session being shown lists its spaces
+	// only; another machine's list is its own session's, and has none.
+	shown := func(w proto.WorkspaceInfo) bool { return !here || t.shownLocked(w.ID) }
 	for _, w := range src.snap.Workspaces {
+		if !shown(w) {
+			continue
+		}
 		if w.Group == "" {
 			rows = append(rows, t.spaceRowFrom(src, w, src.depth))
 			continue
@@ -507,7 +568,7 @@ func (t *tui) spaceRowsFrom(src spaceSource) []ui.SidebarRow {
 		}
 		seen[w.Group] = true
 
-		members := groupMembersIn(src.snap, w.Group)
+		members := slices.DeleteFunc(groupMembersIn(src.snap, w.Group), func(m proto.WorkspaceInfo) bool { return !shown(m) })
 		folded := src.folded[w.Group]
 		inGroup := false
 		for _, m := range members {
@@ -706,6 +767,11 @@ func (t *tui) agentEntriesFrom(src agentSource) ([]ui.SidebarRow, []uint64) {
 	var rows []ui.SidebarRow
 	var seqs []uint64
 	for _, w := range src.snap.Workspaces {
+		if src.here && !t.shownLocked(w.ID) {
+			// A company chosen shows its agents only; the heading above
+			// says when one elsewhere is waiting.
+			continue
+		}
 		for _, tab := range w.Tabs {
 			var entries []ui.SidebarRow
 			var entrySeqs []uint64

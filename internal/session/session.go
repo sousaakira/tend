@@ -124,6 +124,10 @@ type Session struct {
 	nextTab       uint64
 	nextWorkspace uint64
 
+	// companies are the user's groupings of workspaces (company.go).
+	companies   []*Company
+	nextCompany uint64
+
 	// stateSeq numbers state changes, for Pane.StateSeq.
 	stateSeq uint64
 
@@ -359,6 +363,7 @@ func (s *Session) CloseWorkspace(id WorkspaceID) ([]PaneID, error) {
 		if s.active >= len(s.workspaces) {
 			s.active = len(s.workspaces) - 1
 		}
+		s.forgetWorkspace(id)
 		return closed, nil
 	}
 	return nil, fmt.Errorf("%w: %d", ErrNoSuchWorkspace, id)
@@ -685,7 +690,7 @@ func (s *Session) CheckInvariants() error {
 			return fmt.Errorf("index maps pane %d to tab %d, the tree says %d", id, tab.ID, want)
 		}
 	}
-	return nil
+	return s.checkCompanies()
 }
 
 func checkNode(n *node) error {

@@ -37,6 +37,19 @@ type Snapshot struct {
 	NextPane      uint64 `json:"next_pane"`
 	NextTab       uint64 `json:"next_tab"`
 	NextWorkspace uint64 `json:"next_workspace"`
+
+	// Companies are the user's groupings of workspaces (company.go). They
+	// are left out while there are none, so a file from before them and a
+	// session that never used them read the same.
+	Companies   []CompanySnapshot `json:"companies,omitempty"`
+	NextCompany uint64            `json:"next_company,omitempty"`
+}
+
+// CompanySnapshot is one company and its workspaces, in its order.
+type CompanySnapshot struct {
+	ID         uint64   `json:"id"`
+	Name       string   `json:"name"`
+	Workspaces []uint64 `json:"workspaces,omitempty"`
 }
 
 // WorkspaceSnapshot is one space.
@@ -119,6 +132,14 @@ func (s *Session) SnapshotWith(dirs map[PaneID]string, sessions map[PaneID]Agent
 		NextPane:      s.nextPane,
 		NextTab:       s.nextTab,
 		NextWorkspace: s.nextWorkspace,
+		NextCompany:   s.nextCompany,
+	}
+	for _, c := range s.companies {
+		cs := CompanySnapshot{ID: uint64(c.ID), Name: c.Name}
+		for _, w := range c.Workspaces {
+			cs.Workspaces = append(cs.Workspaces, uint64(w))
+		}
+		snap.Companies = append(snap.Companies, cs)
 	}
 	for _, w := range s.workspaces {
 		ws := WorkspaceSnapshot{
@@ -285,6 +306,21 @@ func Restore(snap Snapshot) (*Session, error) {
 		s.active = min(max(snap.Active, 0), len(s.workspaces)-1)
 	}
 	s.raiseCounters()
+
+	s.nextCompany = snap.NextCompany
+	ids := make(map[uint64]bool, len(snap.Companies))
+	for _, cs := range snap.Companies {
+		if cs.ID == 0 || ids[cs.ID] {
+			continue // no way to tell which of two is meant; keep the first
+		}
+		ids[cs.ID] = true
+		c := &Company{ID: CompanyID(cs.ID), Name: cs.Name}
+		for _, w := range cs.Workspaces {
+			c.Workspaces = append(c.Workspaces, WorkspaceID(w))
+		}
+		s.companies = append(s.companies, c)
+	}
+	s.sanitizeCompanies()
 
 	if err := s.CheckInvariants(); err != nil {
 		return nil, fmt.Errorf("session: snapshot does not describe a valid session: %w", err)

@@ -758,6 +758,8 @@ func (t *tui) clickSidebar(x, y int) (bool, error) {
 		t.mu.Unlock()
 		t.openMenu(ui.GlobalMenu(t.serverStale(), ready, notes, x, y))
 		return true, nil
+	case row.Action == ui.ActionCompanies:
+		return true, t.openCompanies()
 	case row.Action == ui.ActionToggleGrouped:
 		t.mu.Lock()
 		t.grouped = !t.grouped

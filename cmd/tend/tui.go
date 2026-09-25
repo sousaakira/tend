@@ -267,6 +267,12 @@ type tui struct {
 	about       *ui.AboutView
 	sessions    *ui.SessionsView
 	sessionList []proto.AgentSessionInfo
+	// companies is the companies panel while it is up; company the one the
+	// sidebar shows, zero for every space, read from disk once the first
+	// snapshot is in (tui_companies.go).
+	companies     *ui.CompaniesView
+	company       uint64
+	companyLoaded bool
 	// issues is the GitHub issues panel while it is up; issueState what
 	// the client keeps for it between frames (tui_issues.go).
 	issues     *ui.IssuesView
@@ -585,6 +591,7 @@ func (t *tui) refresh() error {
 
 	t.mu.Lock()
 	t.snap = snap
+	t.syncCompaniesLocked()
 	t.resolveViewLocked()
 	t.revealSidebarLocked()
 	tab := t.tab
@@ -905,6 +912,7 @@ func (t *tui) refreshSnapshot() error {
 	t.mu.Lock()
 	before := t.tab
 	t.snap = snap
+	t.syncCompaniesLocked()
 	t.resolveViewLocked()
 	t.revealSidebarLocked()
 	changed := t.tab != before
@@ -1112,6 +1120,7 @@ func (t *tui) buildFrame() ui.Frame {
 		About:        t.about,
 		AgentManager: t.agentMgr,
 		Sessions:     t.sessions,
+		Companies:    t.companies,
 		Issues:       t.issues,
 		Errors:       t.errors,
 		Context:      t.contextView,
@@ -1316,6 +1325,9 @@ func (t *tui) handleInput(data []byte) error {
 	}
 	if t.sessionsUp() {
 		return t.sessionsInput(data)
+	}
+	if t.companiesUp() {
+		return t.companiesInput(data)
 	}
 	if t.issuesUp() {
 		return t.issuesInput(data)
@@ -1525,6 +1537,8 @@ func (t *tui) command(action ui.Action) error {
 		return t.openAgentManager()
 	case ui.CommandSessions:
 		return t.openSessions()
+	case ui.CommandCompanies:
+		return t.openCompanies()
 	case ui.CommandIssues:
 		return t.openIssues()
 	case ui.CommandErrors:

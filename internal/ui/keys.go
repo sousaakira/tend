@@ -109,6 +109,9 @@ const (
 	// CommandBrowser asks for a page and opens it in the browser (tend's
 	// own, prefix+B).
 	CommandBrowser
+	// CommandCompanies opens the companies panel: which company's spaces
+	// the sidebar shows (herdr's user-defined Spaces, prefix+O).
+	CommandCompanies
 	// CommandLiteralPrefix sends the prefix key itself to the pane, which is
 	// how an inner multiplexer or an editor bound to Ctrl+B still receives it.
 	CommandLiteralPrefix
@@ -222,6 +225,8 @@ func (c Command) String() string {
 		return "context"
 	case CommandBrowser:
 		return "browser"
+	case CommandCompanies:
+		return "companies"
 	default:
 		return "none"
 	}
@@ -266,6 +271,7 @@ var Keys = []struct {
 	{"E", CommandErrors, "errors from GlitchTip, to fix"},
 	{"C", CommandContext, "context: captured, to send to an agent"},
 	{"B", CommandBrowser, "open a page in the browser"},
+	{"O", CommandCompanies, "companies: which spaces the sidebar shows"},
 	{"g", CommandNavigator, "find a space, tab or pane"},
 	{"w", CommandNavigate, "walk the sidebar"},
 	{"m", CommandMenu, "menu"},
@@ -358,6 +364,7 @@ func DefaultBindings() map[string]Command {
 		"E":         CommandErrors,
 		"C":         CommandContext,
 		"B":         CommandBrowser,
+		"O":         CommandCompanies,
 		"g":         CommandNavigator, "w": CommandNavigate,
 		"e": CommandEditScrollback,
 		"f": CommandFiles,

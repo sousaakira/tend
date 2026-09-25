@@ -337,6 +337,34 @@ func (c *Client) GroupWorkspace(ws uint64, group string) error {
 	return c.Call(proto.MethodWorkspaceGroup, proto.WorkspaceGroupParams{Workspace: ws, Group: group}, nil)
 }
 
+// CreateCompany makes a company, with a workspace in it already when ws is
+// not zero, and returns its id.
+func (c *Client) CreateCompany(name string, ws uint64) (uint64, error) {
+	var res proto.CompanyCreateResult
+	err := c.Call(proto.MethodCompanyCreate, proto.CompanyParams{Name: name, Workspace: ws}, &res)
+	return res.Company, err
+}
+
+// RenameCompany names a company again.
+func (c *Client) RenameCompany(company uint64, name string) error {
+	return c.Call(proto.MethodCompanyRename, proto.CompanyParams{Company: company, Name: name}, nil)
+}
+
+// DeleteCompany deletes a company; its workspaces are left as they are.
+func (c *Client) DeleteCompany(company uint64) error {
+	return c.Call(proto.MethodCompanyDelete, proto.CompanyParams{Company: company}, nil)
+}
+
+// AssignCompany puts a workspace in a company, or with in false takes it
+// out.
+func (c *Client) AssignCompany(company, ws uint64, in bool) error {
+	method := proto.MethodCompanyAssign
+	if !in {
+		method = proto.MethodCompanyUnassign
+	}
+	return c.Call(method, proto.CompanyParams{Company: company, Workspace: ws}, nil)
+}
+
 // CloseWorkspace closes a workspace and every pane in it.
 func (c *Client) CloseWorkspace(ws uint64) error {
 	return c.Call(proto.MethodWorkspaceClose, proto.WorkspaceCloseParams{Workspace: ws}, nil)

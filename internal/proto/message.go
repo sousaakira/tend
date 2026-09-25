@@ -102,6 +102,16 @@ const (
 	// (server/browser.go); none attached is an error, and the client opens
 	// the page itself instead.
 	MethodBrowserOpen = "browser.open"
+
+	// The company methods keep herdr's user-defined Spaces (space.create,
+	// space.rename, space.delete, space.assign, space.unassign), named for
+	// what tend calls them. The companies themselves travel in the
+	// snapshot.
+	MethodCompanyCreate   = "company.create"
+	MethodCompanyRename   = "company.rename"
+	MethodCompanyDelete   = "company.delete"
+	MethodCompanyAssign   = "company.assign"
+	MethodCompanyUnassign = "company.unassign"
 	// MethodPaneFocus says which pane the client is looking at, so programs
 	// that asked for focus events are told.
 	MethodPaneFocus = "pane.focus"
@@ -218,6 +228,11 @@ var KnownMethods = []string{
 	MethodContextClear,
 	MethodContextSend,
 	MethodBrowserOpen,
+	MethodCompanyCreate,
+	MethodCompanyRename,
+	MethodCompanyDelete,
+	MethodCompanyAssign,
+	MethodCompanyUnassign,
 }
 
 // ErrUnknownMethod is what a server answers when it has never heard of a
@@ -476,6 +491,31 @@ type SessionSnapshot struct {
 	TabBarSeparator string          `json:"tab_bar_separator,omitempty"`
 	// Update is what the server's release check knows, if anything.
 	Update *UpdateInfo `json:"update,omitempty"`
+	// Companies are the user's groupings of workspaces, in the order they
+	// were made. Which one is being looked at is the client's.
+	Companies []CompanyInfo `json:"companies,omitempty"`
+}
+
+// CompanyInfo is one company and its workspaces, in its order.
+type CompanyInfo struct {
+	ID         uint64   `json:"id"`
+	Name       string   `json:"name"`
+	Workspaces []uint64 `json:"workspaces,omitempty"`
+}
+
+// CompanyParams names a company, and for create, rename, assign and
+// unassign what to do with it: Name for the first two, Workspace for the
+// others. Create takes a Workspace too, to put in the new company at once,
+// as herdr's space.create takes assign_workspace_id.
+type CompanyParams struct {
+	Company   uint64 `json:"company,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Workspace uint64 `json:"workspace,omitempty"`
+}
+
+// CompanyCreateResult is the company made.
+type CompanyCreateResult struct {
+	Company uint64 `json:"company"`
 }
 
 // UpdateInfo is herdr's update state as a client shows it.

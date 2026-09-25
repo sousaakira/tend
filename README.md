@@ -110,6 +110,13 @@ context panel opens with them, to look over and send on to the agent. Nothing to
 (`docs/BROWSER.md`). `ctrl+b w` walks them too, and `[ui.toolbar] enabled =
 false` takes the row away.
 
+The mark at the right of the "spaces" heading (or `ctrl+b O`) is for
+companies: make one for each company you work for, tick which spaces it
+holds, and choose it — the sidebar then lists that company's spaces and
+their agents only, and a space you make goes into it. "all spaces" brings
+the rest back; a `!` beside the mark says an agent in a hidden space is
+waiting. Choosing one changes only what you see: every space keeps running.
+
 The sidebar's right edge can be dragged to make it wider or narrower (18 to
 36 columns); a double click on it puts it back to `[ui] sidebar_width`.
 

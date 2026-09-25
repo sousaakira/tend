@@ -7,6 +7,7 @@ import (
 	"github.com/sousaakira/tend/internal/agentview"
 	"github.com/sousaakira/tend/internal/config"
 	"github.com/sousaakira/tend/internal/proto"
+	"github.com/sousaakira/tend/internal/ui"
 )
 
 // TestPriorityPutsWhatNeedsYouFirst is herdr's agent_panel_sort = "priority":
@@ -84,5 +85,50 @@ func TestAViewDecidesWhichAgentsAreListed(t *testing.T) {
 	}
 	if heading := tu.agentsSectionLocked().Rows[0].Label; heading != "agents · urgent" {
 		t.Errorf("heading = %q", heading)
+	}
+}
+
+// TestACompanyChosenStillSaysWhoIsWaiting: with a company chosen, the
+// sidebar lists its spaces and their agents only, and an agent waiting in
+// a space it hides is counted for the "!" beside the heading; the panel
+// says which company that agent is in. If it regresses, choosing a company
+// silences an agent that stopped for the user.
+func TestACompanyChosenStillSaysWhoIsWaiting(t *testing.T) {
+	tu := &tui{config: config.Defaults(), companyLoaded: true, company: 7}
+	tu.snap = proto.SessionSnapshot{
+		Workspaces: []proto.WorkspaceInfo{
+			{ID: 1, Name: "acme-api", Tabs: []proto.TabInfo{{ID: 1, Panes: []uint64{1}}}},
+			{ID: 2, Name: "globex-site", Tabs: []proto.TabInfo{{ID: 2, Panes: []uint64{2}}}},
+		},
+		Panes: []proto.PaneInfo{
+			{ID: 1, Agent: "claude", State: "working", Running: true},
+			{ID: 2, Agent: "claude", State: "blocked", Running: true},
+		},
+		Companies: []proto.CompanyInfo{{ID: 7, Name: "Acme", Workspaces: []uint64{1}}, {ID: 9, Name: "Globex", Workspaces: []uint64{2}}},
+	}
+	tu.workspace = 1
+	var spaces, agents []uint64
+	for _, r := range tu.spaceRowsLocked() {
+		spaces = append(spaces, r.Workspace)
+	}
+	for _, r := range tu.agentRowsLocked() {
+		agents = append(agents, r.Pane)
+	}
+	if len(spaces) != 1 || spaces[0] != 1 || len(agents) != 1 || agents[0] != 1 {
+		t.Errorf("listed spaces %v and agents %v, want Acme's only", spaces, agents)
+	}
+	if n := tu.waitingElsewhereLocked(); n != 1 {
+		t.Errorf("waiting elsewhere = %d, want the one in Globex", n)
+	}
+
+	tu.companies = &ui.CompaniesView{}
+	tu.fillCompaniesLocked()
+	if e := tu.companies.Entries; len(e) != 3 || e[0].Waiting != 1 || e[1].Waiting != 0 || e[2].Waiting != 1 || tu.companies.Active != 7 {
+		t.Errorf("panel entries %+v", e)
+	}
+
+	tu.company = 0
+	if n := tu.waitingElsewhereLocked(); n != 0 {
+		t.Errorf("with every space shown nothing is elsewhere, got %d", n)
 	}
 }
