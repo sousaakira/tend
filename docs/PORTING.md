@@ -792,6 +792,15 @@ Publishing a release, which each one needs for the check to see it:
 4. `make manifest NOTES=notes.md` — `dist/latest.json`.
 5. `gh release create v0.4.0 --notes-file notes.md dist/*` — latest.json
    with the binaries, or no tend will hear of the release.
+6. Put the notes in CHANGELOG.md under `## v0.4.0 — date`, the headings one
+   level down and without the install and platforms boilerplate, moving
+   what was under "Unreleased" into them.
+
+The repository is `auth-com-br/tend` (the release tooling's default). Build
+from a clean checkout of the tag (`git worktree add --detach … v0.4.0`), so
+nothing uncommitted reaches a release. `.github/workflows/` can only be
+pushed with a token that has the `workflow` scope; over ssh it goes as any
+other file.
 
 Left: Homebrew, mise and Nix guidance (`update_install_command`), the
 preview channel's own manifest shape (`PreviewManifest`, build ids), the
