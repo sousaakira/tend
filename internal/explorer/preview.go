@@ -12,7 +12,7 @@ import (
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The preview (`tend view`) is a file shown read-only in a pane beside the

@@ -10,7 +10,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The search view looks for text in every file of the project, as an

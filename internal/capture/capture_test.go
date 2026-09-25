@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // TestItemsAreCheckedAndReadAsAnAgentReadsThem: each kind needs its own

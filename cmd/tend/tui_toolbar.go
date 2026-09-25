@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The toolbar over the sidebar's lists (internal/ui/toolbar.go): tend's own,

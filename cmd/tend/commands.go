@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // The user's own commands ([[keys.command]]), from the client's side: the key

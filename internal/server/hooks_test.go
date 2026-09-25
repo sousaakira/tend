@@ -5,9 +5,9 @@ package server
 import (
 	"testing"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 func u64(n uint64) *uint64 { return &n }

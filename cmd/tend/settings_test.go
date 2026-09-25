@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/update"
+	"github.com/auth-com-br/tend/internal/update"
 )
 
 // TestTheSettingsScreenChangesTheFileAndTheSession: a settings screen that

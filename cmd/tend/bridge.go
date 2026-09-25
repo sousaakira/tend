@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/transport"
 )
 
 // runBridge joins stdin and stdout to a session's socket.

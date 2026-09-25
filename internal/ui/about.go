@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The about panel is tend's own, opened from the global menu: which tend is
@@ -13,8 +13,8 @@ import (
 
 // The project's addresses, which the panel opens.
 const (
-	SiteURL   = "https://sousaakira.github.io/tend/"
-	SourceURL = "https://github.com/sousaakira/tend"
+	SiteURL   = "https://tend.auth.com.br/"
+	SourceURL = "https://github.com/auth-com-br/tend"
 )
 
 // AboutView is the panel while it is up.
@@ -135,7 +135,7 @@ func drawAbout(dst *vt.Grid, v *AboutView, theme Theme) {
 	if server != "" {
 		row(box.Y+6, "server", server, style)
 	}
-	row(box.Y+7, "author", "Akira Sousa", theme.Notes)
+	row(box.Y+7, "made by", "Auth Tecnologia Ltda · Akira Sousa", theme.Notes)
 	row(box.Y+9, "site", SiteURL, theme.NotesAccent)
 	row(box.Y+10, "source", SourceURL, theme.NotesAccent)
 	row(box.Y+11, "license", "Apache-2.0 · see NOTICE", theme.Notes)

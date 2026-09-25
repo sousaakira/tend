@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/vt"
 	"testing"
 	"time"
 )

@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // refreshEvery is how often the panel reads the disk and git again. Often

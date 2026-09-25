@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // TestCommandsGoToTheBrowsersAttached: a command reaches every browser

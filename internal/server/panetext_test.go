@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // textScreen writes lines into a terminal, letting the earlier ones scroll off

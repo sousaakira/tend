@@ -3,9 +3,9 @@ package main
 import (
 	"strings"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/notify"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/notify"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // Settings are read at start and can be changed while tend runs: herdr

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sousaakira/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/detect"
 )
 
 // A snapshot is the session as it can be written down: which spaces, tabs and

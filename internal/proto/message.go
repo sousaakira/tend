@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/sousaakira/tend/internal/agentview"
+	"github.com/auth-com-br/tend/internal/agentview"
 )
 
 // Method names are permanent. Renaming one is a protocol break; adding one is

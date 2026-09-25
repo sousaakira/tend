@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // A layout is an arrangement somebody set up and would like back: three panes

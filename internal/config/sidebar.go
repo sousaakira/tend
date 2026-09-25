@@ -10,7 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/sousaakira/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/detect"
 )
 
 // What each row of the sidebar shows: herdr's [ui.sidebar.agents] and

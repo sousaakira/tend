@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // ErrBadAgent means a report named no agent.

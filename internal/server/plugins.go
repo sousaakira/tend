@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/sousaakira/tend/internal/plugin"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/plugin"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // A plugin's event hooks run here, because this is where events are. What a

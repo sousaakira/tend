@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestTheContextPanelShowsAnItemsParts: the list of captures, the chosen

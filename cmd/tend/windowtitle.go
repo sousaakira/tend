@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/sousaakira/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/config"
 )
 
 // The outer window's title: herdr's `ui.window_title` (`app/window_title.rs`).

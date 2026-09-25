@@ -6,9 +6,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agentview"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/agentview"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // Navigating a session means three things that are easy to confuse: which

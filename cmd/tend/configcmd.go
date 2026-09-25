@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sousaakira/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/config"
 )
 
 // runConfig shows where the settings live, or writes a starting point.

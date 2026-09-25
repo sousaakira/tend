@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestTheCompaniesPanelIsClickedWhereItIsDrawn: the list shows every space

@@ -3,7 +3,7 @@ package session
 import (
 	"testing"
 
-	"github.com/sousaakira/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/detect"
 )
 
 // TestAnAgentThatFinishesUnwatchedIsUnseen holds herdr's rule for "done": an

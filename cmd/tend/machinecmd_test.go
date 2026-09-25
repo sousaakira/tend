@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/client"
-	"github.com/sousaakira/tend/internal/machines"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/client"
+	"github.com/auth-com-br/tend/internal/machines"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/transport"
 )
 
 // TestMachineCommandsKeepTheCatalog: herdr's `machine` — add with a label

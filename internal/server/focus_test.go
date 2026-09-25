@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // TestOnlyAProgramThatAskedIsToldAboutFocus: a focus report to a program that

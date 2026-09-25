@@ -8,9 +8,9 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/explorer"
-	"github.com/sousaakira/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/explorer"
+	"github.com/auth-com-br/tend/internal/server"
 )
 
 // runView is the files panel's preview: one file, read-only, with line

@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The navigator is herdr's (prefix+g): a popup over the screen listing every

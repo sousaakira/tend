@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 func spanStyles(spans []span) map[string]vt.Style {

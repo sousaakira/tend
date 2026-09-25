@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sousaakira/tend/internal/capture"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/capture"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // Browsers are tend's own, and this is their foundation: the server keeps

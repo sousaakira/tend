@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // Reading a long answer in a pane means scrolling it. Reading it in an editor

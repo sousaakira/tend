@@ -3,8 +3,8 @@ package main
 import (
 	"sort"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The agent manager (internal/ui/agentmanager.go, internal/agents): tend's

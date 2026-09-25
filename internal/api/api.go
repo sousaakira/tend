@@ -20,11 +20,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/integration"
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/integration"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // Protocol is the version of this API. It changes when a caller written for

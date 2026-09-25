@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // The user's own commands, bound to keys in [[keys.command]]: herdr's custom

@@ -7,15 +7,15 @@
   <meta name="description" content="tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.">
   <meta property="og:title" content="tend — terminal runtime for coding agents">
   <meta property="og:description" content="tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.">
-  <meta property="og:image" content="https://sousaakira.github.io/tend/session.png">
+  <meta property="og:image" content="https://tend.auth.com.br/session.png">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="alternate" hreflang="en" href="https://sousaakira.github.io/tend/">
-  <link rel="alternate" hreflang="pt-BR" href="https://sousaakira.github.io/tend/pt/">
-  <link rel="alternate" hreflang="es" href="https://sousaakira.github.io/tend/es/">
-  <link rel="alternate" hreflang="ja" href="https://sousaakira.github.io/tend/ja/">
-  <link rel="alternate" hreflang="zh-CN" href="https://sousaakira.github.io/tend/zh/">
-  <link rel="alternate" hreflang="zh" href="https://sousaakira.github.io/tend/zh/">
-  <link rel="alternate" hreflang="x-default" href="https://sousaakira.github.io/tend/">
+  <link rel="alternate" hreflang="en" href="https://tend.auth.com.br/">
+  <link rel="alternate" hreflang="pt-BR" href="https://tend.auth.com.br/pt/">
+  <link rel="alternate" hreflang="es" href="https://tend.auth.com.br/es/">
+  <link rel="alternate" hreflang="ja" href="https://tend.auth.com.br/ja/">
+  <link rel="alternate" hreflang="zh-CN" href="https://tend.auth.com.br/zh/">
+  <link rel="alternate" hreflang="zh" href="https://tend.auth.com.br/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://tend.auth.com.br/">
   <link rel="stylesheet" href="site.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -99,7 +99,7 @@
       <a href="#session">session</a>
       <a href="#tools">tools</a>
       <a href="#keys">keys</a>
-      <a href="https://github.com/sousaakira/tend">source</a>
+      <a href="https://github.com/auth-com-br/tend">source</a>
       <span class="langs"><a href="pt/" data-lang="pt" onclick="try{localStorage.setItem('tend-lang','pt')}catch(e){}">pt</a> · <a href="./" data-lang="en" aria-current="page" onclick="try{localStorage.setItem('tend-lang','en')}catch(e){}">en</a> · <a href="es/" data-lang="es" onclick="try{localStorage.setItem('tend-lang','es')}catch(e){}">es</a> · <a href="ja/" data-lang="ja" onclick="try{localStorage.setItem('tend-lang','ja')}catch(e){}">ja</a> · <a href="zh/" data-lang="zh" onclick="try{localStorage.setItem('tend-lang','zh')}catch(e){}">zh</a></span>
     </nav>
   </header>
@@ -125,15 +125,15 @@
       </div>
       <div id="panel-unix" class="install-panel" role="tabpanel" data-panel="unix">
         <div class="cmd-wrap">
-          <pre class="cmd" id="install-cmd">curl -fsSL https://sousaakira.github.io/tend/install.sh | sh</pre>
-          <button type="button" class="copy" data-copy="curl -fsSL https://sousaakira.github.io/tend/install.sh | sh" data-label="copy" data-done="copied">copy</button>
+          <pre class="cmd" id="install-cmd">curl -fsSL https://tend.auth.com.br/install.sh | sh</pre>
+          <button type="button" class="copy" data-copy="curl -fsSL https://tend.auth.com.br/install.sh | sh" data-label="copy" data-done="copied">copy</button>
         </div>
         <p class="install-dl">
-          <a id="bin-link" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-amd64">Download tend-linux-amd64</a>
+          <a id="bin-link" href="https://github.com/auth-com-br/tend/releases/latest/download/tend-linux-amd64">Download tend-linux-amd64</a>
           <span class="sep">·</span>
-          <a id="bin-alt" href="https://github.com/sousaakira/tend/releases/latest/download/tend-linux-arm64">arm64</a>
+          <a id="bin-alt" href="https://github.com/auth-com-br/tend/releases/latest/download/tend-linux-arm64">arm64</a>
           <span class="sep">·</span>
-          <a href="https://github.com/sousaakira/tend/releases/latest">all builds</a>
+          <a href="https://github.com/auth-com-br/tend/releases/latest">all builds</a>
         </p>
         <p>Puts a binary in <code>~/.local/bin</code> (or <code>$GOBIN</code> / <code>$TEND_INSTALL_DIR</code>). Prefers a release build for this machine; otherwise clones and builds with Go.</p>
         <p class="note">From a checkout: <code>make install</code>.</p>
@@ -351,6 +351,7 @@
   </main>
 
   <footer>
+    <p>A product of <a href="https://auth.com.br">Auth Tecnologia Ltda</a> · Belo Horizonte, Brasil</p>
     <p>Apache-2.0. An independent Go implementation; see NOTICE in the repository.</p>
   </footer>
   <script src="site.js" defer></script>

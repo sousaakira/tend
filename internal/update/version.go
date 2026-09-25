@@ -12,7 +12,7 @@ import (
 // that follows each new release. herdr publishes its manifest on its own
 // site; tend has its releases on GitHub and nowhere else, and this needs
 // nothing more to keep true.
-const StableManifest = "https://github.com/sousaakira/tend/releases/latest/download/latest.json"
+const StableManifest = "https://github.com/auth-com-br/tend/releases/latest/download/latest.json"
 
 // Version is a release's version, herdr's `Version`: major.minor.patch,
 // with an optional leading v, and nothing else.

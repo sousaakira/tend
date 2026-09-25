@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // TestTheContextBufferKeepsTheNewestAndSaysWhenItChanges: items get ids in

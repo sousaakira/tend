@@ -16,14 +16,14 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/client"
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/client"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/transport"
 )
 
 // sessionFlag adds the -s flag every client command shares.

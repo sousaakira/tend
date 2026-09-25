@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // Values a script reports about a space rather than a pane — a jj status, a

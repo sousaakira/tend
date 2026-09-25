@@ -7,7 +7,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The issues panel is tend's own, after Orca's task page: the GitHub issues

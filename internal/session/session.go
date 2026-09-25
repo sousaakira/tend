@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sousaakira/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/detect"
 )
 
 // Identifiers are unique for the lifetime of a session and are never reused,

@@ -3,7 +3,7 @@ package explorer
 import (
 	"strconv"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The panel's settings, opened by the gear on the activity bar, as

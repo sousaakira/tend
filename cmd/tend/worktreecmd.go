@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/sousaakira/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/api"
 )
 
 // `tend worktree …`: a checkout of its own for an agent, as a space in the

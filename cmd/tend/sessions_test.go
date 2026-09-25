@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestTheSessionsListFindsResumesAndDeletes: prefix+S lists the Claude Code

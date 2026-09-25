@@ -1,0 +1,31 @@
+# Every commit in a pull request must carry a Signed-off-by line: the
+# Developer Certificate of Origin, which CONTRIBUTING.md explains. Checked
+# here with git alone, so no third-party action sees the repository.
+name: DCO
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  signoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every commit is signed off
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=0
+          for c in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            author=$(git log -1 --format='%an <%ae>' "$c")
+            if ! git log -1 --format=%B "$c" | grep -qiF "Signed-off-by: $author"; then
+              echo "::error::$(git log -1 --format='%h %s' "$c") is not signed off by $author"
+              missing=1
+            fi
+          done
+          if [ "$missing" = 1 ]; then
+            echo "Sign off with: git rebase --signoff $BASE"
+            exit 1
+          fi

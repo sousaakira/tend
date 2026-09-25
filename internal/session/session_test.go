@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/detect"
 )
 
 // check asserts the session's shape. Every test calls it after mutating,

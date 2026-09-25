@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // A popup is herdr's (`app/popup.rs`, `popup_size.rs`): a terminal floating

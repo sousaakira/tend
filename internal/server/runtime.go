@@ -4,11 +4,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // paneRuntime is one pane's live half: its process, its terminal, and the

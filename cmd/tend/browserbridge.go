@@ -17,9 +17,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/browserext"
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/browserext"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // The browser tend opens and the bridge its extension talks through

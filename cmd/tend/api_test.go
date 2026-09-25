@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/transport"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestServeOffersTheAutomationSocket is the hooks path end to end: a real

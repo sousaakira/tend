@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/update"
+	"github.com/auth-com-br/tend/internal/update"
 )
 
 // manifestServer publishes a manifest naming version, over real HTTP, and

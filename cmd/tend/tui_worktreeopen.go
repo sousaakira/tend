@@ -3,9 +3,9 @@ package main
 import (
 	"unicode/utf8"
 
-	"github.com/sousaakira/tend/internal/api"
-	sessionpkg "github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/api"
+	sessionpkg "github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The open-worktree popup, herdr's: the space's repository's checkouts,

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // A stopped server used to take the whole session with it: every space, tab

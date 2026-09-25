@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // twoMachines is a client on this machine with one other saved, whose

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sousaakira/tend/internal/capture"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/capture"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The context buffer: what tools captured, kept here until it is sent to an

@@ -28,7 +28,7 @@ GitHub, Chromium or Edge for tend's browser, `paplay` for sounds — and the
 tests that need one skip or use a stand-in when it is not.
 
 ```bash
-git clone https://github.com/sousaakira/tend
+git clone https://github.com/auth-com-br/tend
 cd tend
 make dev        # the fast loop: cached, stops at the first failure
 make install    # build, and put tend in GOBIN or ~/.local/bin
@@ -145,12 +145,21 @@ different claims — write down which in your pull request.
   `docs: ...`.
 - The body explains the reasoning, and names the bug when there was one. The
   history is written to be read — `git log` shows the style.
+- Sign off every commit (`git commit -s`), which adds a
+  `Signed-off-by: Your Name <you@example.com>` line. It is the
+  [Developer Certificate of Origin](https://developercertificate.org/): your
+  statement that you wrote the change, or have the right to submit it, under
+  the project's licence. A check on every pull request looks for it; a
+  commit without it can be fixed with `git commit --amend -s` or
+  `git rebase --signoff`.
 - One pull request per change. Say what it does, why, how you verified it
   (and against what), and what you did not verify.
 - Update the docs a change affects: README.md for what users see,
   docs/PORTING.md for anything ported or deliberately different.
 
 ## Reporting a bug
+
+A security problem is not reported here: see [SECURITY.md](SECURITY.md).
 
 Open an issue with what you did, what you expected, what happened, and
 `tend version`. If a server is involved, say whether you restarted it or ran
@@ -159,7 +168,11 @@ common cause of "it does nothing".
 
 ## Licence and names
 
-tend is Apache-2.0 ([LICENSE](LICENSE)); by contributing you agree your work is
-under it. [NOTICE](NOTICE) attributes herdr; keep it. Do not use the herdr
+tend is made by [Auth Tecnologia Ltda](https://auth.com.br) and is
+Apache-2.0 ([LICENSE](LICENSE)); by contributing, and signing off, you agree
+your work is under it.
+
+Everyone taking part is expected to follow the
+[code of conduct](CODE_OF_CONDUCT.md). [NOTICE](NOTICE) attributes herdr; keep it. Do not use the herdr
 name or marks in the product itself — in code comments and docs, referring to
 herdr as the original is right and expected.

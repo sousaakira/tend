@@ -5,9 +5,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/github"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/github"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // GitHubIssues is github.issues: the issues of the repository the project a

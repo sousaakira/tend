@@ -5,7 +5,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The context panel is tend's own: what tools have captured (the server's

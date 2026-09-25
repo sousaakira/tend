@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // The right end of the tab bar: herdr's `app/tab_bar_status.rs`.

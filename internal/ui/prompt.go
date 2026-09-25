@@ -5,7 +5,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // Typing a name belongs in front of the user, not on the status line.

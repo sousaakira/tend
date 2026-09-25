@@ -12,9 +12,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // runSession starts a server with one pane per command and prints their state

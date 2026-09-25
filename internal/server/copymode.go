@@ -3,10 +3,10 @@ package server
 import (
 	"errors"
 
-	"github.com/sousaakira/tend/internal/copymode"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/copymode"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // ErrUnknownMotion means a motion copy mode does not have.

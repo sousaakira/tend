@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // Selecting text is the one thing a terminal multiplexer takes away.

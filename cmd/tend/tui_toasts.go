@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // Notifications on tend's own screen are herdr's cards

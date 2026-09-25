@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // TestToastsQueueAndReplaceAsHerdrs: one card at a time; the rest wait, at

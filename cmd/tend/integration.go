@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/sousaakira/tend/internal/integration"
+	"github.com/auth-com-br/tend/internal/integration"
 )
 
 // runIntegration installs, removes or lists agent hooks. It does not need a

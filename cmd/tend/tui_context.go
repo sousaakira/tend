@@ -4,10 +4,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/capture"
-	"github.com/sousaakira/tend/internal/notify"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/capture"
+	"github.com/auth-com-br/tend/internal/notify"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The context panel (internal/ui/contextpanel.go): the server's context

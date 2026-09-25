@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The version, and the about panel (internal/ui/about.go): tend's own.

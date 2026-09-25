@@ -1,6 +1,6 @@
 package api
 
-import "github.com/sousaakira/tend/internal/session"
+import "github.com/auth-com-br/tend/internal/session"
 
 // The parameters of each method, as named types: the handlers decode into
 // them and the published schema (tend api schema) is read off them, so

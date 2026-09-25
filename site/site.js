@@ -1,5 +1,5 @@
 (function () {
-  var RELEASE = "https://github.com/sousaakira/tend/releases/latest/download/";
+  var RELEASE = "https://github.com/auth-com-br/tend/releases/latest/download/";
 
   bindCopy();
   bindInstall();

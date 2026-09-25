@@ -1,9 +1,9 @@
 package server
 
 import (
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // A pane's images live in its terminal, which is here; the terminal that can

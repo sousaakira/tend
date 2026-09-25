@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/transport"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // startRealSession is a session run as a user runs one, with its automation

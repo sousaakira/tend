@@ -14,7 +14,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // Point is a cell, by absolute row and column.

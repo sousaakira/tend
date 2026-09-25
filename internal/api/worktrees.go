@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/worktree"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/worktree"
 )
 
 // Worktrees over the socket, herdr's four methods. A worktree becomes a space:

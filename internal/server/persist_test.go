@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 func persistentServer(t *testing.T, stateFile string) *Server {

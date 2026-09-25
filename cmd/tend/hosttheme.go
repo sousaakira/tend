@@ -4,8 +4,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // Following the outer terminal between light and dark: herdr's theme

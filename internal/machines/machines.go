@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/transport"
 )
 
 // Limits, herdr's.

@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The first-run welcome is herdr's onboarding (ui/onboarding.rs,

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // TestCompaniesAreSentToClientsAndSurviveARestart: a company made, filled,

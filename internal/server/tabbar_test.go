@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/config"
 )
 
 func statusTexts(s *Server) []string {

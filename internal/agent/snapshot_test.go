@@ -3,8 +3,8 @@ package agent
 import (
 	"testing"
 
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 func screenWith(t *testing.T, cols, rows int, input string) *vt.Screen {

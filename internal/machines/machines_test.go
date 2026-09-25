@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/transport"
 )
 
 // TestTheCatalogKeepsMachinesAsHerdrDoes: saved, found, relabelled,

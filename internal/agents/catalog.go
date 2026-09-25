@@ -1,6 +1,6 @@
 package agents
 
-import "github.com/sousaakira/tend/internal/integration"
+import "github.com/auth-com-br/tend/internal/integration"
 
 // Catalog is every agent tend offers, in the order the manager lists them.
 //

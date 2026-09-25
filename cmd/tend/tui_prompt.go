@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sousaakira/tend/internal/ui"
-	"github.com/sousaakira/tend/internal/worktree"
+	"github.com/auth-com-br/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/worktree"
 )
 
 // Renaming needs somewhere to type, and a prompt on the status line is the

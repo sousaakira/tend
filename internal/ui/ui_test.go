@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/vt"
 
 	"github.com/mattn/go-runewidth"
 )

@@ -6,8 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/server"
 )
 
 // The browser methods' stream (server/browser.go): browser.attach turns a

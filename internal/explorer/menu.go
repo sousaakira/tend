@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The tree's context menu is herdr-sidebar's (`actions.rs`, menu_entries):

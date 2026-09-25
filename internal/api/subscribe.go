@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // events.wait answers one event and returns; a caller that wants to follow the

@@ -11,13 +11,13 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sousaakira/tend/internal/client"
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/notify"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/ui"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/client"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/notify"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // frameInterval is how often the screen is repainted when something changed.

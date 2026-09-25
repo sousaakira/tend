@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // The kinds of item. A browser extension sends elements and URLs; the files

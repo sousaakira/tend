@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // `tend keys` prints what every key does, with the user's own bindings

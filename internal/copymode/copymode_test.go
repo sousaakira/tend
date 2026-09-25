@@ -3,7 +3,7 @@ package copymode
 import (
 	"testing"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // screen writes text into a fresh terminal and reads it back as copy mode sees

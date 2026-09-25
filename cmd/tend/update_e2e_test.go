@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/server"
 )
 
 // TestAReleaseFoundIsSaidAndItsNotesOpenFromTheMenu: when the server's

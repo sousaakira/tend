@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The agent manager is tend's own: a panel over the screen listing the

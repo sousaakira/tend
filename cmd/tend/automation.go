@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/transport"
 )
 
 // The commands a script uses, and the ones a person types when driving an

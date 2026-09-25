@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestTheReleaseNotesPanelIsHerdrs: the panel says the version and whether

@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/config"
 )
 
 // `tend browser`, the session's browsers from a shell (server/browser.go):

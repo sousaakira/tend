@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/update"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/update"
 )
 
 // The release check is herdr's auto_update (`update.rs`, `app/mod.rs`): the

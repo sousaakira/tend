@@ -3,8 +3,8 @@ package server
 import (
 	"fmt"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // "Why does it say that?" is the question detection raises most often: an

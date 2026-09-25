@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The toolbar is tend's own, not herdr's: a row of tools at the top of the

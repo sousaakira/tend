@@ -1,0 +1,34 @@
+name: Bug
+description: Something tend does wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: tend version
+      description: The output of `tend version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: After upgrading, did you restart or hand off the server?
+      description: A new client on an old server is the most common cause of "it does nothing".
+      options:
+        - "Yes: tend handoff, or tend update -handoff"
+        - "Yes: the server was restarted"
+        - "No, or not sure"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS, terminal, and the agent involved, if any.

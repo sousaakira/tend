@@ -17,7 +17,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/sousaakira/tend/internal/update"
+	"github.com/auth-com-br/tend/internal/update"
 )
 
 // Config is everything tend can be told.
@@ -874,7 +874,7 @@ focused = false
 # Stable's is published with each release on GitHub; set manifest only to
 # follow somewhere else. Preview has none unless you set one.
 channel = "stable"
-# manifest = "https://github.com/sousaakira/tend/releases/latest/download/latest.json"
+# manifest = "https://github.com/auth-com-br/tend/releases/latest/download/latest.json"
 # preview = "https://example.invalid/tend/preview.json"
 # Look for a newer release in the background and say when there is one:
 # a notice, and "update ready" in the status bar. Nothing is installed.

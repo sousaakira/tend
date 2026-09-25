@@ -5,8 +5,8 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // A sidebar entry as herdr lays it out: rows of tokens, each row fitted to

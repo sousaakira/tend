@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // Links are herdr's: ctrl+click on a web URL in a pane opens it, and with

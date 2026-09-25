@@ -3,8 +3,8 @@ package server
 import (
 	"sync"
 
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // EventKind is what happened.

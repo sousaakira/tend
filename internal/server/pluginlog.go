@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sousaakira/tend/internal/plugin"
+	"github.com/auth-com-br/tend/internal/plugin"
 )
 
 // A plugin's commands run where nobody sees them — a hook on every focus

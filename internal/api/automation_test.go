@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // result digs the result object out of a reply, failing on an error reply.

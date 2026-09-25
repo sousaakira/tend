@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/api"
 )
 
 // `tend context`, the context buffer from a shell: what a script or a

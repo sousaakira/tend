@@ -3,9 +3,9 @@ package main
 import (
 	"strings"
 
-	"github.com/sousaakira/tend/internal/notify"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/notify"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The release check's side of the client, herdr's (`client/shell/`): the

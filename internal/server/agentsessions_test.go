@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/agent"
 )
 
 // TestAConversationOpenInAPaneIsNotDeleted: the sessions list says which

@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/transport"
-	"github.com/sousaakira/tend/internal/ui"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The TUI is tested by running it, because almost everything that can go wrong
@@ -3035,7 +3035,7 @@ func TestTheAboutPanelSaysWhichTendIsRunning(t *testing.T) {
 		return strings.Contains(s, "a terminal runtime for coding agents") &&
 			strings.Contains(s, "development build") &&
 			strings.Contains(s, "v0.5.0 — run tend handoff -s tui") &&
-			strings.Contains(s, "Akira Sousa") && strings.Contains(s, "sousaakira.github.io/tend") &&
+			strings.Contains(s, "Auth Tecnologia Ltda") && strings.Contains(s, "tend.auth.com.br") &&
 			strings.Contains(s, "Apache-2.0")
 	})
 	a.send(t, "\x1b")

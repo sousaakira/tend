@@ -11,14 +11,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sousaakira/tend/internal/update"
+	"github.com/auth-com-br/tend/internal/update"
 )
 
 func main() {
 	version := flag.String("version", "", "the release's tag, v0.4.0")
 	notes := flag.String("notes", "", "a file holding the release's notes, in markdown")
 	dir := flag.String("dir", "dist", "where the binaries and SHA256SUMS are, and where latest.json goes")
-	repo := flag.String("repo", "sousaakira/tend", "the GitHub repository the release is in")
+	repo := flag.String("repo", "auth-com-br/tend", "the GitHub repository the release is in")
 	flag.Parse()
 	if err := run(*version, *notes, *dir, *repo); err != nil {
 		fmt.Fprintln(os.Stderr, "manifest:", err)

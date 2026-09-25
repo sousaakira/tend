@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestTheNavigatorFindsAPaneByNameAndGoesThere: prefix+g puts herdr's

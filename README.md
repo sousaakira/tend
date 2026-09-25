@@ -6,7 +6,9 @@ tend keeps agent terminals running in a background server, marks every pane as
 working, blocked or idle, and exposes that over a socket API so agents can
 spawn panes and wait on each other.
 
-Written in Go, single binary, no cgo.
+Written in Go, single binary, no cgo. Made by
+[Auth Tecnologia Ltda](https://auth.com.br), Belo Horizonte, Brazil —
+[tend.auth.com.br](https://tend.auth.com.br).
 
 > Status: usable. Panes are drawn, keys and the mouse reach them, text reflows
 > when you resize, scrollback is readable, the client reconnects by itself, and
@@ -251,8 +253,12 @@ PANE  COMMAND  AGENT   STATE    TITLE
 ## install
 
 ```bash
-curl -fsSL https://sousaakira.github.io/tend/install.sh | sh
+curl -fsSL https://tend.auth.com.br/install.sh | sh
 ```
+
+tend used to live at `github.com/sousaakira/tend`. Old links, clones and
+installs follow it here: GitHub redirects the repository, and an installed
+tend keeps finding its updates.
 
 tend looks for a newer release in the background and says so: a notice, and
 "update ready" at the right of the status bar. The sidebar's "menu" → update
@@ -303,5 +309,7 @@ tend is a port of herdr to Go, and the porting is ongoing.
 
 ## license
 
-Apache-2.0. tend is an independent Go implementation of the architecture of
+Apache-2.0, © Auth Tecnologia Ltda. Security problems go to
+seguranca@auth.com.br ([SECURITY.md](SECURITY.md)); contributions are signed
+off ([CONTRIBUTING.md](CONTRIBUTING.md)). tend is an independent Go implementation of the architecture of
 [herdr](https://github.com/herdrdev/herdr); see [NOTICE](NOTICE) for attribution.

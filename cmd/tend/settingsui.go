@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/integration"
-	sessionpkg "github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/integration"
+	sessionpkg "github.com/auth-com-br/tend/internal/session"
 )
 
 // The settings screen: herdr's `prefix+s`, a list of the few settings worth

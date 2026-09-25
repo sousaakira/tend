@@ -5,11 +5,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/notify"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
-	"github.com/sousaakira/tend/internal/worktree"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/notify"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/worktree"
 )
 
 // Being told that an agent needs you, which is the reason this program exists.

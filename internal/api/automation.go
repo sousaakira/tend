@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/agentview"
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/plugin"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/agentview"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/plugin"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // The half of the socket that exists for scripts rather than for hooks: read a

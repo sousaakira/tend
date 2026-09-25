@@ -9,10 +9,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/explorer"
-	"github.com/sousaakira/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/explorer"
+	"github.com/auth-com-br/tend/internal/server"
 )
 
 // runFiles is the file explorer. prefix+f docks it on the left of a tab in

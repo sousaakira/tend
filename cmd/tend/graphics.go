@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // An image a program drew in a pane has to be drawn again here, on the

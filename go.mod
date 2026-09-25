@@ -1,4 +1,4 @@
-module github.com/sousaakira/tend
+module github.com/auth-com-br/tend
 
 go 1.27.1
 

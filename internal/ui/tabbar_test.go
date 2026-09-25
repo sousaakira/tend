@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // TestTabsAreBlocksWithTheBarBetween: each tab is a block of its name and

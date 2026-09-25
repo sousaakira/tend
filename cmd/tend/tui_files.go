@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // The file explorer is a panel: a pane docked along the left of the tab,

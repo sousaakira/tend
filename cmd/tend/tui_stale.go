@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // A tend server outlives the client that started it. Building a new binary and

@@ -6,11 +6,11 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/sousaakira/tend/internal/agents"
-	"github.com/sousaakira/tend/internal/agentsessions"
-	"github.com/sousaakira/tend/internal/integration"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/agents"
+	"github.com/auth-com-br/tend/internal/agentsessions"
+	"github.com/auth-com-br/tend/internal/integration"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // AgentsCatalog is the agent CLIs tend knows of, as found on this machine,

@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // Palette is one of the named themes: herdr's palette tokens (`app/state.rs`

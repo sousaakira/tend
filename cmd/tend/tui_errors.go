@@ -6,14 +6,14 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/capture"
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/glitchtip"
-	"github.com/sousaakira/tend/internal/proto"
-	sessionpkg "github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/ui"
-	"github.com/sousaakira/tend/internal/worktree"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/capture"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/glitchtip"
+	"github.com/auth-com-br/tend/internal/proto"
+	sessionpkg "github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/worktree"
 )
 
 // The errors panel (internal/ui/errors.go, internal/glitchtip): tend's own,

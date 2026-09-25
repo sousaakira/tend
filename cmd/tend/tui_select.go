@@ -8,9 +8,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/sousaakira/tend/internal/clipboard"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/clipboard"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // There are two kinds of pane as far as the mouse goes, and they are handled

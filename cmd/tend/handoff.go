@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sousaakira/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/server"
 )
 
 // A replacement server is this binary started with what it needs already open.

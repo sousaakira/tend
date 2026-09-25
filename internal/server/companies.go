@@ -3,8 +3,8 @@ package server
 import (
 	"fmt"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // Company answers the company methods: herdr's user-defined Spaces

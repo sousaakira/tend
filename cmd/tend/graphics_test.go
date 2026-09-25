@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/proto"
 )
 
 // TestOnlyTerminalsThatDrawImagesAreSentThem: a terminal that does not speak

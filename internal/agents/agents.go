@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sousaakira/tend/internal/integration"
+	"github.com/auth-com-br/tend/internal/integration"
 )
 
 // Method is one way to install an agent, as its vendor documents it. Kind

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/plugin"
-	"github.com/sousaakira/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/plugin"
+	"github.com/auth-com-br/tend/internal/pty"
 )
 
 // pluginDir writes a plugin whose hooks record what they were told, so a test

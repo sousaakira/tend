@@ -21,18 +21,18 @@ package server
 import (
 	"errors"
 	"fmt"
-	"github.com/sousaakira/tend/internal/agentview"
+	"github.com/auth-com-br/tend/internal/agentview"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/sousaakira/tend/internal/agent"
-	"github.com/sousaakira/tend/internal/agentsessions"
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/session"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/agent"
+	"github.com/auth-com-br/tend/internal/agentsessions"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 const (

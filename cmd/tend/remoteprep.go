@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/transport"
 )
 
 // Getting tend onto the other machine: herdr's remote attach

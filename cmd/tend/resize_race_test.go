@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/pty"
 )
 
 // TestResizingWhileDrawingDoesNotCrashTheClient: the window manager sends

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/config"
 )
 
 // TestAShellCommandRunsWhereThePaneIs: a background command runs in the

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sousaakira/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/detect"
 )
 
 // An agent can say what it is doing instead of being watched doing it. A hook

@@ -6,7 +6,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // The navigator is herdr's (prefix+g, `client/shell/aggregate_navigation.rs`

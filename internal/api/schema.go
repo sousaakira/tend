@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/agentview"
-	"github.com/sousaakira/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/agentview"
+	"github.com/auth-com-br/tend/internal/server"
 )
 
 // The published schema is herdr's `herdr api schema`: a JSON Schema of what

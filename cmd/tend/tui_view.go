@@ -4,9 +4,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // Scrolling looks back through a pane's history without stopping it.

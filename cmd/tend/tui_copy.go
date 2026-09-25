@@ -3,9 +3,9 @@ package main
 import (
 	"strings"
 
-	"github.com/sousaakira/tend/internal/copymode"
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/copymode"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // Copy mode is keyboard selection through a pane's history, the way tmux does

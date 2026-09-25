@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/sousaakira/tend/internal/vt"
+import "github.com/auth-com-br/tend/internal/vt"
 
 // A panel's close mark, tend's own: a ✕ on its top edge, near its right
 // corner, that closes it as esc does — for somebody reaching for the mouse

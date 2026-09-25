@@ -3,8 +3,8 @@ package server
 import (
 	"fmt"
 
-	"github.com/sousaakira/tend/internal/detect"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // A program can ask to be told when its terminal gains or loses focus (mode

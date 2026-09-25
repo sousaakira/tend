@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/api"
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/plugin"
-	"github.com/sousaakira/tend/internal/server"
-	"github.com/sousaakira/tend/internal/transport"
+	"github.com/auth-com-br/tend/internal/api"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/plugin"
+	"github.com/auth-com-br/tend/internal/server"
+	"github.com/auth-com-br/tend/internal/transport"
 
 	"golang.org/x/term"
 )

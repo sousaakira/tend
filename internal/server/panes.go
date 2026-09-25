@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/sousaakira/tend/internal/pty"
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/pty"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // Small questions a script or a plugin asks about a pane's place: who is next

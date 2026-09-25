@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sousaakira/tend/internal/session"
+	"github.com/auth-com-br/tend/internal/session"
 )
 
 // Agent names: herdr's agent.rename and agent.start's name

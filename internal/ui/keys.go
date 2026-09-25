@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sousaakira/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/config"
 )
 
 // Key handling is a state machine over raw bytes rather than a parsed key

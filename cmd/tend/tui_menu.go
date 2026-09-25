@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/sousaakira/tend/internal/proto"
-	"github.com/sousaakira/tend/internal/ui"
+	"github.com/auth-com-br/tend/internal/proto"
+	"github.com/auth-com-br/tend/internal/ui"
 )
 
 // The menu is how everything that is not a jump gets done with the mouse.

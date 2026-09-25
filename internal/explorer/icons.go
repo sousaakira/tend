@@ -3,7 +3,7 @@ package explorer
 import (
 	"strings"
 
-	"github.com/sousaakira/tend/internal/vt"
+	"github.com/auth-com-br/tend/internal/vt"
 )
 
 // Icons beside the tree's entries are herdr-sidebar's (`icons.rs`), both

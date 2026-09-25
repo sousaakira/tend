@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sousaakira/tend/internal/config"
-	"github.com/sousaakira/tend/internal/integration"
+	"github.com/auth-com-br/tend/internal/config"
+	"github.com/auth-com-br/tend/internal/integration"
 )
 
 // TestTheSettingsScreenInstallsAnAgentsHooks is herdr's integrations

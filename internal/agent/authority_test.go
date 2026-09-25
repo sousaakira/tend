@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sousaakira/tend/internal/detect"
+	"github.com/auth-com-br/tend/internal/detect"
 )
 
 func seq(n uint64) *uint64 { return &n }
