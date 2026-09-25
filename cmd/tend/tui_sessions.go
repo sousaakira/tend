@@ -166,7 +166,7 @@ func (t *tui) sessionsInput(data []byte) error {
 		i, onEntry := ui.SessionAt(v, cols, rows, ev.X, ev.Y)
 		t.mu.Unlock()
 		switch {
-		case inRect(g.Close, ev.X, ev.Y):
+		case inRect(g.Close, ev.X, ev.Y), ui.OnCloseMark(g.Box, ev.X, ev.Y):
 			t.closeSessions()
 			return nil
 		case inRect(g.Resume, ev.X, ev.Y):

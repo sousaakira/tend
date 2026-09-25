@@ -275,6 +275,16 @@ func (t *tui) handleMouse(ev ui.MouseEvent) error {
 	if t.promptMouse(ev) {
 		return nil
 	}
+	if ev.Kind == ui.MousePress && ev.Button == 0 {
+		// The overlay's ✕ — the keys' help — closes it, as a key does.
+		t.mu.Lock()
+		lines, cols, rows := t.overlay, t.cols, t.rows
+		t.mu.Unlock()
+		if box, ok := ui.OverlayBox(lines, cols, rows); ok && len(lines) > 0 && ui.OnCloseMark(box, ev.X, ev.Y) {
+			t.dismissOverlay()
+			return nil
+		}
+	}
 	// The navigator is over everything, so the mouse is all its while it is
 	// up; a press outside it puts it away.
 	if handled, err := t.navigatorMouse(ev); handled {

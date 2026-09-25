@@ -36,6 +36,24 @@ type Config struct {
 	Sound      Sound     `toml:"sound"`
 	Files      Files     `toml:"files"`
 	Issues     Issues    `toml:"issues"`
+	Errors     Errors    `toml:"errors"`
+}
+
+// Errors connects the errors panel to a GlitchTip server. Both are set from
+// the panel, which writes them here — the settings file is written readable
+// by its owner alone — and TEND_GLITCHTIP_TOKEN, when set, is used for a
+// token that is not.
+type Errors struct {
+	URL   string `toml:"url"`
+	Token string `toml:"token"`
+}
+
+// ErrorsToken is the GlitchTip token: the settings', else the environment's.
+func (c Config) ErrorsToken() string {
+	if c.Errors.Token != "" {
+		return c.Errors.Token
+	}
+	return os.Getenv("TEND_GLITCHTIP_TOKEN")
 }
 
 // Issues configures starting work on a GitHub issue from the issues panel.
@@ -267,7 +285,7 @@ type Toolbar struct {
 }
 
 // ToolbarTools are the tools a toolbar can hold, in their default order.
-var ToolbarTools = []string{"files", "agents", "sessions", "issues", "browser", "context"}
+var ToolbarTools = []string{"files", "agents", "sessions", "issues", "errors", "browser", "context"}
 
 // ToolbarItems is the tools the sidebar shows, none when it is off.
 func (c Config) ToolbarItems() []string {
@@ -794,7 +812,7 @@ grouped = false
 # agents, browser and context. items picks which, in order.
 # [ui.toolbar]
 # enabled = true
-# items = ["files", "agents", "sessions", "issues", "browser", "context"]
+# items = ["files", "agents", "sessions", "issues", "errors", "browser", "context"]
 
 [ui.theme]
 # A named theme: catppuccin, catppuccin-latte, terminal, tokyo-night,
@@ -868,6 +886,13 @@ version_check = true
 enabled = false
 # done = "~/sounds/done.wav"
 # request = "~/sounds/request.wav"
+
+[errors]
+# The errors panel (prefix+E) reads a GlitchTip server's errors. Connect it
+# from the panel, which writes these; the token can also come from
+# TEND_GLITCHTIP_TOKEN.
+# url = "https://glitchtip.example.com"
+# token = ""
 
 [issues]
 # Starting work on a GitHub issue (the issues panel, w) makes a worktree for

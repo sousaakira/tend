@@ -401,7 +401,7 @@ func (t *tui) navigatorMouse(ev ui.MouseEvent) (bool, error) {
 		}
 	case ui.MousePress:
 		switch {
-		case !hit.Inside:
+		case !hit.Inside, ui.OnCloseMark(ui.NavigatorRect(t.cols, t.rows), ev.X, ev.Y):
 			t.closeNavigator()
 		case hit.Search:
 			t.mu.Lock()

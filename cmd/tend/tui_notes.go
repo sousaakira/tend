@@ -98,7 +98,7 @@ func (t *tui) notesInput(data []byte) error {
 			t.mu.Unlock()
 			if g, ok := ui.ReleaseNotesLayout(cols, rows); ok && ev.Button == 0 {
 				switch {
-				case inRect(g.Close, ev.X, ev.Y):
+				case inRect(g.Close, ev.X, ev.Y), ui.OnCloseMark(g.Box, ev.X, ev.Y):
 					t.closeReleaseNotes()
 					return nil
 				case inRect(g.Update, ev.X, ev.Y):

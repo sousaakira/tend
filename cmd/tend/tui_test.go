@@ -3046,3 +3046,32 @@ func TestTheAboutPanelSaysWhichTendIsRunning(t *testing.T) {
 		return strings.Contains(s, "tend development build · server v0.5.0") && strings.Contains(s, "ctrl+b then:")
 	})
 }
+
+// TestAClickOnAPanelsCloseMarkClosesIt: the ✕ on a panel's top edge closes
+// it, as esc does — here the keys' help and the sessions list. If it
+// regresses, a panel can be closed from the keyboard alone.
+func TestAClickOnAPanelsCloseMarkClosesIt(t *testing.T) {
+	a := startSession(t, 110, 30)
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	closeMark := func() (int, int) {
+		for y, line := range a.lines() {
+			if c := columnOfString(line, " ✕ "); c >= 0 {
+				return c + 2, y + 1
+			}
+		}
+		t.Fatalf("no ✕ on the screen:\n%s", a.text())
+		return 0, 0
+	}
+
+	a.send(t, "\x02?")
+	a.waitForScreen(t, "the help", func(s string) bool { return strings.Contains(s, "ctrl+b then:") })
+	x, y := closeMark()
+	a.clickAt(t, x, y)
+	a.waitForScreen(t, "the help gone", func(s string) bool { return !strings.Contains(s, "ctrl+b then:") })
+
+	a.send(t, "\x02S")
+	a.waitForScreen(t, "the sessions", func(s string) bool { return strings.Contains(s, "AGENT SESSIONS") })
+	x, y = closeMark()
+	a.clickAt(t, x, y)
+	a.waitForScreen(t, "the sessions gone", func(s string) bool { return !strings.Contains(s, "AGENT SESSIONS") })
+}

@@ -349,6 +349,8 @@ func (t *tui) issueListKey(key string) bool {
 		t.setIssueMode(false)
 	case "\x0e": // ctrl+n
 		t.startIssueCompose(true)
+	case "\x18": // ctrl+x: close the one under the cursor, asking how
+		t.askIssueState()
 	case "\x1b[5~":
 		t.moveIssueCursor(-10)
 	case "\x1b[6~":
@@ -863,11 +865,23 @@ func (t *tui) askIssueState() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	v := t.issues
-	if v == nil || v.Detail == nil || v.Detail.Loading {
+	if v == nil {
 		return
 	}
+	// The one open, or from the list the one under the cursor: an issue
+	// already fixed is closed without opening it.
+	var target ui.IssueEntry
+	switch {
+	case v.Detail != nil && !v.Detail.Loading:
+		target = v.Detail.IssueEntry
+	case v.Detail == nil && !v.PullRequests && v.Cursor < len(v.Issues):
+		target = v.Issues[v.Cursor]
+	default:
+		return
+	}
+	v.Target = &target
 	v.Confirm = "close"
-	if v.Detail.State == "closed" {
+	if target.State == "closed" {
 		v.Confirm = "reopen"
 	}
 	t.dirty = true
@@ -878,7 +892,7 @@ func (t *tui) askIssueState() {
 func (t *tui) issueConfirmKey(key string) {
 	t.mu.Lock()
 	v := t.issues
-	if v == nil || (v.Detail == nil && v.PR == nil) {
+	if v == nil || (v.Target == nil && v.PR == nil) {
 		t.mu.Unlock()
 		return
 	}
@@ -900,10 +914,12 @@ func (t *tui) issueConfirmKey(key string) {
 		state = "open"
 	}
 	if state == "" {
+		v.Target = nil
 		t.mu.Unlock()
 		return
 	}
-	repo, number := t.repoOfLocked(v.Detail.Repo), v.Detail.Number
+	repo, number := t.repoOfLocked(v.Target.Repo), v.Target.Number
+	v.Target = nil
 	v.Message = "asking GitHub…"
 	t.mu.Unlock()
 	go func() {
@@ -954,14 +970,18 @@ var issueAgents = map[string][]string{
 
 // issueAgent is the agent work on an issue starts in: the one the settings
 // name, else the one in the pane the panel was opened from, else claude.
-func (t *tui) issueAgentLocked() string {
+func (t *tui) issueAgentLocked() string { return t.agentForLocked(t.issueState.pane) }
+
+// agentForLocked is the agent work is started in, from a panel opened from
+// pane: the one the settings name, else pane's, else claude.
+func (t *tui) agentForLocked(pane uint64) string {
 	name := strings.TrimSpace(t.config.Issues.Agent)
 	if name == "cursor-agent" {
 		name = "cursor"
 	}
 	if name == "" {
 		for _, p := range t.snap.Panes {
-			if p.ID == t.issueState.pane {
+			if p.ID == pane {
 				if _, ok := issueAgents[p.Agent]; ok {
 					name = p.Agent
 				}

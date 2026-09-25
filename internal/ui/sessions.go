@@ -200,6 +200,7 @@ func drawSessions(dst *vt.Grid, v *SessionsView, theme Theme) {
 		}
 	}
 	drawBox(dst, box, theme.NotesAccent)
+	drawCloseMark(dst, box, withBold(theme.NotesAccent))
 	if box.Rows < 10 || box.Cols < 40 {
 		return
 	}

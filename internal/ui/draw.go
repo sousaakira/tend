@@ -426,6 +426,8 @@ type Frame struct {
 	Sessions *SessionsView
 	// Issues is the GitHub issues panel, when it is up (issues.go).
 	Issues *IssuesView
+	// Errors is the errors panel, when it is up (errors.go).
+	Errors *ErrorsView
 	// Context is the context panel, when it is up (contextpanel.go).
 	Context *ContextView
 	// UpdateReady puts herdr's "update ready" at the right of the status
@@ -636,6 +638,9 @@ func Draw(dst *vt.Grid, f Frame, theme Theme) {
 	if f.Issues != nil {
 		drawIssues(dst, f.Issues, theme)
 	}
+	if f.Errors != nil {
+		drawErrors(dst, f.Errors, theme)
+	}
 	if f.Context != nil {
 		drawContextPanel(dst, f.Context, theme)
 	}
@@ -748,6 +753,7 @@ func drawOverlay(dst *vt.Grid, lines []string, theme Theme) {
 		}
 	}
 	drawBox(dst, box, theme.OverlayTitle)
+	drawCloseMark(dst, box, theme.OverlayTitle)
 
 	limit := box.X + box.Cols - 2
 	writeString(dst, box.X+3, box.Y+1, truncate(lines[0], box.Cols-6), theme.OverlayTitle, limit)

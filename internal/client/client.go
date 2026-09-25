@@ -612,6 +612,12 @@ func (c *Client) ContextClear() error {
 	return c.Call(proto.MethodContextClear, proto.ContextIDs{}, nil)
 }
 
+// ContextAdd puts an item in the buffer, and says what was kept.
+func (c *Client) ContextAdd(item proto.ContextItem) (proto.ContextItem, error) {
+	var out proto.ContextItem
+	return out, c.Call(proto.MethodContextAdd, item, &out)
+}
+
 // ContextSend types items (none: all) into a pane, submitting nothing.
 func (c *Client) ContextSend(pane uint64, ids []uint64) error {
 	return c.Call(proto.MethodContextSend, proto.ContextSendParams{Pane: pane, IDs: ids}, nil)

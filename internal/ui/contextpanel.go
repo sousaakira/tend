@@ -127,6 +127,7 @@ func drawContextPanel(dst *vt.Grid, v *ContextView, theme Theme) {
 		}
 	}
 	drawBox(dst, box, theme.NotesAccent)
+	drawCloseMark(dst, box, withBold(theme.NotesAccent))
 	if box.Rows < 12 || box.Cols < 40 {
 		return
 	}

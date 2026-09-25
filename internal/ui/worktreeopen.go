@@ -138,6 +138,7 @@ func drawWorktreeOpen(dst *vt.Grid, w WorktreeOpen, theme Theme) {
 		fill(dst, y, r.X, r.X+r.Cols, theme.Menu)
 	}
 	drawBox(dst, r, theme.BorderFocused)
+	drawCloseMark(dst, r, theme.BorderFocused)
 	inner := Rect{X: r.X + 1, Y: r.Y + 1, Cols: r.Cols - 2, Rows: r.Rows - 2}
 	limit := inner.X + inner.Cols
 	bold, dim := theme.Menu, theme.Menu

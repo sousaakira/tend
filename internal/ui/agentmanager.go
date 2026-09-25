@@ -150,6 +150,7 @@ func drawAgentManager(dst *vt.Grid, v *AgentManagerView, theme Theme) {
 		}
 	}
 	drawBox(dst, box, theme.NotesAccent)
+	drawCloseMark(dst, box, withBold(theme.NotesAccent))
 	if box.Rows < 8 || box.Cols < 30 {
 		return
 	}

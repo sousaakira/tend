@@ -95,7 +95,11 @@ labels and assignees, and `w` starts work on it — a worktree on
 a new one. `→` shows the pull requests, with their checks and reviews;
 open one to merge it (`m`), comment, close it or mark a draft ready. An issue
 lists its pull requests, and `p` opens the first.
-Browser (or `ctrl+b B`) asks for a page — the last five opened are listed
+Errors (or `ctrl+b E`) shows what your systems' GlitchTip caught: connect the
+server and an API token from the panel, then open an error to see its stack,
+`f` to hand it to the agent you are working with, `w` to fix it in a worktree
+of its own, and `r` to resolve it — or resolve it from the list with `ctrl+x`,
+without opening it, as `ctrl+x` closes a GitHub issue from its list. Browser (or `ctrl+b B`) asks for a page — the last five opened are listed
 under the field, a click or the arrows away — and opens it in tend's
 browser: Chromium (or Edge) in a profile of the session's own, with tend's
 extension already in it. Its icon, or Alt+Shift+T, lets you pick elements on

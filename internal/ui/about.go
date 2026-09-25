@@ -85,6 +85,9 @@ func AboutLayout(v *AboutView, cols, rows int) AboutGeometry {
 // AboutAt is what a click at a point is on: a button, or an address line.
 func AboutAt(v *AboutView, cols, rows, x, y int) (string, bool) {
 	g := AboutLayout(v, cols, rows)
+	if OnCloseMark(g.Box, x, y) {
+		return AboutClose, true
+	}
 	for _, b := range g.Buttons {
 		if y == b.Y && x >= b.X && x < b.X+b.Cols {
 			return b.ID, true
@@ -107,6 +110,7 @@ func drawAbout(dst *vt.Grid, v *AboutView, theme Theme) {
 		}
 	}
 	drawBox(dst, box, theme.NotesAccent)
+	drawCloseMark(dst, box, withBold(theme.NotesAccent))
 	if box.Rows < 14 || box.Cols < 40 {
 		return
 	}

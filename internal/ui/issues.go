@@ -90,8 +90,11 @@ type IssuesView struct {
 	// Picker is the open issue's labels or assignees being chosen.
 	Picker *IssuePicker
 	// Confirm is a question waiting for its answer: "close" asks for the
-	// reason an issue is closed, "reopen" whether to open it again.
+	// reason an issue is closed, "reopen" whether to open it again; Target
+	// is the issue asked about — the one open, or the list's under the
+	// cursor.
 	Confirm string
+	Target  *IssueEntry
 }
 
 // IssueCompose is what is being written to GitHub.
@@ -159,10 +162,15 @@ func issueButtons(v *IssuesView) []IssueButton {
 			{ID: IssueButtonClose, Label: "[ Close ]"},
 		}
 	}
+	state := IssueButton{ID: IssueButtonState, Label: "[ Close issue ]"}
+	if v.Cursor < len(v.Issues) && v.Issues[v.Cursor].State == "closed" {
+		state = IssueButton{ID: IssueButtonState, Label: "[ Reopen ]"}
+	}
 	return []IssueButton{
 		{ID: IssueButtonOpen, Label: "[ Open ]"},
 		{ID: IssueButtonStart, Label: "[ Start work ]"},
 		{ID: IssueButtonNew, Label: "[ New issue ]"},
+		state,
 		{ID: IssueButtonBrowser, Label: "[ In browser ]"},
 		{ID: IssueButtonClose, Label: "[ Close ]"},
 	}
@@ -170,6 +178,9 @@ func issueButtons(v *IssuesView) []IssueButton {
 
 // IssueButtonAt is the button under a point, by its ID.
 func IssueButtonAt(v *IssuesView, cols, rows, x, y int) (string, bool) {
+	if OnCloseMark(IssuesLayout(v, cols, rows).Box, x, y) {
+		return IssueButtonClose, true
+	}
 	for _, b := range IssuesLayout(v, cols, rows).Buttons {
 		if y == b.Y && x >= b.X && x < b.X+b.Cols {
 			return b.ID, true
@@ -425,6 +436,7 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 		}
 	}
 	drawBox(dst, box, theme.NotesAccent)
+	drawCloseMark(dst, box, withBold(theme.NotesAccent))
 	if box.Rows < 14 || box.Cols < 50 {
 		return
 	}
@@ -544,7 +556,7 @@ func drawIssues(dst *vt.Grid, v *IssuesView, theme Theme) {
 	if v.Loading && len(v.Issues) > 0 {
 		msg = "asking GitHub…"
 	}
-	hint := "type to search · tab next filter · ↑↓ move · enter open · ctrl+n new issue · ctrl+o in browser · ctrl+r reload · esc"
+	hint := "type to search · tab next filter · ↑↓ move · enter open · ctrl+x close · ctrl+n new issue · ctrl+o in browser · ctrl+r reload · esc"
 	switch {
 	case len(v.Scopes) > 0:
 		hint += " · ctrl+t repository"
@@ -572,9 +584,9 @@ func drawIssuesFoot(dst *vt.Grid, v *IssuesView, g IssuesGeometry, msg, hint str
 	}
 	switch v.Confirm {
 	case "close":
-		msg, hint = fmt.Sprintf("close #%d?", v.Detail.Number), "enter as completed · n as not planned · esc cancels"
+		msg, hint = fmt.Sprintf("close #%d %s?", v.Target.Number, truncate(v.Target.Title, 50)), "enter as completed · n as not planned · esc cancels"
 	case "reopen":
-		msg, hint = fmt.Sprintf("reopen #%d?", v.Detail.Number), "enter reopens · esc cancels"
+		msg, hint = fmt.Sprintf("reopen #%d %s?", v.Target.Number, truncate(v.Target.Title, 50)), "enter reopens · esc cancels"
 	case "merge":
 		msg, hint = fmt.Sprintf("merge #%d into %s?", v.PR.Number, v.PR.Base), "s squash · m merge commit · r rebase · esc cancels"
 	case "closepr":

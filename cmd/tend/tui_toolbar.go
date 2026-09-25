@@ -19,6 +19,7 @@ var toolLabels = map[string]string{
 	ui.ToolAgents:   "Agents — find and install agents (prefix+A)",
 	ui.ToolSessions: "Sessions — find, resume and delete agent sessions (prefix+S)",
 	ui.ToolIssues:   "Issues — this project's GitHub issues (prefix+I)",
+	ui.ToolErrors:   "Errors — what GlitchTip caught, to fix (prefix+E)",
 	ui.ToolBrowser:  "Browser — open a page (prefix+B)",
 	ui.ToolContext:  "Context — captured, to send to an agent (prefix+C)",
 }
@@ -75,6 +76,8 @@ func (t *tui) runTool(id string) error {
 		return t.openSessions()
 	case ui.ToolIssues:
 		return t.openIssues()
+	case ui.ToolErrors:
+		return t.openErrors()
 	case ui.ToolContext:
 		return t.openContext()
 	case ui.ToolBrowser:

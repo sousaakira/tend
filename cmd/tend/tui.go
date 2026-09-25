@@ -269,8 +269,12 @@ type tui struct {
 	sessionList []proto.AgentSessionInfo
 	// issues is the GitHub issues panel while it is up; issueState what
 	// the client keeps for it between frames (tui_issues.go).
-	issues      *ui.IssuesView
-	issueState  issuesState
+	issues     *ui.IssuesView
+	issueState issuesState
+	// errors is the errors panel while it is up; errorState what the
+	// client keeps for it (tui_errors.go).
+	errors      *ui.ErrorsView
+	errorState  errorsState
 	agentStatus []proto.AgentStatus
 	// contextView is the context panel while it is up, and contextItems the
 	// items it lists, in its order (tui_context.go).
@@ -1109,6 +1113,7 @@ func (t *tui) buildFrame() ui.Frame {
 		AgentManager: t.agentMgr,
 		Sessions:     t.sessions,
 		Issues:       t.issues,
+		Errors:       t.errors,
 		Context:      t.contextView,
 		UpdateReady:  t.updateReadyLocked() != "",
 		Navigator:    t.navigatorFrameLocked(),
@@ -1315,6 +1320,9 @@ func (t *tui) handleInput(data []byte) error {
 	if t.issuesUp() {
 		return t.issuesInput(data)
 	}
+	if t.errorsUp() {
+		return t.errorsInput(data)
+	}
 	if t.contextUp() {
 		return t.contextInput(data)
 	}
@@ -1519,6 +1527,8 @@ func (t *tui) command(action ui.Action) error {
 		return t.openSessions()
 	case ui.CommandIssues:
 		return t.openIssues()
+	case ui.CommandErrors:
+		return t.openErrors()
 
 	case ui.CommandContext:
 		return t.openContext()

@@ -100,6 +100,9 @@ const (
 	// CommandIssues opens the GitHub issues of the project being worked in
 	// (tend's own, prefix+I).
 	CommandIssues
+	// CommandErrors opens the errors a GlitchTip server collected (tend's
+	// own, prefix+E).
+	CommandErrors
 	// CommandContext opens the context panel: what tools captured, to copy
 	// or send to an agent (tend's own, prefix+C).
 	CommandContext
@@ -213,6 +216,8 @@ func (c Command) String() string {
 		return "sessions"
 	case CommandIssues:
 		return "issues"
+	case CommandErrors:
+		return "errors"
 	case CommandContext:
 		return "context"
 	case CommandBrowser:
@@ -258,6 +263,7 @@ var Keys = []struct {
 	{"A", CommandAgentManager, "agent manager: find, install"},
 	{"S", CommandSessions, "agent sessions: find, resume, delete"},
 	{"I", CommandIssues, "GitHub issues of this project"},
+	{"E", CommandErrors, "errors from GlitchTip, to fix"},
 	{"C", CommandContext, "context: captured, to send to an agent"},
 	{"B", CommandBrowser, "open a page in the browser"},
 	{"g", CommandNavigator, "find a space, tab or pane"},
@@ -349,6 +355,7 @@ func DefaultBindings() map[string]Command {
 		"A":         CommandAgentManager,
 		"S":         CommandSessions,
 		"I":         CommandIssues,
+		"E":         CommandErrors,
 		"C":         CommandContext,
 		"B":         CommandBrowser,
 		"g":         CommandNavigator, "w": CommandNavigate,

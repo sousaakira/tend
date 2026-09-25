@@ -134,7 +134,7 @@ func (t *tui) agentManagerInput(data []byte) error {
 		i, onEntry := ui.AgentManagerEntryAt(v, cols, rows, ev.X, ev.Y)
 		t.mu.Unlock()
 		switch {
-		case inRect(g.Close, ev.X, ev.Y):
+		case inRect(g.Close, ev.X, ev.Y), ui.OnCloseMark(g.Box, ev.X, ev.Y):
 			t.closeAgentManager()
 			return nil
 		case inRect(g.Refresh, ev.X, ev.Y):

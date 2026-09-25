@@ -236,7 +236,7 @@ func (t *tui) worktreeOpenMouse(ev ui.MouseEvent) (bool, error) {
 		t.moveWorktreeOpenLocked(1)
 	case ui.MousePress:
 		switch {
-		case !inside && !w.popup.Opening:
+		case (!inside || ui.OnCloseMark(ui.WorktreeOpenRect(w.popup, t.cols, t.rows), ev.X, ev.Y)) && !w.popup.Opening:
 			t.worktreeOpen = nil
 		case search:
 			w.popup.Searching = true

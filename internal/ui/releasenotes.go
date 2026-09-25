@@ -216,6 +216,7 @@ func drawReleaseNotes(dst *vt.Grid, v *ReleaseNotesView, theme Theme) {
 		}
 	}
 	drawBox(dst, box, theme.NotesAccent)
+	drawCloseMark(dst, box, withBold(theme.NotesAccent))
 	if !ok {
 		return
 	}

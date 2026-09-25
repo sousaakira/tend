@@ -75,6 +75,17 @@ JSON
 	a.waitForScreen(t, "the next preset", func(s string) bool { return strings.Contains(s, "label:bug") })
 	waitForFileContent(t, asked, url.QueryEscape("repo:acme/shop is:issue is:open assignee:@me label:bug"))
 
+	// Closed from the list, without opening it: ctrl+x asks how, n says
+	// not planned; esc before that changes nothing.
+	a.send(t, "\x18")
+	a.waitForScreen(t, "the question", func(s string) bool { return strings.Contains(s, "close #42 Checkout button is grey?") })
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "no question", func(s string) bool { return !strings.Contains(s, "close #42") })
+	a.send(t, "\x18")
+	a.waitForScreen(t, "the question again", func(s string) bool { return strings.Contains(s, "close #42 Checkout button is grey?") })
+	a.send(t, "n")
+	waitForFileContent(t, asked, "issue close 42 --repo acme/shop --reason not planned")
+
 	a.send(t, "\r")
 	a.waitForScreen(t, "the issue with its thread", func(s string) bool {
 		return strings.Contains(s, "#42 open · opened by ana") && strings.Contains(s, "checkout button should be green") &&
@@ -169,7 +180,7 @@ esac
 	waitForFileContent(t, asked+".comment", "It's \"fixed\" on main.\nSee the PR.")
 
 	a.send(t, "x")
-	a.waitForScreen(t, "the question", func(s string) bool { return strings.Contains(s, "close #42?") })
+	a.waitForScreen(t, "the question", func(s string) bool { return strings.Contains(s, "close #42 Checkout button is grey?") })
 	a.send(t, "n")
 	a.waitForScreen(t, "it closed", func(s string) bool { return strings.Contains(s, "closed #42 as not planned") })
 	waitForFileContent(t, asked, "issue close 42 --repo acme/shop --reason not planned")

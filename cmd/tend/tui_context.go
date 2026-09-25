@@ -202,6 +202,10 @@ func (t *tui) contextInput(data []byte) error {
 			t.mu.Unlock()
 			return nil
 		}
+		if ui.OnCloseMark(ui.ContextLayout(v, cols, rows).Box, ev.X, ev.Y) {
+			t.mu.Unlock()
+			return t.contextButton(ui.ContextClose)
+		}
 		b, onButton := ui.ContextButtonAt(v, cols, rows, ev.X, ev.Y)
 		i, onItem := ui.ContextItemAt(v, cols, rows, ev.X, ev.Y)
 		if onItem {
@@ -344,7 +348,7 @@ func (t *tui) contextArrived(ev proto.Event) {
 		what = n + " " + what
 	}
 	t.mu.Lock()
-	busy := t.notes != nil || t.about != nil || t.agentMgr != nil || t.sessions != nil || t.issues != nil || t.menu != nil || t.settings != nil ||
+	busy := t.notes != nil || t.about != nil || t.agentMgr != nil || t.sessions != nil || t.issues != nil || t.errors != nil || t.menu != nil || t.settings != nil ||
 		t.prompt != promptNone || t.navigator != nil || t.onboarding
 	open := t.contextView != nil
 	t.mu.Unlock()
