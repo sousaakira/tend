@@ -192,6 +192,13 @@ func (g Git) run(args ...string) ([]byte, error) {
 		return nil, ErrNoRepo
 	}
 	cmd := exec.Command("git", append([]string{"-C", g.Top}, args...)...)
+	// The panel reads the status every two seconds, and a status takes the
+	// index's lock to write back what it refreshed — an optional lock, which
+	// this turns off, as git documents for tools that poll. With it on, the
+	// user's own git add or commit, run at the same moment, failed with
+	// "index.lock: File exists"; and a panel ended in the middle of one left
+	// the lock behind. Locks git needs, for the panel's own add, are kept.
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
