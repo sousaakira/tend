@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tend — terminal runtime for coding agents</title>
-  <meta name="description" content="tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.">
-  <meta property="og:title" content="tend — terminal runtime for coding agents">
-  <meta property="og:description" content="tend keeps agent terminals running after you detach, and marks each pane working, blocked, or idle.">
+  <title>tend — from the ticket and the error to the PR, with agents</title>
+  <meta name="description" content="tend takes your GitHub issues and your production errors, opens a worktree and hands the task to your coding agent. You follow every agent, and close what was fixed, on one screen.">
+  <meta property="og:title" content="tend — from the ticket and the error to the PR, with agents">
+  <meta property="og:description" content="tend takes your GitHub issues and your production errors, opens a worktree and hands the task to your coding agent. You follow every agent, and close what was fixed, on one screen.">
   <meta property="og:image" content="https://tend.auth.com.br/session.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" hreflang="en" href="https://tend.auth.com.br/">
@@ -107,7 +107,7 @@
   <main id="top">
     <section class="lead">
       <h1>tend</h1>
-      <p class="deck">A terminal runtime for coding agents. The server stays up when you leave. Each pane is marked working, blocked, or idle.</p>
+      <p class="deck">From the ticket and the production error to the pull request, with agents, without leaving the terminal. tend takes a GitHub issue or a GlitchTip error, opens a worktree and hands it to Claude Code, Codex or any agent you use. You follow them all — each pane marked working, blocked or idle — and close what was fixed, on the same screen.</p>
     </section>
 
     <section id="install"
@@ -257,7 +257,7 @@
 
     <section id="tools" class="facts">
       <h2>Tools, over the spaces</h2>
-      <p class="note">Six buttons at the top of the sidebar, each with a key after the prefix.</p>
+      <p class="note">Buttons at the top of the sidebar, each with a key after the prefix.</p>
       <dl>
         <div>
           <dt>Files <kbd>f</kbd></dt>
@@ -278,6 +278,14 @@
         <div>
           <dt>Browser and context <kbd>B</kbd> <kbd>C</kbd></dt>
           <dd>A Chromium, Chrome or Edge window with tend's extension: pick elements on a page, note what you want of each, and send them to the agent, looked over first in the context panel.</dd>
+        </div>
+        <div>
+          <dt>Errors <kbd>E</kbd></dt>
+          <dd>What your systems' GlitchTip servers caught, as many servers as you report to. Open an error to read its stack; <kbd>f</kbd> hands it to your agent, <kbd>w</kbd> fixes it in a worktree, <kbd>ctrl</kbd><kbd>x</kbd> resolves it. Each project can open on its own server.</dd>
+        </div>
+        <div>
+          <dt>Companies <kbd>O</kbd></dt>
+          <dd>Working for several companies? Keep each one's spaces together and choose one: the sidebar shows that company's projects and agents, and an agent waiting in another is still flagged.</dd>
         </div>
         <div>
           <dt>Updates</dt>
