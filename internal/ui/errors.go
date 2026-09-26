@@ -86,6 +86,11 @@ type ErrorsView struct {
 	Source  int
 	// Manage is the servers box, when it is up.
 	Manage *ErrorsManage
+	// Folder is the project folder the panel was opened in, by its last
+	// name, and Linked whether it is tied to the server and project shown;
+	// the title offers to tie it, or says it is.
+	Folder string
+	Linked bool
 	// Scopes are "all" and each project, Scope the one listed.
 	Scopes  []string
 	Scope   int
@@ -123,6 +128,8 @@ const (
 	ErrorsAdd       = "add"
 	ErrorsRemove    = "remove"
 	ErrorsManageEnd = "manage-close"
+	// ErrorsLink ties the project folder to what is shown, or unties it.
+	ErrorsLink = "link"
 )
 
 // ErrorsGeometry is where the panel's parts are.
@@ -135,8 +142,10 @@ type ErrorsGeometry struct {
 	List        Rect
 	Body        Rect
 	Buttons     []IssueButton
-	// Settings is the gear on the title line.
+	// Settings is the gear on the title line, and Link what is said there
+	// about the project folder.
 	Settings Rect
+	Link     Rect
 	// ConnectBox is the connect box, when it is up, with its fields and
 	// buttons.
 	ConnectBox     Rect
@@ -185,6 +194,10 @@ func ErrorsLayout(v *ErrorsView, cols, rows int) ErrorsGeometry {
 	box := Rect{X: (cols - w) / 2, Y: (rows - h) / 2, Cols: w, Rows: h}
 	g := ErrorsGeometry{Box: box}
 	g.Settings = Rect{X: box.X + box.Cols - 6, Y: box.Y + 1, Cols: 3, Rows: 1}
+	if label := errorsLinkLabel(v); label != "" {
+		w := runewidth.StringWidth(label)
+		g.Link = Rect{X: box.X + 2 + min(runewidth.StringWidth(errorsTitle(v))+2, max(box.Cols-w-20, 0)), Y: box.Y + 1, Cols: w, Rows: 1}
+	}
 	// A line of chips for the servers when there is more than one, then
 	// one for the projects: each pushes what is under it down a line.
 	off := 0
@@ -305,6 +318,9 @@ func ErrorsAt(v *ErrorsView, cols, rows, x, y int) (string, bool) {
 	}
 	if v.Connected && in(g.Settings) {
 		return ErrorsSettings, true
+	}
+	if g.Link.Cols > 0 && in(g.Link) {
+		return ErrorsLink, true
 	}
 	if v.Detail != nil {
 		return "", false
@@ -435,12 +451,17 @@ func drawErrors(dst *vt.Grid, v *ErrorsView, theme Theme) {
 		return
 	}
 	right := box.X + box.Cols - 1
-	title := "ERRORS"
 	if v.Connected {
-		title += " · " + strings.TrimPrefix(strings.TrimPrefix(v.Server, "https://"), "http://")
 		writeString(dst, g.Settings.X, g.Settings.Y, " ⚙ ", theme.NotesAccent, right)
 	}
-	writeString(dst, box.X+2, box.Y+1, truncate(title, box.Cols-12), withBold(theme.NotesAccent), right)
+	writeString(dst, box.X+2, box.Y+1, truncate(errorsTitle(v), box.Cols-12), withBold(theme.NotesAccent), right)
+	if g.Link.Cols > 0 {
+		style := theme.NotesSub
+		if v.Linked {
+			style = theme.NotesAccent
+		}
+		writeString(dst, g.Link.X, g.Link.Y, errorsLinkLabel(v), style, right)
+	}
 
 	switch {
 	case !v.Connected:
@@ -468,7 +489,7 @@ func drawErrors(dst *vt.Grid, v *ErrorsView, theme Theme) {
 	if msg != "" {
 		writeString(dst, box.X+2, msgY, truncate(msg, box.Cols-4), theme.NotesSub, right)
 	}
-	hint := "type to search · tab status · ctrl+t project · ctrl+g server · ↑↓ move · enter open · ctrl+x resolve · ctrl+f fix with agent · ctrl+o browser · ctrl+r reload · esc"
+	hint := "type to search · tab status · ctrl+t project · ctrl+g server · ctrl+l link folder · ↑↓ move · enter open · ctrl+x resolve · ctrl+f fix with agent · ctrl+o browser · ctrl+r reload · esc"
 	switch {
 	case !v.Connected:
 		hint = "enter connect · esc close"
@@ -485,6 +506,27 @@ func drawErrors(dst *vt.Grid, v *ErrorsView, theme Theme) {
 	if v.Connect != nil {
 		drawErrorsConnect(dst, v.Connect, g, theme)
 	}
+}
+
+// errorsTitle is the title line's words.
+func errorsTitle(v *ErrorsView) string {
+	if !v.Connected {
+		return "ERRORS"
+	}
+	return "ERRORS · " + strings.TrimPrefix(strings.TrimPrefix(v.Server, "https://"), "http://")
+}
+
+// errorsLinkLabel is what the title says about the project folder: that
+// it opens here, or an offer to make it — nothing over an open error, or
+// with no folder or no server.
+func errorsLinkLabel(v *ErrorsView) string {
+	switch {
+	case !v.Connected || v.Folder == "" || v.Detail != nil:
+		return ""
+	case v.Linked:
+		return "⇄ " + v.Folder + " opens here"
+	}
+	return "[ link " + v.Folder + " here ]"
 }
 
 // drawErrorsManage draws the servers box: each server kept, the one shown

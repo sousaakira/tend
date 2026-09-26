@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -211,6 +212,24 @@ func isAssignment(line, key string) bool {
 
 // Quote renders a string as TOML.
 func Quote(s string) string { return strconv.Quote(s) }
+
+// InlineTable is a TOML inline table of strings, its keys in order so the
+// line written does not change while the table does not.
+func InlineTable(m map[string]string) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, strconv.Quote(k)+" = "+strconv.Quote(m[k]))
+	}
+	if len(parts) == 0 {
+		return "{}"
+	}
+	return "{ " + strings.Join(parts, ", ") + " }"
+}
 
 // Bool renders a boolean as TOML.
 func Bool(b bool) string { return strconv.FormatBool(b) }

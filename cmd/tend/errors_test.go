@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -236,5 +237,147 @@ func TestTheErrorsPanelKeepsSeveralServers(t *testing.T) {
 	b, _ = os.ReadFile(cfg)
 	if strings.Contains(string(b), "shop-token") || !strings.Contains(string(b), "# my comment") {
 		t.Errorf("after removing the shop:\n%s", b)
+	}
+}
+
+// TestAProjectFolderOpensOnItsServerAndProject: in a pane working in a
+// repository, ctrl+l ties the repository's folder to the server and the
+// project shown, written to that server's table; opened from elsewhere the
+// panel shows the server remembered, and opened in the repository again —
+// a folder under it — it shows the tied server with the tied project's
+// errors only, whatever was remembered; ctrl+l there unties it. GlitchTip
+// is two stand-ins; the repository and the pane's shell are real. If it
+// regresses, the panel opens on whichever server was used last, not the
+// one the project reports to.
+func TestAProjectFolderOpensOnItsServerAndProject(t *testing.T) {
+	two := func(token string) *httptest.Server {
+		gt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "Bearer "+token {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			switch r.URL.Path {
+			case "/api/0/organizations/":
+				_, _ = io.WriteString(w, `[{"slug":"org","name":"Org"}]`)
+			case "/api/0/organizations/org/projects/":
+				_, _ = io.WriteString(w, `[{"slug":"api","name":"api"},{"slug":"web","name":"web"}]`)
+			case "/api/0/organizations/org/issues/":
+				_, _ = io.WriteString(w, `[{"id":"1","shortId":"`+strings.ToUpper(token)+`-API","title":"api down","level":"error","status":"unresolved","count":1,"lastSeen":"2026-09-20T12:00:00Z","project":{"slug":"api"}},
+					{"id":"2","shortId":"`+strings.ToUpper(token)+`-WEB","title":"web down","level":"error","status":"unresolved","count":1,"lastSeen":"2026-09-20T12:00:00Z","project":{"slug":"web"}}]`)
+			default:
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+		t.Cleanup(gt.Close)
+		return gt
+	}
+	shop, blog := two("shop"), two("blog")
+
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "-C", repo, "init", "-q").CombinedOutput(); err != nil {
+		t.Skipf("needs git: %v %s", err, out)
+	}
+	deep := filepath.Join(repo, "src", "app")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(t.TempDir(), "tend.toml")
+	settings := quietSettings + "\n[errors]\nurl = \"" + shop.URL + "\"\ntoken = \"shop\"\nsource = \"" + "127-0-0-1-" + strings.Split(shop.URL, ":")[2] + "\"\n\n[errors.sources.blog]\nurl = \"" + blog.URL + "\"\ntoken = \"blog\"\n"
+	if err := os.WriteFile(cfg, []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	t.Setenv("TEND_CONFIG", cfg)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "TEND_CONFIG="+cfg, "SHELL=/bin/sh", "TEND_GLITCHTIP_TOKEN=")
+	tend := buildBinary(t)
+	p, err := pty.Start(tend, []string{"attach", "-s", "linked"}, pty.Options{Size: pty.Size{Cols: 130, Rows: 40}, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &attached{pty: p, screen: vt.NewScreen(130, 40, 100)}
+	go func() { _, _ = io.Copy(a, p) }()
+	t.Cleanup(func() { _ = p.Close(); stopSession(t, "linked") })
+	a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+	cd := func(dir string) {
+		t.Helper()
+		a.send(t, "cd "+dir+" && echo IN-$(basename $PWD)\r")
+		a.waitForScreen(t, "the shell there", func(s string) bool { return strings.Contains(s, "IN-"+filepath.Base(dir)) })
+	}
+	folder := filepath.Base(repo)
+
+	cd(repo)
+	a.send(t, "\x02E")
+	a.waitForScreen(t, "the remembered server, and the offer", func(s string) bool {
+		return strings.Contains(s, "SHOP-API") && strings.Contains(s, "[ link "+folder+" here ]")
+	})
+	a.send(t, "\x07") // the blog
+	a.waitForScreen(t, "the blog", func(s string) bool { return strings.Contains(s, "BLOG-API") && strings.Contains(s, "BLOG-WEB") })
+	a.send(t, "\x14\x14") // project: web
+	a.waitForScreen(t, "the web project only", func(s string) bool { return strings.Contains(s, "BLOG-WEB") && !strings.Contains(s, "BLOG-API") })
+	a.send(t, "\x0c")
+	a.waitForScreen(t, "tied", func(s string) bool {
+		return strings.Contains(s, folder+" now opens on") && strings.Contains(s, "⇄ "+folder+" opens here")
+	})
+	b, _ := os.ReadFile(cfg)
+	if !strings.Contains(string(b), `projects = { "`+repo+`" = "org/web" }`) {
+		t.Fatalf("the tie in the settings:\n%s", b)
+	}
+
+	// Elsewhere, the shop is chosen, and remembered.
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "closed", func(s string) bool { return !strings.Contains(s, "ERRORS ·") })
+	cd("/")
+	a.send(t, "\x02E")
+	a.waitForScreen(t, "the blog remembered", func(s string) bool { return strings.Contains(s, "BLOG-API") })
+	a.send(t, "\x07")
+	a.waitForScreen(t, "the shop", func(s string) bool { return strings.Contains(s, "SHOP-API") })
+	a.send(t, "\x1b")
+	a.waitForScreen(t, "closed", func(s string) bool { return !strings.Contains(s, "ERRORS ·") })
+
+	// Under the repository, the tie wins over what was remembered.
+	cd(deep)
+	a.send(t, "\x02E")
+	a.waitForScreen(t, "the tied server and project", func(s string) bool {
+		return strings.Contains(s, "BLOG-WEB") && !strings.Contains(s, "BLOG-API") && !strings.Contains(s, "SHOP-") &&
+			strings.Contains(s, "⇄ "+folder+" opens here")
+	})
+	a.send(t, "\x0c")
+	a.waitForScreen(t, "untied", func(s string) bool { return strings.Contains(s, folder+" no longer opens on") })
+	b, _ = os.ReadFile(cfg)
+	if strings.Contains(string(b), `"`+repo+`"`) {
+		t.Errorf("the tie is still in the settings:\n%s", b)
+	}
+}
+
+// TestAWorktreeIsItsRepositorysProject: a directory in a worktree belongs
+// to the repository the worktree was made from, and one in no repository
+// is its own project. If it regresses, an error fixed in its worktree
+// opens on no server, or the wrong one.
+func TestAWorktreeIsItsRepositorysProject(t *testing.T) {
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Skipf("needs git: %v %s", err, out)
+		}
+	}
+	git("init", "-q")
+	git("commit", "-q", "--allow-empty", "-m", "one")
+	tree := filepath.Join(t.TempDir(), "fix-1")
+	git("worktree", "add", "-q", "-b", "fix-1", tree)
+	sub := filepath.Join(tree, "src")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real, _ := filepath.EvalSymlinks(repo)
+	if got, _ := filepath.EvalSymlinks(projectRoot(sub)); got != real {
+		t.Errorf("worktree dir's project is %q, want %q", got, real)
+	}
+	plain := t.TempDir()
+	if got := projectRoot(plain); got != plain {
+		t.Errorf("a folder in no repository is %q, want itself", got)
 	}
 }

@@ -100,7 +100,9 @@ lists its pull requests, and `p` opens the first.
 Errors (or `ctrl+b E`) shows what your systems' GlitchTip caught: connect the
 server and an API token from the panel — as many servers as you have: the gear
 (or `ctrl+k`) adds and removes them, and `ctrl+g` or a click on the server
-chips moves between them — then open an error to see its stack,
+chips moves between them; `ctrl+l` (or "link … here" on the title) ties the
+project you are in to the server and project shown, so the panel opens
+there from then on — then open an error to see its stack,
 `f` to hand it to the agent you are working with, `w` to fix it in a worktree
 of its own, and `r` to resolve it — or resolve it from the list with `ctrl+x`,
 without opening it, as `ctrl+x` closes a GitHub issue from its list. Browser (or `ctrl+b B`) asks for a page — the last five opened are listed

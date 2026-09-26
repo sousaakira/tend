@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -39,6 +41,13 @@ type errorsState struct {
 	// one's latest event.
 	items []glitchtip.Issue
 	event *glitchtip.Event
+	// source is the server shown while the panel is up when it is not the
+	// one remembered: the one the project folder is tied to.
+	source string
+	// dir is where the pane is working and root the project that is, and
+	// want the project to show once the server's projects are read.
+	dir, root string
+	want      string
 }
 
 func (t *tui) errorsUp() bool {
@@ -51,9 +60,11 @@ func (t *tui) errorsUp() bool {
 // else the first kept, with its place among them.
 func (t *tui) errorSourceLocked() (config.NamedErrorSource, int, bool) {
 	sources := t.config.ErrorSources()
-	for i, s := range sources {
-		if s.Name == t.config.Errors.Source {
-			return s, i, true
+	for _, name := range []string{t.errorState.source, t.config.Errors.Source} {
+		for i, s := range sources {
+			if name != "" && s.Name == name {
+				return s, i, true
+			}
 		}
 	}
 	if len(sources) > 0 {
@@ -93,6 +104,182 @@ func (t *tui) showSourceLocked() {
 		m.Servers, m.Active = append([]string(nil), v.Sources...), at
 		m.Cursor = max(min(m.Cursor, len(m.Servers)-1), 0)
 	}
+	t.showLinkLocked()
+}
+
+// errorProjectKey is how a project is named in a folder's tie: org/slug.
+func errorProjectKey(p glitchtip.Project) string { return p.Org + "/" + p.Slug }
+
+// shownProjectLocked is the project the list is of, as a tie names it, ""
+// for all of them.
+func (t *tui) shownProjectLocked() string {
+	v := t.errors
+	if v == nil || v.Scope <= 0 || v.Scope > len(t.errorState.projects) {
+		return ""
+	}
+	return errorProjectKey(t.errorState.projects[v.Scope-1])
+}
+
+// showLinkLocked says in the title whether the project folder opens on
+// what is shown.
+func (t *tui) showLinkLocked() {
+	v := t.errors
+	if v == nil {
+		return
+	}
+	v.Folder, v.Linked = "", false
+	if t.errorState.root == "" {
+		return
+	}
+	v.Folder = filepath.Base(t.errorState.root)
+	if s, _, ok := t.errorSourceLocked(); ok {
+		p, tied := s.Projects[t.errorState.root]
+		v.Linked = tied && p == t.shownProjectLocked()
+	}
+}
+
+// projectFolder is where a pane is working — its program's directory, as
+// the automation socket's pane.get says — and the project that is: the
+// repository's own folder, which for a worktree is the repository it was
+// made from, so a fix in a worktree opens on the same errors.
+func (t *tui) projectFolder(session string, pane uint64) (string, string) {
+	if pane == 0 {
+		return "", ""
+	}
+	res, err := apiCall(session, api.MethodPaneGet, map[string]any{"pane_id": api.PaneID(sessionpkg.PaneID(pane))}, false)
+	if err != nil {
+		return "", ""
+	}
+	info, _ := res["pane"].(map[string]any)
+	dir, _ := info["foreground_cwd"].(string)
+	if dir == "" {
+		dir, _ = info["cwd"].(string)
+	}
+	if dir == "" {
+		return "", ""
+	}
+	return dir, projectRoot(dir)
+}
+
+// projectRoot is the repository a directory is in, through its common git
+// directory; a directory in no repository — a folder of several, say — is
+// its own project.
+func projectRoot(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	if err != nil {
+		return dir
+	}
+	common := strings.TrimSpace(string(out))
+	if filepath.Base(common) == ".git" {
+		return filepath.Dir(common)
+	}
+	return dir
+}
+
+// findErrorsFolder learns the project folder of the pane the panel was
+// opened from, and when a server is tied to it shows that server and, once
+// its projects are read, that project. The list is asked for only after,
+// so the first one shown is the right one.
+func (t *tui) findErrorsFolder(session string, pane uint64) {
+	dir, root := t.projectFolder(session, pane)
+	t.mu.Lock()
+	v := t.errors
+	if v == nil {
+		t.mu.Unlock()
+		return
+	}
+	t.errorState.dir, t.errorState.root = dir, root
+	if src, project, ok := t.config.ErrorSourceFor(root, dir); ok {
+		t.errorState.source, t.errorState.want = src.Name, project
+	}
+	t.showSourceLocked()
+	connected, want := v.Connected, t.errorState.want
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+	if !connected {
+		return
+	}
+	go t.loadErrorProjects()
+	if want == "" {
+		t.reloadErrors()
+	}
+}
+
+// toggleErrorLink ties the project folder to the server and project shown,
+// or, when it is tied to them already, unties it. A folder is tied to one
+// server: tying it here takes it from any other.
+func (t *tui) toggleErrorLink() {
+	t.mu.Lock()
+	root := t.errorState.root
+	src, _, ok := t.errorSourceLocked()
+	project := t.shownProjectLocked()
+	if root == "" || !ok {
+		t.mu.Unlock()
+		t.errorSay("no project folder is known for this pane")
+		return
+	}
+	p, tied := src.Projects[root]
+	untie := tied && p == project
+	type write struct {
+		name    string
+		legacy  bool
+		section string
+		table   map[string]string
+	}
+	var writes []write
+	for _, s := range t.config.ErrorSources() {
+		table := map[string]string{}
+		for k, v := range s.Projects {
+			table[k] = v
+		}
+		_, had := table[root]
+		switch {
+		case s.Name == src.Name && untie:
+			delete(table, root)
+		case s.Name == src.Name:
+			table[root] = project
+		case had:
+			delete(table, root)
+		default:
+			continue
+		}
+		section := "errors.sources." + s.Name
+		if s.Legacy {
+			section = "errors"
+		}
+		writes = append(writes, write{s.Name, s.Legacy, section, table})
+	}
+	t.mu.Unlock()
+	go func() {
+		for _, w := range writes {
+			if err := config.Set(w.section, "projects", config.InlineTable(w.table)); err != nil {
+				t.errorSay("could not tie the folder: " + err.Error())
+				return
+			}
+			t.mu.Lock()
+			if w.legacy {
+				t.config.Errors.Projects = w.table
+			} else if s, ok := t.config.Errors.Sources[w.name]; ok {
+				s.Projects = w.table
+				t.config.Errors.Sources[w.name] = s
+			}
+			t.mu.Unlock()
+		}
+		what := hostOf(src.URL)
+		if project != "" {
+			what += " · " + project
+		}
+		message := filepath.Base(root) + " now opens on " + what
+		if untie {
+			message = filepath.Base(root) + " no longer opens on " + what
+		}
+		t.mu.Lock()
+		t.showLinkLocked()
+		t.dirty = true
+		t.mu.Unlock()
+		t.errorSay(message)
+	}()
 }
 
 // useErrorSource shows another server's errors, and remembers it as the
@@ -105,7 +292,7 @@ func (t *tui) useErrorSource(i int) {
 		return
 	}
 	name := sources[i].Name
-	t.config.Errors.Source = name
+	t.config.Errors.Source, t.errorState.source, t.errorState.want = name, name, ""
 	v := t.errors
 	v.Scopes, v.Scope, v.Errors, v.Cursor, v.Scroll, v.Error = nil, 0, nil, 0, 0, ""
 	v.Detail, v.Message = nil, ""
@@ -126,16 +313,21 @@ func (t *tui) useErrorSource(i int) {
 // else the offer to connect one.
 func (t *tui) openErrors() error {
 	t.mu.Lock()
-	if t.errors == nil {
+	fresh := t.errors == nil
+	if fresh {
 		t.errors = &ui.ErrorsView{Filters: glitchtip.Statuses, Now: time.Now()}
 		t.errorState = errorsState{pane: t.focus}
 	}
 	v := t.errors
 	t.showSourceLocked()
+	v.Loading = v.Connected
+	session, pane := t.session, t.errorState.pane
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
-	if v.Connected {
+	if fresh {
+		go t.findErrorsFolder(session, pane)
+	} else if v.Connected {
 		go t.loadErrorProjects()
 		t.reloadErrors()
 	}
@@ -156,28 +348,40 @@ func (t *tui) closeErrors() {
 func (t *tui) loadErrorProjects() {
 	t.mu.Lock()
 	c := t.errorsClientLocked()
+	asked, _, _ := t.errorSourceLocked()
 	t.mu.Unlock()
 	if c == nil {
 		return
 	}
 	projects, err := c.Projects()
-	if err != nil {
-		return // the list says what is wrong; the chips are only a help
-	}
 	t.mu.Lock()
-	defer func() {
-		t.dirty = true
-		t.mu.Unlock()
-		t.wakeUp()
-	}()
 	v := t.errors
-	if v == nil {
+	shown, _, _ := t.errorSourceLocked()
+	if v == nil || shown.Name != asked.Name {
+		// Closed, or another server chosen while this one answered.
+		t.mu.Unlock()
 		return
 	}
-	t.errorState.projects = projects
-	v.Scopes = []string{"all"}
-	for _, p := range projects {
-		v.Scopes = append(v.Scopes, p.Slug)
+	want := t.errorState.want
+	t.errorState.want = ""
+	if err == nil {
+		t.errorState.projects = projects
+		v.Scopes = []string{"all"}
+		for i, p := range projects {
+			v.Scopes = append(v.Scopes, p.Slug)
+			if want != "" && errorProjectKey(p) == want {
+				v.Scope = i + 1
+			}
+		}
+	}
+	t.showLinkLocked()
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+	// The list waited for the tied project to be known; with the chips
+	// only a help, a failure to read them still lists every project.
+	if want != "" {
+		t.reloadErrors()
 	}
 }
 
@@ -346,6 +550,7 @@ func (t *tui) errorsAction(id string) bool {
 		t.mu.Lock()
 		if t.errors != nil {
 			t.errors.Scope, t.errors.Cursor, t.errors.Scroll = n, 0, 0
+			t.showLinkLocked()
 		}
 		t.mu.Unlock()
 		t.reloadErrors()
@@ -381,6 +586,8 @@ func (t *tui) errorsAction(id string) bool {
 		t.openErrorsConnect()
 	case ui.ErrorsSettings:
 		t.openErrorsManage()
+	case ui.ErrorsLink:
+		t.toggleErrorLink()
 	case ui.ErrorsUse:
 		t.errorsManageKey("\r")
 	case ui.ErrorsAdd:
@@ -465,6 +672,7 @@ func (t *tui) errorListKey(key string) bool {
 		t.mu.Lock()
 		if v := t.errors; v != nil && len(v.Scopes) > 0 {
 			v.Scope, v.Cursor, v.Scroll = (v.Scope+1)%len(v.Scopes), 0, 0
+			t.showLinkLocked()
 		}
 		t.mu.Unlock()
 		t.reloadErrors()
@@ -474,6 +682,8 @@ func (t *tui) errorListKey(key string) bool {
 		t.reloadErrors()
 	case "\x0b": // ctrl+k: the servers kept
 		t.openErrorsManage()
+	case "\x0c": // ctrl+l: tie the project folder to what is shown
+		t.toggleErrorLink()
 	case "\x07": // ctrl+g: the next server
 		t.mu.Lock()
 		next := -1

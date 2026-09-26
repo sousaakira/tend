@@ -55,12 +55,20 @@ type Errors struct {
 	Sources map[string]ErrorSource `toml:"sources"`
 	// Source is the one the panel last showed, by name.
 	Source string `toml:"source"`
+	// Projects ties project folders to the server in [errors] itself, as
+	// a source's own Projects does.
+	Projects map[string]string `toml:"projects"`
 }
 
 // ErrorSource is one GlitchTip server and a token for it.
 type ErrorSource struct {
 	URL   string `toml:"url"`
 	Token string `toml:"token"`
+	// Projects are the project folders this server's errors are for, each
+	// with the GlitchTip project ("org/slug") to show, or "" for all of
+	// them: the panel opened in a pane working under one of these folders
+	// opens on this server and that project.
+	Projects map[string]string `toml:"projects"`
 }
 
 // NamedErrorSource is a source with the name it is kept under. Legacy marks
@@ -89,7 +97,7 @@ func (c Config) ErrorSources() []NamedErrorSource {
 	if c.Errors.URL != "" && c.ErrorsToken() != "" {
 		out = append(out, NamedErrorSource{
 			Name:        ErrorSourceName(c.Errors.URL),
-			ErrorSource: ErrorSource{URL: c.Errors.URL, Token: c.ErrorsToken()},
+			ErrorSource: ErrorSource{URL: c.Errors.URL, Token: c.ErrorsToken(), Projects: c.Errors.Projects},
 			Legacy:      true,
 		})
 	}
@@ -104,6 +112,28 @@ func (c Config) ErrorSources() []NamedErrorSource {
 		}
 	}
 	return out
+}
+
+// ErrorSourceFor is the source whose project folders hold dir — the
+// deepest folder of all of them that dir is in or is, so a folder inside
+// another can go to another server — with the project it names.
+func (c Config) ErrorSourceFor(dirs ...string) (NamedErrorSource, string, bool) {
+	var best NamedErrorSource
+	project, depth := "", -1
+	for _, src := range c.ErrorSources() {
+		for folder, p := range src.Projects {
+			folder = strings.TrimRight(folder, "/")
+			for _, dir := range dirs {
+				if dir == "" || folder == "" || (dir != folder && !strings.HasPrefix(dir, folder+"/")) {
+					continue
+				}
+				if len(folder) > depth {
+					best, project, depth = src, p, len(folder)
+				}
+			}
+		}
+	}
+	return best, project, depth >= 0
 }
 
 // ErrorSourceName is the name a server is kept under: its host, with what a
@@ -974,6 +1004,10 @@ enabled = false
 # [errors.sources.glitchtip-example-com]
 # url = "https://glitchtip.example.com"
 # token = ""
+# The project folders whose errors are on this server, each with the
+# GlitchTip project to show ("org/slug", or "" for all): the panel opened in
+# a pane working under one opens here. ctrl+l in the panel writes it.
+# projects = { "/home/me/shop" = "acme/shop-api" }
 
 [issues]
 # Starting work on a GitHub issue (the issues panel, w) makes a worktree for

@@ -62,3 +62,45 @@ func TestRemovingASectionLeavesTheRestAsWritten(t *testing.T) {
 		t.Errorf("a table not there changed the file: %q", got)
 	}
 }
+
+// TestAProjectFolderChoosesItsServer: a folder tied to a server, and a
+// project on it, is found from the folder itself and from any folder under
+// it; the deepest folder wins, so a project inside another can report to
+// another server; a folder that only starts with the same letters is not
+// under it; and the table written reads back the same. If it regresses,
+// the panel opens on the wrong server for the project being worked in, or
+// "/work/api" catches "/work/api-old".
+func TestAProjectFolderChoosesItsServer(t *testing.T) {
+	cfg, err := parse(`[errors]
+url = "https://one.example.com"
+token = "a"
+projects = { "/work" = "" }
+
+[errors.sources.two]
+url = "https://two.example.com"
+token = "b"
+projects = `+InlineTable(map[string]string{"/work/api": "shop/api", "/srv/x": ""})+`
+`, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for dir, want := range map[string]string{
+		"/work/api": "two shop/api", "/work/api/src/models": "two shop/api",
+		"/work/api-old": "one-example-com ", "/work": "one-example-com ", "/srv/x": "two ", "/elsewhere": "none",
+	} {
+		src, project, ok := cfg.ErrorSourceFor(dir)
+		got := "none"
+		if ok {
+			got = src.Name + " " + project
+		}
+		if got != want {
+			t.Errorf("%s: %q, want %q", dir, got, want)
+		}
+	}
+	if src, _, ok := cfg.ErrorSourceFor("", "/work/api/x"); !ok || src.Name != "two" {
+		t.Errorf("the second of two folders was not looked at: %v %v", src.Name, ok)
+	}
+	if got := InlineTable(map[string]string{"/b": "", "/a \"q\"": "o/p"}); got != `{ "/a \"q\"" = "o/p", "/b" = "" }` {
+		t.Errorf("inline table: %s", got)
+	}
+}
