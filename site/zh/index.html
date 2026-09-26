@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tend — 面向编程智能体的终端运行时</title>
-  <meta name="description" content="tend 在你离开后仍保持智能体终端运行，并为每个窗格标出 working、blocked 或 idle。">
-  <meta property="og:title" content="tend — 面向编程智能体的终端运行时">
-  <meta property="og:description" content="tend 在你离开后仍保持智能体终端运行，并为每个窗格标出 working、blocked 或 idle。">
+  <title>tend — 从工单和错误到 PR，交给智能体</title>
+  <meta name="description" content="tend 接收 GitHub issue 和生产环境错误，创建 worktree，并把任务交给你的编程智能体。你在同一个屏幕上跟进所有智能体，并关闭已解决的问题。">
+  <meta property="og:title" content="tend — 从工单和错误到 PR，交给智能体">
+  <meta property="og:description" content="tend 接收 GitHub issue 和生产环境错误，创建 worktree，并把任务交给你的编程智能体。你在同一个屏幕上跟进所有智能体，并关闭已解决的问题。">
   <meta property="og:image" content="https://tend.auth.com.br/session.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" hreflang="en" href="https://tend.auth.com.br/">
@@ -107,7 +107,7 @@
   <main id="top">
     <section class="lead">
       <h1>tend</h1>
-      <p class="deck">面向编程智能体的终端运行时。你离开后服务器仍在运行。每个窗格标为 working、blocked 或 idle。</p>
+      <p class="deck">从工单和生产错误到 pull request，交给智能体，不离开终端。tend 接收一个 GitHub issue 或 GlitchTip 错误，创建 worktree，交给 Claude Code、Codex 或你使用的任何智能体。每个窗格标为 working、blocked 或 idle，已解决的在同一屏幕上关闭。</p>
     </section>
 
     <section id="install"
@@ -257,7 +257,7 @@
 
     <section id="tools" class="facts">
       <h2>空间上方的工具</h2>
-      <p class="note">侧边栏顶部的六个按钮，每个都可在前缀后用一个键打开。</p>
+      <p class="note">侧边栏顶部的按钮，每个都可在前缀后用一个键打开。</p>
       <dl>
         <div>
           <dt>文件 <kbd>f</kbd></dt>
@@ -278,6 +278,14 @@
         <div>
           <dt>浏览器与上下文 <kbd>B</kbd> <kbd>C</kbd></dt>
           <dd>带 tend 扩展的 Chromium、Chrome 或 Edge 窗口：在页面上选取元素，为每个写下要求，先在上下文面板中查看，再发送给代理。</dd>
+        </div>
+        <div>
+          <dt>错误 <kbd>E</kbd></dt>
+          <dd>你的系统的 GlitchTip 服务器捕获的错误，支持多个服务器。打开错误查看堆栈；<kbd>f</kbd> 交给智能体，<kbd>w</kbd> 在 worktree 中修复，<kbd>ctrl</kbd><kbd>x</kbd> 标记解决。每个项目可以打开自己的服务器。</dd>
+        </div>
+        <div>
+          <dt>公司 <kbd>O</kbd></dt>
+          <dd>同时为多家公司工作？把每家公司的 space 放在一起并选择一家：侧边栏只显示该公司的项目和智能体，其他公司里等待的智能体仍会提示。</dd>
         </div>
         <div>
           <dt>更新</dt>

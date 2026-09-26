@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>tend — runtime de terminal para agentes de código</title>
-  <meta name="description" content="tend mantiene los terminales de los agentes tras desconectarte, y marca cada panel como working, blocked o idle.">
-  <meta property="og:title" content="tend — runtime de terminal para agentes de código">
-  <meta property="og:description" content="tend mantiene los terminales de los agentes tras desconectarte, y marca cada panel como working, blocked o idle.">
+  <title>tend — del ticket y el error al PR, con agentes</title>
+  <meta name="description" content="tend toma las issues de GitHub y los errores de producción, abre un worktree y entrega la tarea a tu agente de código. Sigues a todos los agentes, y cierras lo resuelto, en la misma pantalla.">
+  <meta property="og:title" content="tend — del ticket y el error al PR, con agentes">
+  <meta property="og:description" content="tend toma las issues de GitHub y los errores de producción, abre un worktree y entrega la tarea a tu agente de código. Sigues a todos los agentes, y cierras lo resuelto, en la misma pantalla.">
   <meta property="og:image" content="https://tend.auth.com.br/session.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" hreflang="en" href="https://tend.auth.com.br/">
@@ -107,7 +107,7 @@
   <main id="top">
     <section class="lead">
       <h1>tend</h1>
-      <p class="deck">Un runtime de terminal para agentes de código. El servidor sigue cuando te vas. Cada panel queda marcado como working, blocked o idle.</p>
+      <p class="deck">Del ticket y el error de producción al pull request, con agentes, sin salir de la terminal. tend toma una issue de GitHub o un error de GlitchTip, abre un worktree y se lo entrega a Claude Code, Codex o el agente que uses. Los sigues a todos — cada panel marcado como working, blocked o idle — y cierras lo resuelto, en la misma pantalla.</p>
     </section>
 
     <section id="install"
@@ -257,7 +257,7 @@
 
     <section id="tools" class="facts">
       <h2>Herramientas, sobre los spaces</h2>
-      <p class="note">Seis botones arriba de la barra lateral, cada uno con una tecla tras el prefijo.</p>
+      <p class="note">Botones arriba de la barra lateral, cada uno con una tecla tras el prefijo.</p>
       <dl>
         <div>
           <dt>Archivos <kbd>f</kbd></dt>
@@ -278,6 +278,14 @@
         <div>
           <dt>Navegador y contexto <kbd>B</kbd> <kbd>C</kbd></dt>
           <dd>Una ventana de Chromium, Chrome o Edge con la extensión de tend: elige elementos en una página, anota lo que quieres de cada uno y envíalos al agente, revisados antes en el panel de contexto.</dd>
+        </div>
+        <div>
+          <dt>Errores <kbd>E</kbd></dt>
+          <dd>Lo que capturaron los servidores GlitchTip de tus sistemas, tantos como uses. Abre un error para leer su traza; <kbd>f</kbd> se lo entrega a tu agente, <kbd>w</kbd> lo arregla en un worktree, <kbd>ctrl</kbd><kbd>x</kbd> lo resuelve. Cada proyecto puede abrir en su propio servidor.</dd>
+        </div>
+        <div>
+          <dt>Empresas <kbd>O</kbd></dt>
+          <dd>¿Trabajas para varias empresas? Agrupa los spaces de cada una y elige una: la barra lateral muestra sus proyectos y agentes, y un agente esperando en otra sigue avisándose.</dd>
         </div>
         <div>
           <dt>Actualizaciones</dt>

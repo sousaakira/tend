@@ -1,10 +1,16 @@
 # tend
 
-terminal runtime for coding agents.
+From the ticket and the production error to the pull request, with agents,
+without leaving the terminal.
 
-tend keeps agent terminals running in a background server, marks every pane as
-working, blocked or idle, and exposes that over a socket API so agents can
-spawn panes and wait on each other.
+tend takes a GitHub issue or a GlitchTip error, opens a worktree for it and
+hands it to Claude Code, Codex or whichever agent you use. You follow every
+agent on one screen — each pane marked working, blocked or idle — and close
+the issue or resolve the error when it is fixed, from the same place.
+
+Under it is a terminal runtime built for agents: a background server that
+keeps them running when you detach, spaces and tabs for your projects, and a
+socket API so agents can spawn panes and wait on each other.
 
 Written in Go, single binary, no cgo. Made by
 [Auth Tecnologia Ltda](https://auth.com.br), Belo Horizonte, Brazil —
