@@ -145,6 +145,59 @@ func Upsert(content, section, key, value string) string {
 	return strings.Join(out, "\n") + "\n"
 }
 
+// RemoveSection deletes one table of the settings file — its header and
+// everything up to the next table — and nothing else. A table that is not
+// there leaves the file as it is.
+func RemoveSection(section string) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	updated := DropSection(string(content), section)
+	if updated == string(content) {
+		return nil
+	}
+	if _, err := parse(updated, path); err != nil {
+		return fmt.Errorf("config: refusing to remove [%s]: %w", section, err)
+	}
+	return writeFile(path, updated)
+}
+
+// DropSection returns content without the table named section, and
+// without the blank lines that were left before it.
+func DropSection(content, section string) string {
+	header := "[" + section + "]"
+	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) != header {
+			out = append(out, lines[i])
+			continue
+		}
+		for i+1 < len(lines) {
+			next := strings.TrimSpace(lines[i+1])
+			if strings.HasPrefix(next, "[") && strings.HasSuffix(next, "]") {
+				break
+			}
+			i++
+		}
+		for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+			out = out[:len(out)-1]
+		}
+		if i+1 < len(lines) && len(out) > 0 {
+			out = append(out, "")
+		}
+	}
+	return strings.Join(out, "\n") + "\n"
+}
+
 // isAssignment reports whether a line assigns key, allowing for the spacing
 // people actually write: "key = x", "key=x", "key\t= x".
 func isAssignment(line, key string) bool {

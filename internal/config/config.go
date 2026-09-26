@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -44,8 +45,31 @@ type Config struct {
 // by its owner alone — and TEND_GLITCHTIP_TOKEN, when set, is used for a
 // token that is not.
 type Errors struct {
+	// URL and Token are the one server tend first knew how to keep, which
+	// is still read as a source like the others.
 	URL   string `toml:"url"`
 	Token string `toml:"token"`
+	// Sources are the servers added since, one table each
+	// ([errors.sources.<name>]), so adding or removing one edits its own
+	// table and leaves the rest of the file as the user wrote it.
+	Sources map[string]ErrorSource `toml:"sources"`
+	// Source is the one the panel last showed, by name.
+	Source string `toml:"source"`
+}
+
+// ErrorSource is one GlitchTip server and a token for it.
+type ErrorSource struct {
+	URL   string `toml:"url"`
+	Token string `toml:"token"`
+}
+
+// NamedErrorSource is a source with the name it is kept under. Legacy marks
+// the one in [errors] itself, which is removed by emptying its keys rather
+// than its table.
+type NamedErrorSource struct {
+	Name string
+	ErrorSource
+	Legacy bool
 }
 
 // ErrorsToken is the GlitchTip token: the settings', else the environment's.
@@ -54,6 +78,56 @@ func (c Config) ErrorsToken() string {
 		return c.Errors.Token
 	}
 	return os.Getenv("TEND_GLITCHTIP_TOKEN")
+}
+
+// ErrorSources are the GlitchTip servers the errors panel can show: the one
+// in [errors], when it has an address and a token, then those in
+// [errors.sources], by name. A source with no token is left out: there is
+// nothing it could be asked.
+func (c Config) ErrorSources() []NamedErrorSource {
+	var out []NamedErrorSource
+	if c.Errors.URL != "" && c.ErrorsToken() != "" {
+		out = append(out, NamedErrorSource{
+			Name:        ErrorSourceName(c.Errors.URL),
+			ErrorSource: ErrorSource{URL: c.Errors.URL, Token: c.ErrorsToken()},
+			Legacy:      true,
+		})
+	}
+	names := make([]string, 0, len(c.Errors.Sources))
+	for name := range c.Errors.Sources {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if src := c.Errors.Sources[name]; src.URL != "" && src.Token != "" {
+			out = append(out, NamedErrorSource{Name: name, ErrorSource: src})
+		}
+	}
+	return out
+}
+
+// ErrorSourceName is the name a server is kept under: its host, with what a
+// bare TOML key cannot hold made a dash ("glitchtip.example.com" is
+// glitchtip-example-com).
+func ErrorSourceName(url string) string {
+	host := url
+	if i := strings.Index(host, "://"); i >= 0 {
+		host = host[i+3:]
+	}
+	host = strings.SplitN(host, "/", 2)[0]
+	var b strings.Builder
+	for _, r := range strings.ToLower(host) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	if name := strings.Trim(b.String(), "-"); name != "" {
+		return name
+	}
+	return "glitchtip"
 }
 
 // Issues configures starting work on a GitHub issue from the issues panel.
@@ -888,9 +962,16 @@ enabled = false
 # request = "~/sounds/request.wav"
 
 [errors]
-# The errors panel (prefix+E) reads a GlitchTip server's errors. Connect it
-# from the panel, which writes these; the token can also come from
+# The errors panel (prefix+E) reads GlitchTip servers' errors, one server at
+# a time. Connect them from the panel (the gear, or ctrl+k, adds and removes
+# them), which writes a table for each, as below; source is the one shown.
+# A server here in [errors] itself is kept too, and its token can come from
 # TEND_GLITCHTIP_TOKEN.
+# url = "https://glitchtip.example.com"
+# token = ""
+# source = "glitchtip-example-com"
+#
+# [errors.sources.glitchtip-example-com]
 # url = "https://glitchtip.example.com"
 # token = ""
 

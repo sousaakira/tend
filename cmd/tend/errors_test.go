@@ -118,3 +118,123 @@ func TestTheErrorsPanelConnectsListsAndFixes(t *testing.T) {
 			strings.Contains(s, "typed into the pane")
 	})
 }
+
+// glitchTipStandIn answers as GlitchTip does for one organization with one
+// error, to a token.
+func glitchTipStandIn(t *testing.T, token, shortID, title string) *httptest.Server {
+	t.Helper()
+	gt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/0/organizations/":
+			_, _ = io.WriteString(w, `[{"slug":"org","name":"Org"}]`)
+		case "/api/0/organizations/org/projects/":
+			_, _ = io.WriteString(w, `[{"slug":"app","name":"app"}]`)
+		case "/api/0/organizations/org/issues/":
+			_, _ = io.WriteString(w, `[{"id":"1","shortId":"`+shortID+`","title":"`+title+`","level":"error","status":"unresolved","count":3,"lastSeen":"2026-09-20T12:00:00Z","project":{"slug":"app"}}]`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(gt.Close)
+	return gt
+}
+
+// TestTheErrorsPanelKeepsSeveralServers: a second GlitchTip is added from
+// the gear's servers box; the panel shows a chip for each, and ctrl+g goes
+// to the other's errors; the one shown is remembered across a restart of
+// the client; and removing a server from the box takes its own table out
+// of the settings file — its token with it — and shows the one left. If it
+// regresses, connecting a second server replaces the first, or a server
+// once added can never be taken away.
+func TestTheErrorsPanelKeepsSeveralServers(t *testing.T) {
+	shop := glitchTipStandIn(t, "shop-token", "SHOP-1", "shop is down")
+	blog := glitchTipStandIn(t, "blog-token", "BLOG-7", "blog is slow")
+
+	cfg := filepath.Join(t.TempDir(), "tend.toml")
+	settings := quietSettings + "\n[errors]\n# my comment\nurl = \"" + shop.URL + "\"\ntoken = \"shop-token\"\n"
+	if err := os.WriteFile(cfg, []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := t.TempDir()
+	t.Setenv("TEND_RUNTIME_DIR", runtimeDir)
+	t.Setenv("TEND_CONFIG", cfg)
+	env := append(os.Environ(), "TEND_RUNTIME_DIR="+runtimeDir, "TEND_CONFIG="+cfg, "SHELL=/bin/sh", "TEND_GLITCHTIP_TOKEN=")
+	tend := buildBinary(t)
+	attach := func() *attached {
+		t.Helper()
+		p, err := pty.Start(tend, []string{"attach", "-s", "servers"}, pty.Options{Size: pty.Size{Cols: 130, Rows: 40}, Env: env})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := &attached{pty: p, screen: vt.NewScreen(130, 40, 100)}
+		go func() { _, _ = io.Copy(a, p) }()
+		t.Cleanup(func() { _ = p.Close() })
+		a.waitForScreen(t, "a pane", func(s string) bool { return strings.Contains(s, "┌") })
+		return a
+	}
+	t.Cleanup(func() { stopSession(t, "servers") })
+	host := func(u string) string { return strings.TrimPrefix(u, "http://") }
+
+	a := attach()
+	a.send(t, "\x02E")
+	a.waitForScreen(t, "the first server's errors", func(s string) bool { return strings.Contains(s, "SHOP-1") })
+	a.send(t, "\x0b")
+	a.waitForScreen(t, "the servers box", func(s string) bool {
+		return strings.Contains(s, "GlitchTip servers") && strings.Contains(s, "● "+host(shop.URL))
+	})
+	a.send(t, "a")
+	a.waitForScreen(t, "the connect box", func(s string) bool { return strings.Contains(s, "connect GlitchTip") })
+	a.send(t, "\x15"+blog.URL+"\tblog-token\r")
+	a.waitForScreen(t, "the second server's errors, both chips", func(s string) bool {
+		return strings.Contains(s, "BLOG-7") && !strings.Contains(s, "SHOP-1") &&
+			strings.Contains(s, "server") && strings.Contains(s, host(shop.URL)) && strings.Contains(s, host(blog.URL))
+	})
+	b, _ := os.ReadFile(cfg)
+	if !strings.Contains(string(b), `token = "shop-token"`) || !strings.Contains(string(b), `token = "blog-token"`) || !strings.Contains(string(b), "# my comment") {
+		t.Fatalf("both servers kept, the file as it was:\n%s", b)
+	}
+
+	a.send(t, "\x07")
+	a.waitForScreen(t, "ctrl+g to the other", func(s string) bool { return strings.Contains(s, "SHOP-1") && !strings.Contains(s, "BLOG-7") })
+	a.send(t, "\x07")
+	a.waitForScreen(t, "and back", func(s string) bool { return strings.Contains(s, "BLOG-7") })
+
+	// The client goes and comes back: the blog is still the one shown.
+	a.send(t, "\x1b\x1b")
+	a.waitForScreen(t, "the panel gone", func(s string) bool { return !strings.Contains(s, "ERRORS ·") })
+	a.send(t, "\x02d")
+	_ = a.pty.Wait()
+	a = attach()
+	a.send(t, "\x02E")
+	a.waitForScreen(t, "the blog remembered", func(s string) bool { return strings.Contains(s, "BLOG-7") })
+
+	// Remove the blog: its table goes, and the shop is shown.
+	a.send(t, "\x0b")
+	a.waitForScreen(t, "the box on the blog", func(s string) bool { return strings.Contains(s, "● "+host(blog.URL)) })
+	a.send(t, "d")
+	a.waitForScreen(t, "the question", func(s string) bool { return strings.Contains(s, "remove "+host(blog.URL)+"?") })
+	a.send(t, "\r")
+	a.waitForScreen(t, "the shop left", func(s string) bool {
+		return strings.Contains(s, "SHOP-1") && strings.Contains(s, "removed "+host(blog.URL)) &&
+			!strings.Contains(s, "● "+host(blog.URL)) && !strings.Contains(s, "│ server ")
+	})
+	b, _ = os.ReadFile(cfg)
+	if strings.Contains(string(b), "blog-token") || strings.Contains(string(b), "errors.sources") || !strings.Contains(string(b), `token = "shop-token"`) {
+		t.Errorf("after removing the blog:\n%s", b)
+	}
+
+	// And the first, kept in [errors] itself: its keys are emptied, and
+	// the panel offers to connect one again.
+	a.send(t, "d")
+	a.waitForScreen(t, "the question", func(s string) bool { return strings.Contains(s, "remove "+host(shop.URL)+"?") })
+	a.send(t, "\r")
+	a.waitForScreen(t, "nothing kept", func(s string) bool { return strings.Contains(s, "GlitchTip is not connected") })
+	b, _ = os.ReadFile(cfg)
+	if strings.Contains(string(b), "shop-token") || !strings.Contains(string(b), "# my comment") {
+		t.Errorf("after removing the shop:\n%s", b)
+	}
+}

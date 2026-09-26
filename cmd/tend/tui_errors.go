@@ -47,12 +47,79 @@ func (t *tui) errorsUp() bool {
 	return t.errors != nil
 }
 
-// errorsClientLocked is a client for the connected server, or nil.
+// errorSourceLocked is the server the panel shows: the one last chosen,
+// else the first kept, with its place among them.
+func (t *tui) errorSourceLocked() (config.NamedErrorSource, int, bool) {
+	sources := t.config.ErrorSources()
+	for i, s := range sources {
+		if s.Name == t.config.Errors.Source {
+			return s, i, true
+		}
+	}
+	if len(sources) > 0 {
+		return sources[0], 0, true
+	}
+	return config.NamedErrorSource{}, 0, false
+}
+
+// errorsClientLocked is a client for the server shown, or nil.
 func (t *tui) errorsClientLocked() *glitchtip.Client {
-	if t.config.Errors.URL == "" || t.config.ErrorsToken() == "" {
+	s, _, ok := t.errorSourceLocked()
+	if !ok {
 		return nil
 	}
-	return glitchtip.New(t.config.Errors.URL, t.config.ErrorsToken())
+	return glitchtip.New(s.URL, s.Token)
+}
+
+// hostOf is a server's address as the panel names it.
+func hostOf(url string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(url, "https://"), "http://")
+}
+
+// showSourceLocked says in the view which servers there are and which one
+// is shown, and forgets what was read from another one.
+func (t *tui) showSourceLocked() {
+	v := t.errors
+	if v == nil {
+		return
+	}
+	s, at, ok := t.errorSourceLocked()
+	v.Connected, v.Server, v.Source = ok, s.URL, at
+	v.Sources = v.Sources[:0]
+	for _, src := range t.config.ErrorSources() {
+		v.Sources = append(v.Sources, hostOf(src.URL))
+	}
+	if m := v.Manage; m != nil {
+		m.Servers, m.Active = append([]string(nil), v.Sources...), at
+		m.Cursor = max(min(m.Cursor, len(m.Servers)-1), 0)
+	}
+}
+
+// useErrorSource shows another server's errors, and remembers it as the
+// one to show next time.
+func (t *tui) useErrorSource(i int) {
+	t.mu.Lock()
+	sources := t.config.ErrorSources()
+	if t.errors == nil || i < 0 || i >= len(sources) {
+		t.mu.Unlock()
+		return
+	}
+	name := sources[i].Name
+	t.config.Errors.Source = name
+	v := t.errors
+	v.Scopes, v.Scope, v.Errors, v.Cursor, v.Scroll, v.Error = nil, 0, nil, 0, 0, ""
+	v.Detail, v.Message = nil, ""
+	t.errorState.projects, t.errorState.items, t.errorState.event = nil, nil, nil
+	t.showSourceLocked()
+	t.dirty = true
+	t.mu.Unlock()
+	go func() {
+		if err := config.Set("errors", "source", config.Quote(name)); err != nil {
+			t.errorSay("showing " + name + ", but it could not be remembered: " + err.Error())
+		}
+	}()
+	go t.loadErrorProjects()
+	t.reloadErrors()
 }
 
 // openErrors puts the panel up: the errors when a server is connected,
@@ -64,8 +131,7 @@ func (t *tui) openErrors() error {
 		t.errorState = errorsState{pane: t.focus}
 	}
 	v := t.errors
-	v.Connected = t.errorsClientLocked() != nil
-	v.Server = t.config.Errors.URL
+	t.showSourceLocked()
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
@@ -217,6 +283,7 @@ func (t *tui) errorsInput(data []byte) error {
 		t.mu.Lock()
 		v := t.errors
 		connecting := v != nil && v.Connect != nil
+		managing := v != nil && v.Manage != nil
 		connected := v != nil && v.Connected
 		detail := v != nil && v.Detail != nil
 		t.mu.Unlock()
@@ -227,6 +294,8 @@ func (t *tui) errorsInput(data []byte) error {
 		switch {
 		case connecting:
 			t.errorsConnectKey(key)
+		case managing:
+			t.errorsManageKey(key)
 		case !connected:
 			switch key {
 			case "\r", "\n":
@@ -253,6 +322,25 @@ func (t *tui) errorsInput(data []byte) error {
 func (t *tui) errorsAction(id string) bool {
 	var n int
 	switch {
+	case strings.HasPrefix(id, "source:"):
+		fmt.Sscan(id[len("source:"):], &n)
+		t.useErrorSource(n)
+		return false
+	case strings.HasPrefix(id, "server:"):
+		fmt.Sscan(id[len("server:"):], &n)
+		t.mu.Lock()
+		again := false
+		if v := t.errors; v != nil && v.Manage != nil {
+			m := v.Manage
+			again = m.Cursor == n && !m.Confirm
+			m.Cursor, m.Confirm = n, false
+		}
+		t.dirty = true
+		t.mu.Unlock()
+		if again {
+			t.errorsManageKey("\r")
+		}
+		return false
 	case strings.HasPrefix(id, "scope:"):
 		fmt.Sscan(id[len("scope:"):], &n)
 		t.mu.Lock()
@@ -289,8 +377,18 @@ func (t *tui) errorsAction(id string) bool {
 	case ui.ErrorsClose:
 		t.closeErrors()
 		return true
-	case ui.ErrorsConnectB, ui.ErrorsSettings:
+	case ui.ErrorsConnectB:
 		t.openErrorsConnect()
+	case ui.ErrorsSettings:
+		t.openErrorsManage()
+	case ui.ErrorsUse:
+		t.errorsManageKey("\r")
+	case ui.ErrorsAdd:
+		t.errorsManageKey("a")
+	case ui.ErrorsRemove:
+		t.errorsManageKey("d")
+	case ui.ErrorsManageEnd:
+		t.errorsManageKey("\x1b")
 	case ui.ErrorsSave:
 		t.saveErrorsConnect()
 	case ui.ErrorsCancel:
@@ -374,8 +472,16 @@ func (t *tui) errorListKey(key string) bool {
 		t.openErrorInBrowser()
 	case "\x12": // ctrl+r
 		t.reloadErrors()
-	case "\x0b": // ctrl+k: the server and its token
-		t.openErrorsConnect()
+	case "\x0b": // ctrl+k: the servers kept
+		t.openErrorsManage()
+	case "\x07": // ctrl+g: the next server
+		t.mu.Lock()
+		next := -1
+		if v := t.errors; v != nil && len(v.Sources) > 1 {
+			next = (v.Source + 1) % len(v.Sources)
+		}
+		t.mu.Unlock()
+		t.useErrorSource(next)
 	case "\x06": // ctrl+f: fix the one under the cursor
 		return t.fixError()
 	case "\x18": // ctrl+x: resolve the one under the cursor — or, listing
@@ -779,20 +885,155 @@ func (t *tui) openErrorInBrowser() {
 	t.errorSay(message)
 }
 
-// openErrorsConnect opens the connect box, with the server there is — the
-// token is never shown back, only asked for again.
+// openErrorsConnect opens the connect box for a server to add. A token is
+// never shown back: to give a kept server a new one, its address is typed
+// again with the new token, which replaces the old.
 func (t *tui) openErrorsConnect() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.errors == nil {
 		return
 	}
-	url := t.config.Errors.URL
-	if url == "" {
-		url = "https://"
-	}
-	t.errors.Connect = &ui.ErrorsConnect{URL: url, InToken: t.config.Errors.URL != ""}
+	t.errors.Connect = &ui.ErrorsConnect{URL: "https://"}
 	t.dirty = true
+}
+
+// openErrorsManage opens the servers box — or, with none kept, the connect
+// box, since there is nothing to manage.
+func (t *tui) openErrorsManage() {
+	t.mu.Lock()
+	v := t.errors
+	if v == nil {
+		t.mu.Unlock()
+		return
+	}
+	if len(t.config.ErrorSources()) == 0 {
+		t.mu.Unlock()
+		t.openErrorsConnect()
+		return
+	}
+	_, at, _ := t.errorSourceLocked()
+	v.Manage = &ui.ErrorsManage{Cursor: at}
+	t.showSourceLocked()
+	t.dirty = true
+	t.mu.Unlock()
+	t.wakeUp()
+}
+
+// errorsManageKey is a key in the servers box: enter shows the server under
+// the cursor, a adds one, d removes it after enter confirms, esc closes.
+func (t *tui) errorsManageKey(key string) {
+	t.mu.Lock()
+	v := t.errors
+	if v == nil || v.Manage == nil {
+		t.mu.Unlock()
+		return
+	}
+	m := v.Manage
+	t.dirty = true
+	if m.Confirm {
+		m.Confirm = false
+		if key == "\r" || key == "\n" {
+			sources := t.config.ErrorSources()
+			if m.Cursor < len(sources) {
+				src := sources[m.Cursor]
+				t.mu.Unlock()
+				t.removeErrorSource(src)
+				return
+			}
+		}
+		t.mu.Unlock()
+		return
+	}
+	switch key {
+	case "\x1b", "q":
+		v.Manage = nil
+	case "\x1b[A", "k", "\x10":
+		m.Cursor = max(m.Cursor-1, 0)
+	case "\x1b[B", "j", "\x0e":
+		m.Cursor = max(min(m.Cursor+1, len(m.Servers)-1), 0)
+	case "\r", "\n":
+		at := m.Cursor
+		v.Manage = nil
+		t.mu.Unlock()
+		t.useErrorSource(at)
+		return
+	case "a":
+		t.mu.Unlock()
+		t.openErrorsConnect()
+		return
+	case "d", "\x1b[3~":
+		if len(m.Servers) > 0 {
+			m.Confirm, m.Message = true, ""
+		}
+	}
+	t.mu.Unlock()
+	t.wakeUp()
+}
+
+// removeErrorSource forgets a server and its token: its own table in the
+// settings file goes, or, for the one kept in [errors], its keys are
+// emptied. The panel shows the next one kept, or offers to connect one.
+func (t *tui) removeErrorSource(src config.NamedErrorSource) {
+	go func() {
+		var err error
+		if src.Legacy {
+			if err = config.Set("errors", "url", config.Quote("")); err == nil {
+				err = config.Set("errors", "token", config.Quote(""))
+			}
+		} else {
+			err = config.RemoveSection("errors.sources." + src.Name)
+		}
+		t.mu.Lock()
+		v := t.errors
+		if err != nil {
+			if v != nil && v.Manage != nil {
+				v.Manage.Message = "could not remove it: " + err.Error()
+			}
+			t.dirty = true
+			t.mu.Unlock()
+			t.wakeUp()
+			return
+		}
+		if src.Legacy {
+			t.config.Errors.URL, t.config.Errors.Token = "", ""
+		} else {
+			delete(t.config.Errors.Sources, src.Name)
+		}
+		shown := t.config.Errors.Source == src.Name
+		if v != nil {
+			if len(t.config.ErrorSources()) == 0 {
+				v.Manage = nil
+			} else if v.Manage != nil {
+				v.Manage.Message = "removed " + hostOf(src.URL)
+			}
+		}
+		t.mu.Unlock()
+		if !shown {
+			t.mu.Lock()
+			t.showSourceLocked()
+			t.dirty = true
+			t.mu.Unlock()
+			t.wakeUp()
+			return
+		}
+		// The one shown went: show the first left, which also forgets
+		// what was read from the one removed.
+		t.mu.Lock()
+		t.config.Errors.Source = ""
+		t.mu.Unlock()
+		t.useErrorSource(0)
+		t.mu.Lock()
+		if v := t.errors; v != nil {
+			t.showSourceLocked()
+			if !v.Connected {
+				v.Errors, v.Scopes, v.Message = nil, nil, "removed "+hostOf(src.URL)+"; no server is kept"
+			}
+		}
+		t.dirty = true
+		t.mu.Unlock()
+		t.wakeUp()
+	}()
 }
 
 // errorsConnectKey is a key in the connect box: typing goes to the field,
@@ -843,6 +1084,33 @@ func (t *tui) errorsConnectKey(key string) {
 	}
 }
 
+// newErrorSourceLocked is where a server typed into the connect box is
+// kept: the source that already has its address, whose token is replaced,
+// or a new one named after its host, made unique.
+func (t *tui) newErrorSourceLocked(url string) config.NamedErrorSource {
+	for _, s := range t.config.ErrorSources() {
+		if strings.TrimRight(s.URL, "/") == url {
+			return s
+		}
+	}
+	if t.config.Errors.URL != "" && strings.TrimRight(t.config.Errors.URL, "/") == url {
+		// Kept in [errors] with no token yet (TEND_GLITCHTIP_TOKEN unset).
+		return config.NamedErrorSource{Name: config.ErrorSourceName(url), Legacy: true}
+	}
+	base := config.ErrorSourceName(url)
+	name := base
+	taken := func(n string) bool {
+		if _, ok := t.config.Errors.Sources[n]; ok {
+			return true
+		}
+		return t.config.Errors.URL != "" && config.ErrorSourceName(t.config.Errors.URL) == n
+	}
+	for i := 2; taken(name); i++ {
+		name = fmt.Sprintf("%s-%d", base, i)
+	}
+	return config.NamedErrorSource{Name: name}
+}
+
 // saveErrorsConnect tries the server and token, and only when the server
 // takes them writes them to the settings file and lists its errors: a token
 // mistyped is said in the box, and nothing is kept.
@@ -865,11 +1133,22 @@ func (t *tui) saveErrorsConnect() {
 	t.dirty = true
 	t.mu.Unlock()
 	t.wakeUp()
+	t.mu.Lock()
+	src := t.newErrorSourceLocked(url)
+	t.mu.Unlock()
 	go func() {
 		orgs, err := glitchtip.New(url, token).Orgs()
 		if err == nil {
-			if err = config.Set("errors", "url", config.Quote(url)); err == nil {
+			if src.Legacy {
 				err = config.Set("errors", "token", config.Quote(token))
+			} else {
+				section := "errors.sources." + src.Name
+				if err = config.Set(section, "url", config.Quote(url)); err == nil {
+					err = config.Set(section, "token", config.Quote(token))
+				}
+			}
+			if err == nil {
+				err = config.Set("errors", "source", config.Quote(src.Name))
 			}
 		}
 		t.mu.Lock()
@@ -885,15 +1164,24 @@ func (t *tui) saveErrorsConnect() {
 			t.wakeUp()
 			return
 		}
-		t.config.Errors.URL, t.config.Errors.Token = url, token
-		v.Connect = nil
-		v.Connected, v.Server = true, url
-		v.Scopes, v.Scope = nil, 0
-		t.errorState.projects = nil
-		v.Message = fmt.Sprintf("connected to %s: %d organizations", url, len(orgs))
-		t.dirty = true
+		if src.Legacy {
+			t.config.Errors.Token = token
+		} else {
+			if t.config.Errors.Sources == nil {
+				t.config.Errors.Sources = map[string]config.ErrorSource{}
+			}
+			t.config.Errors.Sources[src.Name] = config.ErrorSource{URL: url, Token: token}
+		}
+		v.Connect, v.Manage = nil, nil
+		sources := t.config.ErrorSources()
+		at := 0
+		for i, s := range sources {
+			if s.Name == src.Name {
+				at = i
+			}
+		}
 		t.mu.Unlock()
-		go t.loadErrorProjects()
-		t.reloadErrors()
+		t.useErrorSource(at)
+		t.errorSay(fmt.Sprintf("connected to %s: %d organizations", hostOf(url), len(orgs)))
 	}()
 }

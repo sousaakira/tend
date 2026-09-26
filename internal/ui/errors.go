@@ -64,11 +64,28 @@ type ErrorsConnect struct {
 	Error   string
 }
 
+// ErrorsManage is the box the servers are kept in: each one's address,
+// the one shown, and adding or removing one.
+type ErrorsManage struct {
+	Servers []string
+	Cursor  int
+	Active  int
+	// Confirm is while a remove waits for its answer.
+	Confirm bool
+	Message string
+}
+
 // ErrorsView is the panel while it is up.
 type ErrorsView struct {
 	// Connected is a server and a token set; Server is its address.
 	Connected bool
 	Server    string
+	// Sources are the servers kept, by address, and Source the one shown;
+	// a line of chips when there is more than one.
+	Sources []string
+	Source  int
+	// Manage is the servers box, when it is up.
+	Manage *ErrorsManage
 	// Scopes are "all" and each project, Scope the one listed.
 	Scopes  []string
 	Scope   int
@@ -101,17 +118,23 @@ const (
 	ErrorsConnectB = "connect"
 	ErrorsSave     = "save"
 	ErrorsCancel   = "cancel"
+	// The servers box's buttons.
+	ErrorsUse       = "use"
+	ErrorsAdd       = "add"
+	ErrorsRemove    = "remove"
+	ErrorsManageEnd = "manage-close"
 )
 
 // ErrorsGeometry is where the panel's parts are.
 type ErrorsGeometry struct {
-	Box        Rect
-	ScopeChips []Rect
-	Filters    []Rect
-	Search     Rect
-	List       Rect
-	Body       Rect
-	Buttons    []IssueButton
+	Box         Rect
+	SourceChips []Rect
+	ScopeChips  []Rect
+	Filters     []Rect
+	Search      Rect
+	List        Rect
+	Body        Rect
+	Buttons     []IssueButton
 	// Settings is the gear on the title line.
 	Settings Rect
 	// ConnectBox is the connect box, when it is up, with its fields and
@@ -120,6 +143,10 @@ type ErrorsGeometry struct {
 	URLField       Rect
 	TokenField     Rect
 	ConnectButtons []IssueButton
+	// ManageBox is the servers box, with a line for each server.
+	ManageBox     Rect
+	ManageList    Rect
+	ManageButtons []IssueButton
 }
 
 func errorButtons(v *ErrorsView) []IssueButton {
@@ -158,15 +185,25 @@ func ErrorsLayout(v *ErrorsView, cols, rows int) ErrorsGeometry {
 	box := Rect{X: (cols - w) / 2, Y: (rows - h) / 2, Cols: w, Rows: h}
 	g := ErrorsGeometry{Box: box}
 	g.Settings = Rect{X: box.X + box.Cols - 6, Y: box.Y + 1, Cols: 3, Rows: 1}
+	// A line of chips for the servers when there is more than one, then
+	// one for the projects: each pushes what is under it down a line.
 	off := 0
-	if len(v.Scopes) > 0 && v.Detail == nil {
-		off = 1
-		sx := box.X + 2 + runewidth.StringWidth("project ")
-		for _, name := range v.Scopes {
-			r := Rect{X: sx, Y: box.Y + 2, Cols: runewidth.StringWidth(" " + name + " "), Rows: 1}
-			g.ScopeChips = append(g.ScopeChips, r)
+	chips := func(label string, names []string) []Rect {
+		var out []Rect
+		sx := box.X + 2 + runewidth.StringWidth(label+" ")
+		for _, name := range names {
+			r := Rect{X: sx, Y: box.Y + 2 + off, Cols: runewidth.StringWidth(" " + name + " "), Rows: 1}
+			out = append(out, r)
 			sx += r.Cols + 1
 		}
+		off++
+		return out
+	}
+	if len(v.Sources) > 1 && v.Detail == nil {
+		g.SourceChips = chips("server ", v.Sources)
+	}
+	if len(v.Scopes) > 0 && v.Detail == nil {
+		g.ScopeChips = chips("project", v.Scopes)
 	}
 	x := box.X + 2
 	for _, name := range v.Filters {
@@ -187,6 +224,22 @@ func ErrorsLayout(v *ErrorsView, cols, rows int) ErrorsGeometry {
 		}
 		g.Buttons = append(g.Buttons, b)
 	}
+	if m := v.Manage; m != nil {
+		mw, mh := min(64, cols-4), min(len(m.Servers)+9, rows-4)
+		mb := Rect{X: (cols - mw) / 2, Y: (rows - mh) / 2, Cols: max(mw, 0), Rows: max(mh, 0)}
+		g.ManageBox = mb
+		g.ManageList = Rect{X: mb.X + 2, Y: mb.Y + 3, Cols: max(mb.Cols-4, 0), Rows: max(mb.Rows-8, 0)}
+		mx := mb.X + 2
+		for _, b := range []IssueButton{{ID: ErrorsUse, Label: "[ Use ]"}, {ID: ErrorsAdd, Label: "[ Add ]"}, {ID: ErrorsRemove, Label: "[ Remove ]"}, {ID: ErrorsManageEnd, Label: "[ Close ]"}} {
+			b.Rect = Rect{X: mx, Y: mb.Y + mb.Rows - 2, Cols: runewidth.StringWidth(b.Label), Rows: 1}
+			if b.ID == ErrorsManageEnd {
+				b.X = mb.X + mb.Cols - 2 - b.Cols
+			} else {
+				mx += b.Cols + 1
+			}
+			g.ManageButtons = append(g.ManageButtons, b)
+		}
+	}
 	if v.Connect != nil {
 		cw, ch := min(64, cols-4), 11
 		c := Rect{X: (cols - cw) / 2, Y: (rows - ch) / 2, Cols: max(cw, 0), Rows: ch}
@@ -203,11 +256,28 @@ func ErrorsLayout(v *ErrorsView, cols, rows int) ErrorsGeometry {
 	return g
 }
 
-// ErrorsAt is what a click at a point is on: a button's ID, "scope:N",
-// "filter:N", "row:N", or the connect box's parts ("url", "token").
+// ErrorsAt is what a click at a point is on: a button's ID, "source:N",
+// "scope:N", "filter:N", "row:N", the connect box's parts ("url",
+// "token"), or a line of the servers box ("server:N").
 func ErrorsAt(v *ErrorsView, cols, rows, x, y int) (string, bool) {
 	g := ErrorsLayout(v, cols, rows)
 	in := func(r Rect) bool { return y >= r.Y && y < r.Y+r.Rows && x >= r.X && x < r.X+r.Cols }
+	if v.Manage != nil && v.Connect == nil {
+		if OnCloseMark(g.ManageBox, x, y) {
+			return ErrorsManageEnd, true
+		}
+		for _, b := range g.ManageButtons {
+			if in(b.Rect) {
+				return b.ID, true
+			}
+		}
+		if in(g.ManageList) {
+			if i := y - g.ManageList.Y; i < len(v.Manage.Servers) {
+				return fmt.Sprintf("server:%d", i), true
+			}
+		}
+		return "", false
+	}
 	if v.Connect != nil {
 		if OnCloseMark(g.ConnectBox, x, y) {
 			return ErrorsCancel, true
@@ -238,6 +308,11 @@ func ErrorsAt(v *ErrorsView, cols, rows, x, y int) (string, bool) {
 	}
 	if v.Detail != nil {
 		return "", false
+	}
+	for i, r := range g.SourceChips {
+		if in(r) {
+			return fmt.Sprintf("source:%d", i), true
+		}
 	}
 	for i, r := range g.ScopeChips {
 		if in(r) {
@@ -393,7 +468,7 @@ func drawErrors(dst *vt.Grid, v *ErrorsView, theme Theme) {
 	if msg != "" {
 		writeString(dst, box.X+2, msgY, truncate(msg, box.Cols-4), theme.NotesSub, right)
 	}
-	hint := "type to search · tab status · ctrl+t project · ↑↓ move · enter open · ctrl+x resolve · ctrl+f fix with agent · ctrl+o browser · ctrl+r reload · esc"
+	hint := "type to search · tab status · ctrl+t project · ctrl+g server · ↑↓ move · enter open · ctrl+x resolve · ctrl+f fix with agent · ctrl+o browser · ctrl+r reload · esc"
 	switch {
 	case !v.Connected:
 		hint = "enter connect · esc close"
@@ -404,8 +479,56 @@ func drawErrors(dst *vt.Grid, v *ErrorsView, theme Theme) {
 	for _, b := range g.Buttons {
 		writeString(dst, b.X, b.Y, b.Label, theme.NotesAccent, right)
 	}
+	if v.Manage != nil {
+		drawErrorsManage(dst, v.Manage, g, theme)
+	}
 	if v.Connect != nil {
 		drawErrorsConnect(dst, v.Connect, g, theme)
+	}
+}
+
+// drawErrorsManage draws the servers box: each server kept, the one shown
+// marked, and what to do with them.
+func drawErrorsManage(dst *vt.Grid, m *ErrorsManage, g ErrorsGeometry, theme Theme) {
+	box := g.ManageBox
+	for y := box.Y; y < box.Y+box.Rows; y++ {
+		for x := box.X; x < box.X+box.Cols; x++ {
+			setCell(dst, x, y, ' ', theme.Notes)
+		}
+	}
+	drawBox(dst, box, theme.NotesAccent)
+	drawCloseMark(dst, box, withBold(theme.NotesAccent))
+	right := box.X + box.Cols - 1
+	writeString(dst, box.X+2, box.Y, " GlitchTip servers ", withBold(theme.NotesAccent), right)
+	writeString(dst, box.X+2, box.Y+1, truncate("the servers kept; the panel shows one at a time", box.Cols-4), theme.NotesSub, right)
+	end := g.ManageList.X + g.ManageList.Cols
+	for i, name := range m.Servers {
+		if i >= g.ManageList.Rows {
+			break
+		}
+		y := g.ManageList.Y + i
+		base, accent := theme.Notes, theme.NotesAccent
+		if i == m.Cursor {
+			base, accent = theme.NotesButton, theme.NotesButton
+			for x := g.ManageList.X; x < end; x++ {
+				setCell(dst, x, y, ' ', base)
+			}
+		}
+		if i == m.Active {
+			writeString(dst, g.ManageList.X, y, "●", withBold(accent), end)
+		}
+		writeString(dst, g.ManageList.X+2, y, truncate(name, g.ManageList.Cols-3), base, end)
+	}
+	msg, style := "↑↓ move · enter use · a add · d remove · esc close", theme.NotesSub
+	switch {
+	case m.Confirm && m.Cursor < len(m.Servers):
+		msg, style = "remove "+m.Servers[m.Cursor]+"? its token is forgotten · enter removes · esc keeps it", withBold(theme.Notes)
+	case m.Message != "":
+		msg = m.Message
+	}
+	writeString(dst, box.X+2, box.Y+box.Rows-3, truncate(msg, box.Cols-4), style, right)
+	for _, b := range g.ManageButtons {
+		writeString(dst, b.X, b.Y, b.Label, theme.NotesAccent, right)
 	}
 }
 
@@ -415,6 +538,16 @@ func drawErrorList(dst *vt.Grid, v *ErrorsView, g ErrorsGeometry, theme Theme) {
 	if len(v.Errors) > 0 {
 		count := fmt.Sprintf("%d", len(v.Errors))
 		writeString(dst, right-7-runewidth.StringWidth(count), box.Y+1, count, theme.NotesSub, right)
+	}
+	if len(g.SourceChips) > 0 {
+		writeString(dst, box.X+2, g.SourceChips[0].Y, "server", theme.NotesSub, right)
+		for i, r := range g.SourceChips {
+			style := theme.NotesSub
+			if i == v.Source {
+				style = theme.NotesButton
+			}
+			writeString(dst, r.X, r.Y, " "+v.Sources[i]+" ", style, right)
+		}
 	}
 	if len(g.ScopeChips) > 0 {
 		writeString(dst, box.X+2, g.ScopeChips[0].Y, "project", theme.NotesSub, right)
