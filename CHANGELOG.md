@@ -5,7 +5,14 @@ release's notes on GitHub and what "what's new" shows inside tend.
 
 ## Unreleased
 
-- The installer (`curl -fsSL https://tend.auth.com.br/install.sh | sh`) checks the binary it downloads against the release's `SHA256SUMS`, as `tend update` always has, and installs nothing when it does not match.
+## v0.7.2 — 2026-09-26
+
+#### New
+- **Several GlitchTip servers.** The errors panel keeps as many servers as you report to. The gear (or `ctrl+k`) opens the servers box: add one, show one, or remove one — its token goes with it. With more than one, a line of server chips and `ctrl+g` move between them, and the last one shown is remembered.
+- **Each project opens on its own errors.** In the errors panel, `ctrl+l` (or "link … here" on the title) ties the project you are in to the server and project shown. From then on, the panel opened anywhere in that project — a worktree of it too — shows those errors first, whatever you looked at last. `ctrl+l` again unties it.
+
+#### Fixed
+- **The installer checks what it downloads.** `curl … | sh` now compares the binary with the release's `SHA256SUMS`, as `tend update` always has, and installs nothing when they differ.
 
 ## v0.7.1 — 2026-09-25
 
